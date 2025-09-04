@@ -8,6 +8,8 @@ These SQL files set up the database schema, RLS policies, and a minimal catalog 
 - 007_project_employees.sql — simple assignment of employees to projects (with `role`) + RLS
 - 008_drop_teams.sql — removes deprecated `teams`, `team_members`, `project_teams`
 - 009_roles_alignment_manager.sql — idempotent migration to align old role `pm` to `manager` and update legacy policies/constraints
+- 010_fix_has_role_security.sql — redefine `public.has_role(text[])` as SECURITY DEFINER to avoid RLS recursion and grant EXECUTE to `authenticated`
+- 011_grant_has_role_execute.sql — complement grants: EXECUTE on `public.has_role(text[])` to `anon` and `service_role`
 
 ## How to apply in Supabase
 
@@ -17,6 +19,8 @@ Option A — SQL Editor (recommended for POC)
 3. Paste contents of `db/002_seed.sql` and run
 4. Paste contents of `db/007_project_employees.sql` and run
 5. If you previously applied teams tables, paste `db/008_drop_teams.sql` and run to clean them up
+6. Paste contents of `db/010_fix_has_role_security.sql` and run
+7. Paste contents of `db/011_grant_has_role_execute.sql` and run
 
 Option B — psql (if you have a direct connection string)
 ```sql
@@ -25,20 +29,31 @@ psql "<SUPABASE_DB_URL>" -v ON_ERROR_STOP=1 -f db/002_seed.sql
 psql "<SUPABASE_DB_URL>" -v ON_ERROR_STOP=1 -f db/007_project_employees.sql
 # Only if teams were previously applied
 psql "<SUPABASE_DB_URL>" -v ON_ERROR_STOP=1 -f db/008_drop_teams.sql
+psql "<SUPABASE_DB_URL>" -v ON_ERROR_STOP=1 -f db/010_fix_has_role_security.sql
+psql "<SUPABASE_DB_URL>" -v ON_ERROR_STOP=1 -f db/011_grant_has_role_execute.sql
 ```
 
 ### Upgrading an existing database that used role 'pm'
 - If your environment was initialized before the role rename, run `db/009_roles_alignment_manager.sql` to migrate existing data and policies.
 - This migration is idempotent and safe to run multiple times.
 
+Additionally, to fix RLS recursion and ensure proper EXECUTE permissions on `public.has_role(text[])`, apply:
+
+1. `db/010_fix_has_role_security.sql`
+2. `db/011_grant_has_role_execute.sql`
+
 Upgrade via SQL Editor (Supabase):
 1. Open SQL Editor
 2. Paste contents of `db/009_roles_alignment_manager.sql`
 3. Run
+4. Paste contents of `db/010_fix_has_role_security.sql` and run
+5. Paste contents of `db/011_grant_has_role_execute.sql` and run
 
 Upgrade via psql:
 ```sql
 psql "<SUPABASE_DB_URL>" -v ON_ERROR_STOP=1 -f db/009_roles_alignment_manager.sql
+psql "<SUPABASE_DB_URL>" -v ON_ERROR_STOP=1 -f db/010_fix_has_role_security.sql
+psql "<SUPABASE_DB_URL>" -v ON_ERROR_STOP=1 -f db/011_grant_has_role_execute.sql
 ```
 
 Notes

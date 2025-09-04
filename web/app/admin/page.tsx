@@ -12,19 +12,38 @@ export default function AdminHomePage() {
 
   useEffect(() => {
     let mounted = true;
-    (async () => {
-      const { data } = await supabaseBrowser.auth.getSession();
-      const session = data.session;
-      if (!mounted) return;
-      if (!session) {
-        router.replace("/auth/login");
-        return;
+    // Filet de sécurité: ne jamais rester bloqué plus de 3s en chargement
+    const safety = setTimeout(() => {
+      if (mounted) {
+        console.warn('[Admin] Safety timeout reached: forcing loading=false');
+        setLoading(false);
       }
-      setEmail(session.user.email ?? null);
-      setLoading(false);
+    }, 3000);
+    (async () => {
+      try {
+        console.log('[Admin] getSession start');
+        const { data } = await supabaseBrowser.auth.getSession();
+        const session = data.session;
+        if (!mounted) return;
+        if (!session) {
+          console.warn('[Admin] No session -> redirect to /auth/login');
+          router.replace("/auth/login");
+          return;
+        }
+        console.log('[Admin] Session ok for user:', session.user?.email);
+        setEmail(session.user.email ?? null);
+      } catch (e) {
+        console.warn('[Admin] getSession error', e);
+        if (mounted) {
+          try { router.replace('/auth/login'); } catch {}
+        }
+      } finally {
+        if (mounted) setLoading(false);
+      }
     })();
     return () => {
       mounted = false;
+      try { clearTimeout(safety); } catch {}
     };
   }, [router]);
 

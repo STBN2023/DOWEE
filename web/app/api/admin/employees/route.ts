@@ -87,7 +87,7 @@ export async function GET() {
   if (!guard.ok) return guard.response;
   const { data, error } = await supabaseAdmin
     .from('employees')
-    .select('id, first_name, last_name, email, active, contract_start_date, agency:agencies(name), service:services(name), function:functions(name)')
+    .select('id, display_name, first_name, last_name, email, active, role, contract_start_date, avatar_url, agency:agencies(name), service:services(name), function:functions(name)')
     .order('last_name', { ascending: true, nullsFirst: true })
     .order('first_name', { ascending: true, nullsFirst: true });
 

@@ -11,37 +11,59 @@ export default function Header() {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const { data } = await supabaseBrowser.auth.getUser();
-      if (!mounted) return;
-      const id = data.user?.id ?? null;
-      setUserId(id);
-      if (id) {
-        const { data: emp } = await supabaseBrowser
-          .from('employees')
-          .select('first_name,last_name,display_name,avatar_url')
-          .eq('id', id)
-          .maybeSingle();
-        const name = (emp?.first_name || emp?.display_name || null);
-        setFirstName(name);
-        setAvatarUrl(emp?.avatar_url || null);
-      } else {
-        setFirstName(null);
-        setAvatarUrl(null);
+      try {
+        console.log('[Header] init start');
+        // 1) Vérifier d'abord la session (plus fiable que getUser en montage)
+        const { data: sess } = await supabaseBrowser.auth.getSession();
+        if (!mounted) return;
+        let id = sess.session?.user?.id ?? null;
+        if (!id) {
+          const { data: u } = await supabaseBrowser.auth.getUser();
+          id = u.user?.id ?? null;
+        }
+        console.log('[Header] detected user id:', id);
+        setUserId(id);
+        // 2) Charger le profil employé si connecté, sans bloquer l'état connecté en cas d'erreur RLS
+        if (id) {
+          try {
+            const { data: emp, error } = await supabaseBrowser
+              .from('employees')
+              .select('first_name,last_name,display_name,avatar_url')
+              .eq('id', id)
+              .maybeSingle();
+            if (error) console.warn('[Header] employees fetch error:', error.message);
+            const name = (emp?.first_name || emp?.display_name || null);
+            setFirstName(name);
+            setAvatarUrl(emp?.avatar_url || null);
+          } catch (e) {
+            console.warn('[Header] employees fetch exception', e);
+          }
+        } else {
+          setFirstName(null);
+          setAvatarUrl(null);
+        }
+      } catch (e) {
+        console.warn('[Header] init error', e);
       }
     })();
-    const { data: sub } = supabaseBrowser.auth.onAuthStateChange(async () => {
-      const { data } = await supabaseBrowser.auth.getUser();
-      const id = data.user?.id ?? null;
+    const { data: sub } = supabaseBrowser.auth.onAuthStateChange(async (_evt, session) => {
+      const id = session?.user?.id ?? null;
+      console.log('[Header] onAuthStateChange user id:', id);
       setUserId(id);
       if (id) {
-        const { data: emp } = await supabaseBrowser
-          .from('employees')
-          .select('first_name,last_name,display_name,avatar_url')
-          .eq('id', id)
-          .maybeSingle();
-        const name = (emp?.first_name || emp?.display_name || null);
-        setFirstName(name);
-        setAvatarUrl(emp?.avatar_url || null);
+        try {
+          const { data: emp, error } = await supabaseBrowser
+            .from('employees')
+            .select('first_name,last_name,display_name,avatar_url')
+            .eq('id', id)
+            .maybeSingle();
+          if (error) console.warn('[Header] employees fetch error:', error.message);
+          const name = (emp?.first_name || emp?.display_name || null);
+          setFirstName(name);
+          setAvatarUrl(emp?.avatar_url || null);
+        } catch (e) {
+          console.warn('[Header] employees fetch exception', e);
+        }
       } else {
         setFirstName(null);
         setAvatarUrl(null);

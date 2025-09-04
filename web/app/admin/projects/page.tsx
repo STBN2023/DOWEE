@@ -90,21 +90,33 @@ export default function ProjectsPage() {
         router.replace("/auth/login");
         return;
       }
-      // Load clients, employees, then projects
+      // Load clients, employees (via admin API), then projects
       setLoading(true);
       setError(null);
-      const [clientsRes, employeesRes, projectsRes] = await Promise.all([
+      const [clientsRes, employeesResp, projectsRes] = await Promise.all([
         supabaseBrowser.from("clients").select("id, name").order("name", { ascending: true, nullsFirst: true }),
-        // employees read policy: self or admin read all; we'll try to read all (admin/manager required). Fallback to empty on error
-        supabaseBrowser.from("employees").select("id, display_name").order("display_name", { ascending: true, nullsFirst: true }),
+        fetch('/api/admin/employees', { method: 'GET', cache: 'no-store' }),
         supabaseBrowser.from("projects").select("id, code, name, client_id, owner_id, status").order("code", { ascending: true, nullsFirst: true }),
       ]);
       if (!mounted) return;
       if (clientsRes.error) setError(clientsRes.error.message);
-      if (employeesRes.error && !error) setError(employeesRes.error.message);
+      if (!(employeesResp as Response).ok) {
+        if (!error) setError('Impossible de charger la liste des salariés');
+      }
       if (projectsRes.error && !error) setError(projectsRes.error.message);
       if (clientsRes.data) setClients((clientsRes.data as any[]).map((c) => ({ id: c.id, label: c.name })));
-      if (employeesRes.data) setEmployees((employeesRes.data as any[]).map((e) => ({ id: e.id, label: e.display_name })));
+      try {
+        const empJson = await (employeesResp as Response).json();
+        const rows = (empJson?.rows ?? []) as Array<{ id: string; display_name?: string; first_name?: string; last_name?: string; email?: string }>;
+        setEmployees(rows.map((e) => ({
+          id: e.id,
+          label: e.display_name && e.display_name.trim().length > 0
+            ? e.display_name
+            : ((`${e.last_name ?? ''} ${e.first_name ?? ''}`.trim()) || (e.email ?? '')),
+        })));
+      } catch {
+        // ignore JSON parse errors
+      }
       if (projectsRes.data) setProjects(projectsRes.data as any as ProjectRow[]);
       setLoading(false);
     })();

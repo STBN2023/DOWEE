@@ -85,32 +85,35 @@ export default function EmployeesPage() {
     (async () => {
       setLoading(true);
       setError(null);
-      // Joins auto via FK: agency:agencies, service:services, function:functions
-      const { data, error } = await supabaseBrowser
-        .from("employees")
-        .select("id, first_name, last_name, email, active, contract_start_date, role, avatar_url, agency:agencies(name), service:services(name), function:functions(name)")
-        .order("last_name", { ascending: true, nullsFirst: true })
-        .order("first_name", { ascending: true, nullsFirst: true });
-      if (!mounted) return;
-      if (error) {
-        setError(error.message);
-      } else {
-        const normalized: EmployeeRow[] = (data as any[] | null | undefined)?.map((r: any) => ({
-          id: r.id,
-          first_name: r.first_name ?? null,
-          last_name: r.last_name ?? null,
-          email: r.email ?? null,
-          active: r.active ?? null,
-          contract_start_date: r.contract_start_date ? new Date(r.contract_start_date).toISOString().slice(0,10) : null,
-          avatar_url: r.avatar_url ?? null,
-          agency: Array.isArray(r.agency) ? (r.agency[0] ?? null) : (r.agency ?? null),
-          service: Array.isArray(r.service) ? (r.service[0] ?? null) : (r.service ?? null),
-          function: Array.isArray(r.function) ? (r.function[0] ?? null) : (r.function ?? null),
-          role: r.role ?? null,
-        })) ?? [];
-        setRows(normalized);
+      try {
+        const res = await fetch('/api/admin/employees', { method: 'GET' });
+        if (!mounted) return;
+        const json = await res.json();
+        if (!res.ok) {
+          setError(json?.error || `Erreur ${res.status}`);
+        } else {
+          const data = json?.rows as any[] | null | undefined;
+          const normalized: EmployeeRow[] = data?.map((r: any) => ({
+            id: r.id,
+            first_name: r.first_name ?? null,
+            last_name: r.last_name ?? null,
+            email: r.email ?? null,
+            active: r.active ?? null,
+            contract_start_date: r.contract_start_date ? new Date(r.contract_start_date).toISOString().slice(0,10) : null,
+            avatar_url: r.avatar_url ?? null,
+            agency: Array.isArray(r.agency) ? (r.agency[0] ?? null) : (r.agency ?? null),
+            service: Array.isArray(r.service) ? (r.service[0] ?? null) : (r.service ?? null),
+            function: Array.isArray(r.function) ? (r.function[0] ?? null) : (r.function ?? null),
+            role: r.role ?? null,
+          })) ?? [];
+          setRows(normalized);
+        }
+      } catch (e: any) {
+        if (!mounted) return;
+        setError(e?.message || 'Erreur inconnue');
+      } finally {
+        if (mounted) setLoading(false);
       }
-      setLoading(false);
     })();
     return () => { mounted = false; };
   }, []);
@@ -166,27 +169,28 @@ export default function EmployeesPage() {
     alert(`Import terminé: ${json.inserted} insérés, ${json.updated} mis à jour, ${json.errors.length} erreurs`);
     // reload list
     setLoading(true);
-    const { data, error } = await supabaseBrowser
-      .from('employees')
-      .select('id, first_name, last_name, email, active, contract_start_date, avatar_url, agency:agencies(name), service:services(name), function:functions(name)')
-      .order('last_name', { ascending: true, nullsFirst: true })
-      .order('first_name', { ascending: true, nullsFirst: true });
-    if (error) setError(error.message); else {
-      const normalized: EmployeeRow[] = (data as any[] | null | undefined)?.map((r: any) => ({
-        id: r.id,
-        first_name: r.first_name ?? null,
-        last_name: r.last_name ?? null,
-        email: r.email ?? null,
-        active: r.active ?? null,
-        contract_start_date: r.contract_start_date ? new Date(r.contract_start_date).toISOString().slice(0,10) : null,
-        avatar_url: r.avatar_url ?? null,
-        agency: Array.isArray(r.agency) ? (r.agency[0] ?? null) : (r.agency ?? null),
-        service: Array.isArray(r.service) ? (r.service[0] ?? null) : (r.service ?? null),
-        function: Array.isArray(r.function) ? (r.function[0] ?? null) : (r.function ?? null),
-      })) ?? [];
-      setRows(normalized);
+    try {
+      const r2 = await fetch('/api/admin/employees');
+      const j2 = await r2.json();
+      if (!r2.ok) setError(j2?.error || `Erreur ${r2.status}`); else {
+        const data = j2?.rows as any[] | null | undefined;
+        const normalized: EmployeeRow[] = data?.map((r: any) => ({
+          id: r.id,
+          first_name: r.first_name ?? null,
+          last_name: r.last_name ?? null,
+          email: r.email ?? null,
+          active: r.active ?? null,
+          contract_start_date: r.contract_start_date ? new Date(r.contract_start_date).toISOString().slice(0,10) : null,
+          avatar_url: r.avatar_url ?? null,
+          agency: Array.isArray(r.agency) ? (r.agency[0] ?? null) : (r.agency ?? null),
+          service: Array.isArray(r.service) ? (r.service[0] ?? null) : (r.service ?? null),
+          function: Array.isArray(r.function) ? (r.function[0] ?? null) : (r.function ?? null),
+        })) ?? [];
+        setRows(normalized);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   return (
@@ -329,28 +333,29 @@ export default function EmployeesPage() {
               setShowEdit(false);
               // reload list
               setLoading(true);
-              const { data, error } = await supabaseBrowser
-                .from('employees')
-                .select('id, first_name, last_name, email, active, contract_start_date, role, avatar_url, agency:agencies(name), service:services(name), function:functions(name)')
-                .order('last_name', { ascending: true, nullsFirst: true })
-                .order('first_name', { ascending: true, nullsFirst: true });
-              if (error) setError(error.message); else {
-                const normalized: EmployeeRow[] = (data as any[] | null | undefined)?.map((r: any) => ({
-                  id: r.id,
-                  first_name: r.first_name ?? null,
-                  last_name: r.last_name ?? null,
-                  email: r.email ?? null,
-                  active: r.active ?? null,
-                  contract_start_date: r.contract_start_date ? new Date(r.contract_start_date).toISOString().slice(0,10) : null,
-                  avatar_url: r.avatar_url ?? null,
-                  agency: Array.isArray(r.agency) ? (r.agency[0] ?? null) : (r.agency ?? null),
-                  service: Array.isArray(r.service) ? (r.service[0] ?? null) : (r.service ?? null),
-                  function: Array.isArray(r.function) ? (r.function[0] ?? null) : (r.function ?? null),
-                  role: r.role ?? null,
-                })) ?? [];
-                setRows(normalized);
+              try {
+                const r2 = await fetch('/api/admin/employees');
+                const j2 = await r2.json();
+                if (!r2.ok) setError(j2?.error || `Erreur ${r2.status}`); else {
+                  const data = j2?.rows as any[] | null | undefined;
+                  const normalized: EmployeeRow[] = data?.map((r: any) => ({
+                    id: r.id,
+                    first_name: r.first_name ?? null,
+                    last_name: r.last_name ?? null,
+                    email: r.email ?? null,
+                    active: r.active ?? null,
+                    contract_start_date: r.contract_start_date ? new Date(r.contract_start_date).toISOString().slice(0,10) : null,
+                    avatar_url: r.avatar_url ?? null,
+                    agency: Array.isArray(r.agency) ? (r.agency[0] ?? null) : (r.agency ?? null),
+                    service: Array.isArray(r.service) ? (r.service[0] ?? null) : (r.service ?? null),
+                    function: Array.isArray(r.function) ? (r.function[0] ?? null) : (r.function ?? null),
+                    role: r.role ?? null,
+                  })) ?? [];
+                  setRows(normalized);
+                }
+              } finally {
+                setLoading(false);
               }
-              setLoading(false);
             }}>
               <input className="input col-span-1" placeholder="Prénom" value={editForm.first_name} onChange={(e)=>setEditForm(f=>({...f, first_name: e.target.value}))} required />
               <input className="input col-span-1" placeholder="Nom" value={editForm.last_name} onChange={(e)=>setEditForm(f=>({...f, last_name: e.target.value}))} required />
@@ -433,27 +438,28 @@ export default function EmployeesPage() {
               // refresh list
               setShowCreate(false);
               setLoading(true);
-              const { data, error } = await supabaseBrowser
-                .from('employees')
-                .select('id, first_name, last_name, email, active, contract_start_date, avatar_url, agency:agencies(name), service:services(name), function:functions(name)')
-                .order('last_name', { ascending: true, nullsFirst: true })
-                .order('first_name', { ascending: true, nullsFirst: true });
-              if (error) setError(error.message); else {
-                const normalized: EmployeeRow[] = (data as any[] | null | undefined)?.map((r: any) => ({
-                  id: r.id,
-                  first_name: r.first_name ?? null,
-                  last_name: r.last_name ?? null,
-                  email: r.email ?? null,
-                  active: r.active ?? null,
-                  contract_start_date: r.contract_start_date ? new Date(r.contract_start_date).toISOString().slice(0,10) : null,
-                  avatar_url: r.avatar_url ?? null,
-                  agency: Array.isArray(r.agency) ? (r.agency[0] ?? null) : (r.agency ?? null),
-                  service: Array.isArray(r.service) ? (r.service[0] ?? null) : (r.service ?? null),
-                  function: Array.isArray(r.function) ? (r.function[0] ?? null) : (r.function ?? null),
-                })) ?? [];
-                setRows(normalized);
+              try {
+                const r2 = await fetch('/api/admin/employees');
+                const j2 = await r2.json();
+                if (!r2.ok) setError(j2?.error || `Erreur ${r2.status}`); else {
+                  const data = j2?.rows as any[] | null | undefined;
+                  const normalized: EmployeeRow[] = data?.map((r: any) => ({
+                    id: r.id,
+                    first_name: r.first_name ?? null,
+                    last_name: r.last_name ?? null,
+                    email: r.email ?? null,
+                    active: r.active ?? null,
+                    contract_start_date: r.contract_start_date ? new Date(r.contract_start_date).toISOString().slice(0,10) : null,
+                    avatar_url: r.avatar_url ?? null,
+                    agency: Array.isArray(r.agency) ? (r.agency[0] ?? null) : (r.agency ?? null),
+                    service: Array.isArray(r.service) ? (r.service[0] ?? null) : (r.service ?? null),
+                    function: Array.isArray(r.function) ? (r.function[0] ?? null) : (r.function ?? null),
+                  })) ?? [];
+                  setRows(normalized);
+                }
+              } finally {
+                setLoading(false);
               }
-              setLoading(false);
             }}>
               <input className="input col-span-1" placeholder="Prénom" value={form.first_name} onChange={(e)=>setForm(f=>({...f, first_name: e.target.value}))} required />
               <input className="input col-span-1" placeholder="Nom" value={form.last_name} onChange={(e)=>setForm(f=>({...f, last_name: e.target.value}))} required />
