@@ -84,41 +84,69 @@ export default function ProjectsPage() {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const { data } = await supabaseBrowser.auth.getSession();
-      if (!mounted) return;
-      if (!data.session) {
-        router.replace("/auth/login");
-        return;
-      }
-      // Load clients, employees (via admin API), then projects
-      setLoading(true);
-      setError(null);
-      const [clientsRes, employeesResp, projectsRes] = await Promise.all([
-        supabaseBrowser.from("clients").select("id, name").order("name", { ascending: true, nullsFirst: true }),
-        fetch('/api/admin/employees', { method: 'GET', cache: 'no-store' }),
-        supabaseBrowser.from("projects").select("id, code, name, client_id, owner_id, status").order("code", { ascending: true, nullsFirst: true }),
-      ]);
-      if (!mounted) return;
-      if (clientsRes.error) setError(clientsRes.error.message);
-      if (!(employeesResp as Response).ok) {
-        if (!error) setError('Impossible de charger la liste des salariés');
-      }
-      if (projectsRes.error && !error) setError(projectsRes.error.message);
-      if (clientsRes.data) setClients((clientsRes.data as any[]).map((c) => ({ id: c.id, label: c.name })));
+      console.log('[projects] init start');
       try {
-        const empJson = await (employeesResp as Response).json();
-        const rows = (empJson?.rows ?? []) as Array<{ id: string; display_name?: string; first_name?: string; last_name?: string; email?: string }>;
-        setEmployees(rows.map((e) => ({
-          id: e.id,
-          label: e.display_name && e.display_name.trim().length > 0
-            ? e.display_name
-            : ((`${e.last_name ?? ''} ${e.first_name ?? ''}`.trim()) || (e.email ?? '')),
-        })));
-      } catch {
-        // ignore JSON parse errors
+        const { data } = await supabaseBrowser.auth.getSession();
+        if (!mounted) return;
+        if (!data.session) {
+          console.warn('[projects] no session, redirecting to /auth/login');
+          router.replace("/auth/login");
+          return;
+        }
+        // Load clients, employees (via admin API), then projects
+        setLoading(true);
+        setError(null);
+        console.log('[projects] loading clients, employees, projects');
+        const [clientsRes, employeesResp, projectsRes] = await Promise.all([
+          supabaseBrowser.from("clients").select("id, name").order("name", { ascending: true, nullsFirst: true }),
+          fetch('/api/admin/employees', { method: 'GET', cache: 'no-store' }),
+          supabaseBrowser.from("projects").select("id, code, name, client_id, owner_id, status").order("code", { ascending: true, nullsFirst: true }),
+        ]);
+        if (!mounted) return;
+        const errors: string[] = [];
+        if (clientsRes.error) {
+          console.error('[projects] clients error:', clientsRes.error.message);
+          errors.push(`Clients: ${clientsRes.error.message}`);
+        }
+        if (!(employeesResp as Response).ok) {
+          let detail = '';
+          try {
+            const txt = await (employeesResp as Response).text();
+            detail = txt;
+          } catch {}
+          console.error('[projects] employees API error:', (employeesResp as Response).status, detail);
+          errors.push('Salariés: accès refusé ou erreur (vérifiez rôle admin/manager)');
+        }
+        if (projectsRes.error) {
+          console.error('[projects] projects error:', projectsRes.error.message);
+          errors.push(`Projets: ${projectsRes.error.message}`);
+        }
+        if (clientsRes.data) {
+          setClients((clientsRes.data as any[]).map((c) => ({ id: c.id, label: c.name })));
+        }
+        try {
+          const ct = (employeesResp as Response).headers.get('content-type') || '';
+          if (ct.includes('application/json')) {
+            const empJson = await (employeesResp as Response).json();
+            const rows = (empJson?.rows ?? []) as Array<{ id: string; display_name?: string; first_name?: string; last_name?: string; email?: string }>;
+            setEmployees(rows.map((e) => ({
+              id: e.id,
+              label: e.display_name && e.display_name.trim().length > 0
+                ? e.display_name
+                : ((`${e.last_name ?? ''} ${e.first_name ?? ''}`.trim()) || (e.email ?? '')),
+            })));
+          }
+        } catch (e) {
+          console.warn('[projects] employees parse error', e);
+        }
+        if (projectsRes.data) setProjects(projectsRes.data as any as ProjectRow[]);
+        if (errors.length > 0) setError(errors.join(' | '));
+      } catch (e) {
+        console.error('[projects] unexpected error', e);
+        setError('Erreur inattendue lors du chargement');
+      } finally {
+        if (mounted) setLoading(false);
       }
-      if (projectsRes.data) setProjects(projectsRes.data as any as ProjectRow[]);
-      setLoading(false);
     })();
     return () => { mounted = false; };
   }, [router]);

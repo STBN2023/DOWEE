@@ -80,7 +80,19 @@ export default function Header() {
   }
 
   async function handleLogout() {
-    await supabaseBrowser.auth.signOut();
+    try {
+      // Déconnexion côté serveur pour nettoyer les cookies (auth-helpers)
+      await fetch('/auth/signout', { method: 'POST', cache: 'no-store' });
+    } catch (e) {
+      console.warn('[Header] signout server route error', e);
+    }
+    try {
+      // Filet de sécurité: nettoyer le côté client (local storage)
+      await supabaseBrowser.auth.signOut();
+    } catch (e) {
+      console.warn('[Header] signout client error', e);
+    }
+    // Redirection vers l'accueil
     window.location.href = '/';
   }
 
