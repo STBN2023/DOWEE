@@ -40,13 +40,17 @@ for each row execute function public.set_updated_at();
 alter table public.tariffs_reference enable row level security;
 
 -- Lecture: tout utilisateur authentifié
-create policy if not exists tariffs_ref_select_authenticated
+drop policy if exists tariffs_ref_select_authenticated on public.tariffs_reference;
+create policy tariffs_ref_select_authenticated
 on public.tariffs_reference for select
-using ( auth.role() = 'authenticated' );
+to authenticated
+using ( true );
 
 -- Écriture: admin/manager via has_role
-create policy if not exists tariffs_ref_modify_admin_manager
+drop policy if exists tariffs_ref_modify_admin_manager on public.tariffs_reference;
+create policy tariffs_ref_modify_admin_manager
 on public.tariffs_reference for all
+to authenticated
 using ( public.has_role(array['admin','manager']::text[]) )
 with check ( public.has_role(array['admin','manager']::text[]) );
 
