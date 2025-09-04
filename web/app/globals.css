@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand: #214A33;
+}
+
+.app-bg {
+  background-color: #fbf8e9;
+  color: #111;
+}
+
+.container { @apply mx-auto max-w-2xl px-4; }
+.h1 { @apply text-2xl font-semibold mb-6; text-align: center; margin-top: 1.5rem; }
+.input { @apply w-full rounded border border-gray-300 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500; }
+.btn { @apply inline-flex items-center gap-2 rounded bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-700; }
+.card { @apply rounded-xl border p-6 shadow-sm bg-white; }
+
+/* Force background on html/body for consistency */
+html, body {
+  min-height: 100%;
+  background-color: #fbf8e9;
+  color: #111;
+}
