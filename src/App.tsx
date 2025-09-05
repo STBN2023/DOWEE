@@ -18,6 +18,7 @@ import Admin from "./pages/Admin";
 import AdminEmployees from "./pages/AdminEmployees";
 import AdminClients from "./pages/AdminClients";
 import AdminReferences from "./pages/AdminReferences";
+import AdminTariffs from "./pages/AdminTariffs";
 
 const queryClient = new QueryClient();
 
@@ -78,6 +79,14 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <AdminProjects />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/tariffs"
+                element={
+                  <ProtectedRoute>
+                    <AdminTariffs />
                   </ProtectedRoute>
                 }
               />
