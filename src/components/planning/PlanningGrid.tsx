@@ -169,6 +169,8 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
 
   const onCellDragOver: React.DragEventHandler<HTMLTableCellElement> = (e) => {
     e.preventDefault();
+    // Indication visuelle du type d’opération
+    e.dataTransfer.dropEffect = dragSel.active ? "copy" : "move";
   };
 
   const onCellDrop = (dayIdx: number) => {
@@ -178,7 +180,11 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     }
   };
 
-  const onPlanDragStart = (k: string) => {
+  const onPlanDragStart = (k: string, e?: React.DragEvent<HTMLDivElement>) => {
+    if (e) {
+      e.dataTransfer.setData("text/plain", k);
+      e.dataTransfer.effectAllowed = "move";
+    }
     movingPlanKeyRef.current = k;
     lastOverCellRef.current = null;
   };
@@ -363,7 +369,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
                       ) : (
                         <div
                           draggable
-                          onDragStart={() => onPlanDragStart(k)}
+                          onDragStart={(e) => onPlanDragStart(k, e)}
                           onDragEnd={onPlanDragEnd}
                           title={`${byProject[plans[k].projectId]?.code} — ${byProject[plans[k].projectId]?.name}`}
                           className="absolute inset-1 flex items-center gap-2 rounded-md border border-[#BFBFBF] bg-white px-2 text-xs text-[#214A33] shadow-sm"

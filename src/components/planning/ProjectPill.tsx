@@ -12,7 +12,12 @@ const ProjectPill: React.FC<Props> = ({ id, code, name, onDragStart, onDragEnd }
   return (
     <div
       draggable
-      onDragStart={() => onDragStart(id)}
+      onDragStart={(e) => {
+        // Améliore la compatibilité Chrome/Firefox
+        e.dataTransfer.setData("text/plain", id);
+        e.dataTransfer.effectAllowed = "copyMove";
+        onDragStart(id);
+      }}
       onDragEnd={onDragEnd}
       className="select-none inline-flex items-center gap-2 rounded-full border border-[#BFBFBF] bg-white px-3 py-1 text-sm text-[#214A33] shadow-sm hover:shadow transition"
       title={`${code} — ${name}`}
