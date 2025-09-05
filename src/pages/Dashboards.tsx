@@ -3,31 +3,36 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRole } from "@/context/RoleContext";
 import { mondayOf } from "@/utils/date";
-import { format } from "date-fns";
-
-type PlanItem = { id: string; d: string; hour: number; projectId: string };
+import { getMetricsOverview } from "@/api/metrics";
+import { getUserWeek } from "@/api/userWeek";
 
 const Dashboards = () => {
   const { role } = useRole();
   const defaultTab = role === "admin" ? "global" : role === "manager" ? "team" : "me";
 
+  const [globalStats, setGlobalStats] = React.useState<{ total: number; active: number; onhold: number }>({ total: 0, active: 0, onhold: 0 });
+  const [teamStats, setTeamStats] = React.useState<{ commercial: number; crea: number; dev: number }>({ commercial: 0, crea: 0, dev: 0 });
   const [meProjects, setMeProjects] = React.useState<number>(0);
   const [meHours, setMeHours] = React.useState<number>(0);
 
   React.useEffect(() => {
-    const weekStart = mondayOf(new Date());
-    const storageKey = `dowee.plans.${format(weekStart, "yyyy-MM-dd")}`;
-    const raw = localStorage.getItem(storageKey);
-    if (!raw) {
-      setMeProjects(0);
-      setMeHours(0);
-      return;
-    }
-    const parsed = JSON.parse(raw) as Record<string, PlanItem> | PlanItem[];
-    const entries: PlanItem[] = Array.isArray(parsed) ? parsed : Object.values(parsed);
-    const projectSet = new Set(entries.map((p) => p.projectId));
-    setMeProjects(projectSet.size);
-    setMeHours(entries.length); // 1 entrée = 1h
+    const load = async () => {
+      const metrics = await getMetricsOverview();
+      setGlobalStats({
+        total: metrics.global.nb_projects_total,
+        active: metrics.global.nb_projects_active,
+        onhold: metrics.global.nb_projects_onhold,
+      });
+      const commercial = metrics.byTeam.find((t) => t.team === "commercial")?.nb_projects_active_distinct ?? 0;
+      const crea = metrics.byTeam.find((t) => t.team === "créa")?.nb_projects_active_distinct ?? 0;
+      const dev = metrics.byTeam.find((t) => t.team === "dev")?.nb_projects_active_distinct ?? 0;
+      setTeamStats({ commercial, crea, dev });
+      setMeProjects(metrics.me.nb_projects_mine);
+
+      const week = await getUserWeek(mondayOf(new Date()));
+      setMeHours(week.plans.length); // 1 plan = 1h
+    };
+    load();
   }, []);
 
   return (
@@ -42,17 +47,17 @@ const Dashboards = () => {
 
         <TabsContent value="global" className="mt-4">
           <div className="grid gap-4 sm:grid-cols-3">
-            <StatCard title="Projets total" value="—" />
-            <StatCard title="Actifs" value="—" />
-            <StatCard title="En pause" value="—" />
+            <StatCard title="Projets total" value={`${globalStats.total}`} />
+            <StatCard title="Actifs" value={`${globalStats.active}`} />
+            <StatCard title="En pause" value={`${globalStats.onhold}`} />
           </div>
         </TabsContent>
 
         <TabsContent value="team" className="mt-4">
           <div className="grid gap-4 sm:grid-cols-3">
-            <StatCard title="Commercial (actifs)" value="—" />
-            <StatCard title="Créa (actifs)" value="—" />
-            <StatCard title="Dev (actifs)" value="—" />
+            <StatCard title="Commercial (actifs)" value={`${teamStats.commercial}`} />
+            <StatCard title="Créa (actifs)" value={`${teamStats.crea}`} />
+            <StatCard title="Dev (actifs)" value={`${teamStats.dev}`} />
           </div>
         </TabsContent>
 
