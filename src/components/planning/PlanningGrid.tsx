@@ -75,12 +75,21 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
       try {
         const data = await getUserWeek(weekStart);
         if (!mounted) return;
+
+        // Plans
         const plansByKey: Record<string, PlanItem> = {};
         data.plans.forEach((p: PlanDTO) => {
           plansByKey[keyOf(p.d, p.hour)] = { id: p.id, d: p.d, hour: p.hour, projectId: p.project_id };
         });
         setPlans(plansByKey);
-        setProjects(data.projects.map((p) => ({ id: p.id, code: p.code, name: p.name })));
+
+        // Projets (ne pas écraser si API renvoie 0)
+        const newProjects = data.projects.map((p) => ({ id: p.id, code: p.code, name: p.name }));
+        setProjects((prev) => {
+          if (newProjects.length > 0) return newProjects;
+          return prev.length > 0 ? prev : fallbackProjects;
+        });
+
         setLoading(false);
       } catch (e: any) {
         if (!mounted) return;
@@ -93,7 +102,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     return () => {
       mounted = false;
     };
-  }, [weekStart]);
+  }, [weekStart, fallbackProjects]);
 
   // Drag depuis pilule projet
   const handleProjectDragStart = (projectId: string) => {
@@ -118,6 +127,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     const d = days[dayIdx].iso;
     const count = end - start + 1;
 
+    // Optimistic UI
     setPlans((prev) => {
       const next = { ...prev };
       for (let h = start; h <= end; h++) {
@@ -127,6 +137,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
       return next;
     });
 
+    let saved = false;
     try {
       await patchUserWeek({
         upserts: Array.from({ length: count }, (_, i) => ({
@@ -136,10 +147,12 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
           planned_minutes: 60,
         })),
       });
+      saved = true;
     } catch (e: any) {
       showError(e?.message || "Erreur lors de l’enregistrement.");
     }
 
+    // Re-sync
     try {
       const refreshed = await getUserWeek(weekStart);
       const synced: Record<string, PlanItem> = {};
@@ -147,13 +160,21 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
         synced[keyOf(p.d, p.hour)] = { id: p.id, d: p.d, hour: p.hour, projectId: p.project_id };
       });
       setPlans(synced);
+
+      const newProjects = refreshed.projects.map((p) => ({ id: p.id, code: p.code, name: p.name }));
+      setProjects((prev) => {
+        if (newProjects.length > 0) return newProjects;
+        return prev.length > 0 ? prev : fallbackProjects;
+      });
     } catch {
       // on garde l’optimistic state si la sync échoue
     }
 
-    const plural = count > 1 ? "s" : "";
-    const x = count > 1 ? "x" : "";
-    showSuccess(`${count} créneau${x} ajouté${plural}.`);
+    if (saved) {
+      const s = count > 1 ? "x" : "";
+      const aux = count > 1 ? "ajoutés" : "ajouté";
+      showSuccess(`${count} créneau${s} ${aux}.`);
+    }
   };
 
   const onCellDragEnter = (dayIdx: number, hour: number) => {
@@ -169,7 +190,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
 
   const onCellDragOver: React.DragEventHandler<HTMLTableCellElement> = (e) => {
     e.preventDefault();
-    // Indication visuelle du type d’opération
     e.dataTransfer.dropEffect = dragSel.active ? "copy" : "move";
   };
 
@@ -238,7 +258,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
   }, [days]);
 
   const retry = () => {
-    // force un nouvel objet Date pour relancer l’effet
     setWeekStart((d) => new Date(d));
   };
 
@@ -357,7 +376,10 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
                         highlight && "ring-2 ring-[#F2994A] bg-[#F2994A]/10"
                       )}
                       onDragEnter={() => onCellDragEnter(dayIdx, h)}
-                      onDragOver={onCellDragOver}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = dragSel.active ? "copy" : "move";
+                      }}
                       onDrop={() => onCellDrop(dayIdx)}
                     >
                       {!hasPlan ? (
