@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { unwrapFunction } from "@/api/edge";
 
 export type Status = "active" | "onhold" | "archived";
 
@@ -23,33 +24,31 @@ export async function listAdminProjects(): Promise<{
   projects: Project[];
   assignments: Assignments;
 }> {
-  const { data, error } = await supabase.functions.invoke("admin-projects", {
+  const res = await supabase.functions.invoke("admin-projects", {
     body: { action: "list" },
   });
-  if (error) throw error;
-  return data as { employees: Employee[]; projects: Project[]; assignments: Assignments };
+  return unwrapFunction<{ employees: Employee[]; projects: Project[]; assignments: Assignments }>(res);
 }
 
 export async function createProject(input: { code: string; name: string; status: Status }): Promise<Project> {
-  const { data, error } = await supabase.functions.invoke("admin-projects", {
+  const res = await supabase.functions.invoke("admin-projects", {
     body: { action: "create", project: input },
   });
-  if (error) throw error;
-  return (data as any).project as Project;
+  const data = unwrapFunction<{ project: Project }>(res);
+  return data.project;
 }
 
 export async function updateProject(project_id: string, patch: Partial<{ code: string; name: string; status: Status }>): Promise<Project> {
-  const { data, error } = await supabase.functions.invoke("admin-projects", {
+  const res = await supabase.functions.invoke("admin-projects", {
     body: { action: "update", project_id, patch },
   });
-  if (error) throw error;
-  return (data as any).project as Project;
+  const data = unwrapFunction<{ project: Project }>(res);
+  return data.project;
 }
 
 export async function setProjectAssignments(project_id: string, employee_ids: string[]): Promise<{ ok: true }> {
-  const { data, error } = await supabase.functions.invoke("admin-projects", {
+  const res = await supabase.functions.invoke("admin-projects", {
     body: { action: "assign", project_id, employee_ids },
   });
-  if (error) throw error;
-  return data as { ok: true };
+  return unwrapFunction<{ ok: true }>(res);
 }

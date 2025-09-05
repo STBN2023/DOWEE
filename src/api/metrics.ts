@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { unwrapFunction } from "@/api/edge";
 
 export type MetricsOverview = {
   global: { nb_projects_total: number; nb_projects_active: number; nb_projects_onhold: number };
@@ -7,9 +8,8 @@ export type MetricsOverview = {
 };
 
 export async function getMetricsOverview(): Promise<MetricsOverview> {
-  const { data, error } = await supabase.functions.invoke("metrics-overview", {
+  const res = await supabase.functions.invoke("metrics-overview", {
     body: { action: "overview" },
   });
-  if (error) throw error;
-  return data as MetricsOverview;
+  return unwrapFunction<MetricsOverview>(res);
 }

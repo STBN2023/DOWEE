@@ -1,11 +1,11 @@
 import { supabase } from "@/integrations/supabase/client";
+import { unwrapFunction } from "@/api/edge";
 
 export type DebugSession = { id: string; email: string | null };
 
 export async function getDebugSession(): Promise<DebugSession> {
-  const { data, error } = await supabase.functions.invoke("debug-session", {
+  const res = await supabase.functions.invoke("debug-session", {
     body: { action: "whoami" },
   });
-  if (error) throw error;
-  return data as DebugSession;
+  return unwrapFunction<DebugSession>(res);
 }
