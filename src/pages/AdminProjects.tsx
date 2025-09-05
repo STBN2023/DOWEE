@@ -23,69 +23,22 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Users } from "lucide-react";
 import { showSuccess } from "@/utils/toast";
 import { cn } from "@/lib/utils";
-
-type Status = "active" | "onhold" | "archived";
-
-type Employee = {
-  id: string;
-  first_name?: string;
-  last_name?: string;
-  display_name?: string;
-  email: string;
-};
-
-type Project = {
-  id: string;
-  code: string;
-  name: string;
-  status: Status;
-};
+import { createProject, listAdminProjects, setProjectAssignments, type Employee, type Project, type Status } from "@/api/adminProjects";
 
 type Assignments = Record<string, string[]>; // project_id -> employee_id[]
-
-const LS_EMPLOYEES = "dowee.admin.employees";
-const LS_PROJECTS = "dowee.admin.projects";
-const LS_ASSIGN = "dowee.admin.projectEmployees";
-
-function uid(prefix: string) {
-  return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
-}
 
 function fullName(e: Employee) {
   if (e.display_name && e.display_name.trim()) return e.display_name;
   const names = [e.first_name, e.last_name].filter(Boolean).join(" ").trim();
-  return names || e.email;
+  return names || "Utilisateur";
 }
-
-const seedData = () => {
-  const seeded = {
-    employees: [
-      { id: "e1", first_name: "Alice", last_name: "Martin", email: "alice@example.com" },
-      { id: "e2", first_name: "Bruno", last_name: "Durand", email: "bruno@example.com" },
-      { id: "e3", first_name: "Chloé", last_name: "Bernard", email: "chloe@example.com" },
-      { id: "e4", first_name: "David", last_name: "Roux", email: "david@example.com" },
-      { id: "e5", first_name: "Emma", last_name: "Petit", email: "emma@example.com" },
-    ] as Employee[],
-    projects: [
-      { id: "p1", code: "ACME-001", name: "Site vitrine", status: "active" as Status },
-      { id: "p2", code: "BRND-2025", name: "Refonte branding", status: "onhold" as Status },
-      { id: "p3", code: "CRM-OPS", name: "Intégration CRM", status: "active" as Status },
-    ] as Project[],
-    assign: {
-      p1: ["e1", "e3"],
-      p2: ["e2"],
-      p3: ["e4", "e5"],
-    } as Assignments,
-  };
-  localStorage.setItem(LS_EMPLOYEES, JSON.stringify(seeded.employees));
-  localStorage.setItem(LS_PROJECTS, JSON.stringify(seeded.projects));
-  localStorage.setItem(LS_ASSIGN, JSON.stringify(seeded.assign));
-};
 
 const AdminProjects = () => {
   const [employees, setEmployees] = React.useState<Employee[]>([]);
   const [projects, setProjects] = React.useState<Project[]>([]);
   const [assignments, setAssignments] = React.useState<Assignments>({});
+
+  const [loading, setLoading] = React.useState<boolean>(true);
 
   const [openCreate, setOpenCreate] = React.useState(false);
   const [form, setForm] = React.useState<{ code: string; name: string; status: Status }>({
@@ -97,45 +50,35 @@ const AdminProjects = () => {
   const [openAssignFor, setOpenAssignFor] = React.useState<string | null>(null);
   const [assignSelection, setAssignSelection] = React.useState<Record<string, boolean>>({});
 
-  // Load or seed
+  const refresh = async () => {
+    setLoading(true);
+    const data = await listAdminProjects();
+    setEmployees(data.employees);
+    setProjects(data.projects);
+    setAssignments(data.assignments || {});
+    setLoading(false);
+  };
+
   React.useEffect(() => {
-    const rawEmp = localStorage.getItem(LS_EMPLOYEES);
-    const rawProj = localStorage.getItem(LS_PROJECTS);
-    const rawAsg = localStorage.getItem(LS_ASSIGN);
-    if (!rawEmp || !rawProj || !rawAsg) {
-      seedData();
-    }
-    const emps = JSON.parse(localStorage.getItem(LS_EMPLOYEES) || "[]") as Employee[];
-    const projs = JSON.parse(localStorage.getItem(LS_PROJECTS) || "[]") as Project[];
-    const asg = JSON.parse(localStorage.getItem(LS_ASSIGN) || "{}") as Assignments;
-    setEmployees(emps);
-    setProjects(projs);
-    setAssignments(asg);
+    let mounted = true;
+    (async () => {
+      await refresh();
+      if (!mounted) return;
+    })();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  const saveProjects = (next: Project[]) => {
-    setProjects(next);
-    localStorage.setItem(LS_PROJECTS, JSON.stringify(next));
-  };
-
-  const saveAssignments = (next: Assignments) => {
-    setAssignments(next);
-    localStorage.setItem(LS_ASSIGN, JSON.stringify(next));
-  };
-
-  const onCreateProject = () => {
-    const newProject: Project = {
-      id: uid("p"),
-      code: form.code.trim(),
-      name: form.name.trim(),
-      status: form.status,
-    };
-    if (!newProject.code || !newProject.name) return;
-    const next = [newProject, ...projects];
-    saveProjects(next);
+  const onCreateProject = async () => {
+    const code = form.code.trim();
+    const name = form.name.trim();
+    if (!code || !name) return;
+    await createProject({ code, name, status: form.status });
     showSuccess("Projet créé.");
     setForm({ code: "", name: "", status: "active" });
     setOpenCreate(false);
+    await refresh();
   };
 
   const openAssignDialog = (projectId: string) => {
@@ -148,15 +91,15 @@ const AdminProjects = () => {
     setAssignSelection(initSel);
   };
 
-  const confirmAssign = () => {
+  const confirmAssign = async () => {
     if (!openAssignFor) return;
     const selected = Object.entries(assignSelection)
       .filter(([, v]) => v)
       .map(([k]) => k);
-    const next = { ...assignments, [openAssignFor]: selected };
-    saveAssignments(next);
+    await setProjectAssignments(openAssignFor, selected);
     showSuccess("Affectations mises à jour.");
     setOpenAssignFor(null);
+    await refresh();
   };
 
   return (
@@ -235,7 +178,11 @@ const AdminProjects = () => {
                 </tr>
               </thead>
               <tbody>
-                {projects.length === 0 ? (
+                {loading ? (
+                  <tr>
+                    <td colSpan={5} className="p-4 text-center text-sm text-[#214A33]/60">Chargement…</td>
+                  </tr>
+                ) : projects.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="p-4 text-center text-sm text-[#214A33]/60">
                       Aucun projet pour le moment.
@@ -300,7 +247,6 @@ const AdminProjects = () => {
                                       }
                                     />
                                     <span className="text-sm text-[#214A33]">{fullName(e)}</span>
-                                    <span className="text-xs text-[#214A33]/50">({e.email})</span>
                                   </label>
                                 ))}
                               </div>
