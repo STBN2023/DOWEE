@@ -33,12 +33,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { showError, showSuccess } from "@/utils/toast";
+import { listTeams, type TeamRef, normalizeTeamSlug } from "@/api/teams";
 
 const AdminEmployees = () => {
   const { loading: authLoading, employee } = useAuth();
   const [loading, setLoading] = React.useState(true);
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
   const [employees, setEmployees] = React.useState<Employee[]>([]);
+  const [teams, setTeams] = React.useState<TeamRef[]>([]);
 
   const [openCreate, setOpenCreate] = React.useState(false);
   const [createForm, setCreateForm] = React.useState<{
@@ -47,7 +49,7 @@ const AdminEmployees = () => {
     first_name: string;
     last_name: string;
     role: "admin" | "manager" | "user";
-    team: string;
+    team: string; // slug sélectionné
   }>({ id: "", display_name: "", first_name: "", last_name: "", role: "user", team: "" });
 
   const [editFor, setEditFor] = React.useState<Employee | null>(null);
@@ -56,15 +58,16 @@ const AdminEmployees = () => {
     first_name: string;
     last_name: string;
     role: "admin" | "manager" | "user";
-    team: string;
+    team: string; // slug sélectionné
   }>({ display_name: "", first_name: "", last_name: "", role: "user", team: "" });
 
   const refresh = async () => {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const data = await listEmployees();
-      setEmployees(data);
+      const [emps, tms] = await Promise.all([listEmployees(), listTeams()]);
+      setEmployees(emps);
+      setTeams(tms);
     } catch (e: any) {
       setErrorMsg(e?.message || "Erreur lors du chargement des profils.");
     } finally {
@@ -103,6 +106,7 @@ const AdminEmployees = () => {
       showError("L’ID utilisateur (UUID) est requis.");
       return;
     }
+    const normalizedTeam = normalizeTeamSlug(createForm.team);
     try {
       await createEmployee({
         id,
@@ -110,7 +114,7 @@ const AdminEmployees = () => {
         first_name: createForm.first_name || null,
         last_name: createForm.last_name || null,
         role: createForm.role,
-        team: createForm.team || null,
+        team: normalizedTeam, // stocke le slug normalisé (ex: 'créa', 'dev', 'commercial', 'direction')
       });
       showSuccess("Profil créé.");
       setOpenCreate(false);
@@ -123,13 +127,14 @@ const AdminEmployees = () => {
 
   const confirmEdit = async () => {
     if (!editFor) return;
+    const normalizedTeam = normalizeTeamSlug(editForm.team);
     try {
       await updateEmployee(editFor.id, {
         display_name: editForm.display_name || null,
         first_name: editForm.first_name || null,
         last_name: editForm.last_name || null,
         role: editForm.role,
-        team: editForm.team || null,
+        team: normalizedTeam,
       });
       showSuccess("Profil mis à jour.");
       setEditFor(null);
@@ -195,8 +200,19 @@ const AdminEmployees = () => {
                     </Select>
                   </div>
                   <div className="grid gap-2">
-                    <Label>Équipe</Label>
-                    <Input value={createForm.team} onChange={(e) => setCreateForm((f) => ({ ...f, team: e.target.value }))} placeholder="commercial | créa | dev" />
+                    <Label>Équipe (optionnel)</Label>
+                    <Select
+                      value={createForm.team || ""}
+                      onValueChange={(v) => setCreateForm((f) => ({ ...f, team: v }))}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Sélectionner une équipe" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">— Aucune —</SelectItem>
+                        {teams.map((t) => (
+                          <SelectItem key={t.id} value={t.slug}>{t.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </div>
@@ -277,8 +293,19 @@ const AdminEmployees = () => {
                                     </Select>
                                   </div>
                                   <div className="grid gap-2">
-                                    <Label>Équipe</Label>
-                                    <Input value={editForm.team} onChange={(e2) => setEditForm((f) => ({ ...f, team: e2.target.value }))} placeholder="commercial | créa | dev" />
+                                    <Label>Équipe (optionnel)</Label>
+                                    <Select
+                                      value={editForm.team || ""}
+                                      onValueChange={(v) => setEditForm((f) => ({ ...f, team: v }))}
+                                    >
+                                      <SelectTrigger><SelectValue placeholder="Sélectionner une équipe" /></SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="">— Aucune —</SelectItem>
+                                        {teams.map((t) => (
+                                          <SelectItem key={t.id} value={t.slug}>{t.label}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
                                   </div>
                                 </div>
                               </div>
@@ -313,7 +340,7 @@ const AdminEmployees = () => {
             </table>
           </div>
           <p className="mt-3 text-xs text-[#214A33]/60">
-            Les profils peuvent être créés manuellement si l’utilisateur existe déjà dans l’auth (UUID). Sinon, conseillez-lui de se connecter pour auto-créer son profil.
+            Les équipes proposées proviennent du référentiel ref_teams. Les slugs sont normalisés pour rester cohérents avec les tableaux de bord.
           </p>
         </CardContent>
       </Card>
