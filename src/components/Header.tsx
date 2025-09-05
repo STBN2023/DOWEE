@@ -44,9 +44,14 @@ const Header = () => {
                 Tableaux de bord
               </NavLink>
               {role === "admin" && (
-                <NavLink to="/admin/projects" className={navLinkClass}>
-                  Admin Projets
-                </NavLink>
+                <>
+                  <NavLink to="/admin/projects" className={navLinkClass}>
+                    Admin Projets
+                  </NavLink>
+                  <NavLink to="/debug" className={navLinkClass}>
+                    Debug
+                  </NavLink>
+                </>
               )}
             </nav>
           </div>

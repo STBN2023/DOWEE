@@ -14,6 +14,7 @@ import AdminProjects from "./pages/AdminProjects";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./pages/Login";
+import Debug from "./pages/Debug";
 
 const queryClient = new QueryClient();
 
@@ -51,6 +52,14 @@ const App = () => (
                   element={
                     <ProtectedRoute>
                       <AdminProjects />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/debug"
+                  element={
+                    <ProtectedRoute>
+                      <Debug />
                     </ProtectedRoute>
                   }
                 />
