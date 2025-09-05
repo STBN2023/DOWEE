@@ -14,7 +14,7 @@ const Index = () => {
             <img
               src="/logo_dowee.png"
               alt="DoWee"
-              className="h-auto w-full max-w-[360px] select-none"
+              className="mx-auto h-auto w-full max-w-[360px] sm:max-w-[480px] md:max-w-[640px] lg:max-w-[720px] select-none"
             />
             <div className="mt-6 flex flex-wrap justify-center gap-3">
               <Button asChild className="bg-[#214A33] hover:bg-[#214A33]/90 text-white">
