@@ -31,7 +31,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [employee, setEmployee] = React.useState<EmployeeRow | null>(null);
 
   const upsertEmployeeIfMissing = async (u: User) => {
-    // Tente de lire la ligne employees
     const { data, error } = await supabase
       .from("employees")
       .select("*")
@@ -39,13 +38,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       .maybeSingle();
 
     if (error) {
-      // Erreur d’accès inattendue → informer et stopper
       showError(`Connexion impossible: ${error.message}`);
       return null;
     }
     if (data) return data as EmployeeRow;
 
-    // Aucune ligne → auto-provisionnement (RLS: insert own)
     const display_name =
       (u.user_metadata?.display_name as string | undefined)?.trim() ||
       (u.email ?? "Utilisateur");
@@ -74,11 +71,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const fetchEmployee = async (u: User) => {
     const row = await upsertEmployeeIfMissing(u);
-    if (!row) {
-      // On laisse la session telle quelle, mais sans employee
-      setEmployee(null);
-      return;
-    }
     setEmployee(row);
   };
 
@@ -87,27 +79,32 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     const init = async () => {
       const { data } = await supabase.auth.getSession();
-      const sess = data.session ?? null;
       if (!mounted) return;
+
+      const sess = data.session ?? null;
       setSession(sess);
       setUser(sess?.user ?? null);
 
+      // Débloque l’UI immédiatement; on finalise le profil en arrière-plan
+      setLoading(false);
+
       if (sess?.user) {
-        await fetchEmployee(sess.user);
+        fetchEmployee(sess.user).catch(() => {
+          // Les erreurs sont déjà remontées via toasts; on évite de rebloquer l’UI
+        });
       } else {
         setEmployee(null);
       }
-
-      setLoading(false);
     };
 
     init();
 
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
       setUser(newSession?.user ?? null);
+      setLoading(false);
       if (newSession?.user) {
-        await fetchEmployee(newSession.user);
+        fetchEmployee(newSession.user).catch(() => {});
       } else {
         setEmployee(null);
       }

@@ -9,6 +9,7 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -140,6 +141,7 @@ const AdminProjects = () => {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Nouveau projet</DialogTitle>
+                <DialogDescription>Renseignez le code, le nom et le statut du projet.</DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-2">
                 <div className="grid gap-2">
@@ -256,6 +258,7 @@ const AdminProjects = () => {
                             <DialogContent>
                               <DialogHeader>
                                 <DialogTitle>Modifier le projet — {p.code}</DialogTitle>
+                                <DialogDescription>Mettre à jour le code, le nom ou le statut du projet.</DialogDescription>
                               </DialogHeader>
                               <div className="grid gap-4 py-2">
                                 <div className="grid gap-2">
@@ -312,6 +315,7 @@ const AdminProjects = () => {
                             <DialogContent>
                               <DialogHeader>
                                 <DialogTitle>Affecter des salariés — {p.code}</DialogTitle>
+                                <DialogDescription>Sélectionnez les collaborateurs à affecter à ce projet.</DialogDescription>
                               </DialogHeader>
                               <div className="max-h-[300px] overflow-auto pr-1">
                                 {employees.map((e) => (

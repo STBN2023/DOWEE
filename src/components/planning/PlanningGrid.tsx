@@ -3,7 +3,7 @@ import { weekFrom, formatHour, DayInfo, mondayOf } from "@/utils/date";
 import { cn } from "@/lib/utils";
 import ProjectPill from "@/components/planning/ProjectPill";
 import { Button } from "@/components/ui/button";
-import { addDays, format } from "date-fns";
+import { addDays } from "date-fns";
 import { ChevronLeft, ChevronRight, Home, Trash2 } from "lucide-react";
 import {
   AlertDialog,
@@ -16,7 +16,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { showSuccess } from "@/utils/toast";
+import { showSuccess, showError } from "@/utils/toast";
 import { getUserWeek, patchUserWeek, PlanDTO } from "@/api/userWeek";
 
 type Project = { id: string; code: string; name: string };
@@ -55,6 +55,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
   const [plans, setPlans] = React.useState<Record<string, PlanItem>>({});
   const [projects, setProjects] = React.useState<Project[]>(fallbackProjects);
   const [loading, setLoading] = React.useState<boolean>(true);
+  const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
 
   const [dragSel, setDragSel] = React.useState<DragSel>(initialDrag);
   const lastOverCellRef = React.useRef<string | null>(null);
@@ -65,20 +66,28 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     [projects]
   );
 
-  // Fetch semaine
+  // Chargement semaine avec gestion d’erreur
   React.useEffect(() => {
     let mounted = true;
     const fetchWeek = async () => {
       setLoading(true);
-      const data = await getUserWeek(weekStart);
-      if (!mounted) return;
-      const plansByKey: Record<string, PlanItem> = {};
-      data.plans.forEach((p: PlanDTO) => {
-        plansByKey[keyOf(p.d, p.hour)] = { id: p.id, d: p.d, hour: p.hour, projectId: p.project_id };
-      });
-      setPlans(plansByKey);
-      setProjects(data.projects.map((p) => ({ id: p.id, code: p.code, name: p.name })));
-      setLoading(false);
+      setErrorMsg(null);
+      try {
+        const data = await getUserWeek(weekStart);
+        if (!mounted) return;
+        const plansByKey: Record<string, PlanItem> = {};
+        data.plans.forEach((p: PlanDTO) => {
+          plansByKey[keyOf(p.d, p.hour)] = { id: p.id, d: p.d, hour: p.hour, projectId: p.project_id };
+        });
+        setPlans(plansByKey);
+        setProjects(data.projects.map((p) => ({ id: p.id, code: p.code, name: p.name })));
+        setLoading(false);
+      } catch (e: any) {
+        if (!mounted) return;
+        const msg = e?.message || "Erreur de chargement de la semaine.";
+        setErrorMsg(msg);
+        setLoading(false);
+      }
     };
     fetchWeek();
     return () => {
@@ -94,7 +103,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     setDragSel(initialDrag);
   };
 
-  // Calcul du surlignage pour une cellule
   const isHighlighted = (dayIdx: number, hour: number) => {
     if (!dragSel.active) return false;
     if (dragSel.dayIndex === -1 || dragSel.startHour === -1) return false;
@@ -103,7 +111,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     return hour >= a && hour <= b;
   };
 
-  // Validation de la sélection → crée N créneaux de 60 min
   const commitSelection = async (dayIdx: number) => {
     if (!dragSel.active || dragSel.dayIndex !== dayIdx) return;
     const start = Math.min(dragSel.startHour, dragSel.currentHour);
@@ -111,7 +118,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     const d = days[dayIdx].iso;
     const count = end - start + 1;
 
-    // Optimistic update
     setPlans((prev) => {
       const next = { ...prev };
       for (let h = start; h <= end; h++) {
@@ -121,29 +127,35 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
       return next;
     });
 
-    await patchUserWeek({
-      upserts: Array.from({ length: count }, (_, i) => ({
-        d,
-        hour: start + i,
-        project_id: dragSel.projectId,
-        planned_minutes: 60,
-      })),
-    });
+    try {
+      await patchUserWeek({
+        upserts: Array.from({ length: count }, (_, i) => ({
+          d,
+          hour: start + i,
+          project_id: dragSel.projectId,
+          planned_minutes: 60,
+        })),
+      });
+    } catch (e: any) {
+      showError(e?.message || "Erreur lors de l’enregistrement.");
+    }
 
-    // Re-fetch to sync ids
-    const refreshed = await getUserWeek(weekStart);
-    const synced: Record<string, PlanItem> = {};
-    refreshed.plans.forEach((p) => {
-      synced[keyOf(p.d, p.hour)] = { id: p.id, d: p.d, hour: p.hour, projectId: p.project_id };
-    });
-    setPlans(synced);
+    try {
+      const refreshed = await getUserWeek(weekStart);
+      const synced: Record<string, PlanItem> = {};
+      refreshed.plans.forEach((p) => {
+        synced[keyOf(p.d, p.hour)] = { id: p.id, d: p.d, hour: p.hour, projectId: p.project_id };
+      });
+      setPlans(synced);
+    } catch {
+      // on garde l’optimistic state si la sync échoue
+    }
 
     const plural = count > 1 ? "s" : "";
     const x = count > 1 ? "x" : "";
     showSuccess(`${count} créneau${x} ajouté${plural}.`);
   };
 
-  // Gestion des cellules droppables
   const onCellDragEnter = (dayIdx: number, hour: number) => {
     lastOverCellRef.current = keyOf(days[dayIdx].iso, hour);
 
@@ -156,7 +168,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
   };
 
   const onCellDragOver: React.DragEventHandler<HTMLTableCellElement> = (e) => {
-    e.preventDefault(); // permet le dépôt
+    e.preventDefault();
   };
 
   const onCellDrop = (dayIdx: number) => {
@@ -166,7 +178,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     }
   };
 
-  // Drag d’un créneau existant → suppression si glissé hors de la grille
   const onPlanDragStart = (k: string) => {
     movingPlanKeyRef.current = k;
     lastOverCellRef.current = null;
@@ -175,7 +186,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
   const onPlanDragEnd = async () => {
     const movingKey = movingPlanKeyRef.current;
     movingPlanKeyRef.current = null;
-    // Si une cellule a été survolée, on considère que le curseur est resté dans la grille → ne pas supprimer
     if (!movingKey || lastOverCellRef.current) {
       lastOverCellRef.current = null;
       return;
@@ -187,28 +197,33 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
       return next;
     });
 
-    await patchUserWeek({
-      deletes: [
-        plan?.id
-          ? { id: plan.id }
-          : { d: plan.d, hour: plan.hour },
-      ],
-    });
-
-    showSuccess("Créneau supprimé.");
+    try {
+      await patchUserWeek({
+        deletes: [
+          plan?.id
+            ? { id: plan.id }
+            : { d: plan.d, hour: plan.hour },
+        ],
+      });
+      showSuccess("Créneau supprimé.");
+    } catch (e: any) {
+      showError(e?.message || "Suppression impossible.");
+    }
   };
 
-  // Effacer toute la semaine
   const clearWeek = async () => {
     const dels = Object.values(plans).map((p) => (p.id ? { id: p.id } : { d: p.d, hour: p.hour }));
     if (dels.length > 0) {
-      await patchUserWeek({ deletes: dels });
+      try {
+        await patchUserWeek({ deletes: dels });
+      } catch (e: any) {
+        showError(e?.message || "Effacement impossible.");
+      }
     }
     setPlans({});
     showSuccess("Semaine effacée.");
   };
 
-  // Libellé de la semaine (Lun dd/MM – Dim dd/MM)
   const weekLabel = React.useMemo(() => {
     if (days.length === 0) return "";
     const startLbl = days[0].label;
@@ -216,9 +231,13 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     return `${startLbl} – ${endLbl}`;
   }, [days]);
 
+  const retry = () => {
+    // force un nouvel objet Date pour relancer l’effet
+    setWeekStart((d) => new Date(d));
+  };
+
   return (
     <div className="w-full">
-      {/* Barre d’outils */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Button
@@ -275,6 +294,17 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
           </AlertDialog>
         </div>
       </div>
+
+      {errorMsg && (
+        <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <div className="flex items-center justify-between gap-2">
+            <span>{errorMsg}</span>
+            <Button size="sm" variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={retry}>
+              Réessayer
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Pilules projets */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
