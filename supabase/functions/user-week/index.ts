@@ -57,8 +57,13 @@ serve(async (req) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
   const supabase = createClient(supabaseUrl, supabaseAnon, {
     global: { headers: { Authorization: authHeader } },
+  });
+  const admin = createClient(supabaseUrl, serviceRole, {
+    global: { headers: { Authorization: `Bearer ${serviceRole}` } },
   });
 
   const body = (await req.json().catch(() => ({}))) as Partial<Payload>;
@@ -73,6 +78,26 @@ serve(async (req) => {
     });
   }
   const userId = userData.user.id;
+
+  // Orphan check (server-side): employees row must exist
+  const { data: empRow, error: empErr } = await admin
+    .from("employees")
+    .select("id")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (empErr) {
+    return new Response(JSON.stringify({ error: empErr.message }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  if (!empRow) {
+    return new Response(JSON.stringify({ error: "Forbidden: orphan session" }), {
+      status: 403,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
   if (action === "get") {
     const startStr = (body as GetPayload)?.start || isoDate(mondayOf(new Date()));

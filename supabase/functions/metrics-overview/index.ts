@@ -61,6 +61,26 @@ serve(async (req) => {
   }
   const userId = userData.user.id;
 
+  // Orphan check (server-side)
+  const { data: empRow, error: empErr } = await admin
+    .from("employees")
+    .select("id")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (empErr) {
+    return new Response(JSON.stringify({ error: empErr.message }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  if (!empRow) {
+    return new Response(JSON.stringify({ error: "Forbidden: orphan session" }), {
+      status: 403,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   // Projects (non-archived)
   const { data: allProjects, error: projErr } = await admin
     .from("projects")
@@ -80,11 +100,11 @@ serve(async (req) => {
   const allowedProjectIds = new Set((allProjects ?? []).map((p) => p.id));
 
   // Employees (teams)
-  const { data: employees, error: empErr } = await admin
+  const { data: employees, error: empListErr } = await admin
     .from("employees")
     .select("id, team");
-  if (empErr) {
-    return new Response(JSON.stringify({ error: empErr.message }), {
+  if (empListErr) {
+    return new Response(JSON.stringify({ error: empListErr.message }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
