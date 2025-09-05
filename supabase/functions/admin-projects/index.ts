@@ -11,7 +11,8 @@ type ListPayload = { action: "list" };
 type CreatePayload = { action: "create"; project: { code: string; name: string; status: "active" | "onhold" | "archived" } };
 type AssignPayload = { action: "assign"; project_id: string; employee_ids: string[] };
 type UpdatePayload = { action: "update"; project_id: string; patch: Partial<{ code: string; name: string; status: "active" | "onhold" | "archived" }> };
-type Payload = ListPayload | CreatePayload | AssignPayload | UpdatePayload;
+type DeletePayload = { action: "delete"; project_id: string };
+type Payload = ListPayload | CreatePayload | AssignPayload | UpdatePayload | DeletePayload;
 
 function isCreatePayload(p: any): p is CreatePayload {
   return p?.action === "create" && p?.project && typeof p.project?.code === "string" && typeof p.project?.name === "string";
@@ -22,11 +23,12 @@ function isAssignPayload(p: any): p is AssignPayload {
 function isUpdatePayload(p: any): p is UpdatePayload {
   return p?.action === "update" && typeof p?.project_id === "string" && p?.patch && typeof p.patch === "object";
 }
+function isDeletePayload(p: any): p is DeletePayload {
+  return p?.action === "delete" && typeof p?.project_id === "string";
+}
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
@@ -46,41 +48,20 @@ serve(async (req) => {
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-  // Verify user is authenticated (RLS-aware)
-  const userClient = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: authHeader } },
-  });
-  const { data: userData, error: userErr } = await userClient.auth.getUser();
-  if (userErr || !userData?.user) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+  const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } });
+  const admin = createClient(supabaseUrl, serviceRole, { global: { headers: { Authorization: `Bearer ${serviceRole}` } } });
+
+  const { data: userData } = await userClient.auth.getUser();
+  if (!userData?.user) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
-  // Service role client for admin ops
-  const admin = createClient(supabaseUrl, serviceRole, {
-    global: { headers: { Authorization: `Bearer ${serviceRole}` } },
-  });
-
-  // Orphan check (server-side)
-  const { data: empRow, error: empErr } = await admin
-    .from("employees")
-    .select("id")
-    .eq("id", userData.user.id)
-    .maybeSingle();
-
+  const { data: empRow, error: empErr } = await admin.from("employees").select("id").eq("id", userData.user.id).maybeSingle();
   if (empErr) {
-    return new Response(JSON.stringify({ error: empErr.message }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(JSON.stringify({ error: empErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
   if (!empRow) {
-    return new Response(JSON.stringify({ error: "Forbidden: orphan session" }), {
-      status: 403,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(JSON.stringify({ error: "Forbidden: orphan session" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
   const body = (await req.json().catch(() => ({}))) as Partial<Payload>;
@@ -171,7 +152,6 @@ serve(async (req) => {
 
   if (isAssignPayload(body)) {
     const { project_id, employee_ids } = body;
-    // Read current assignments
     const { data: current, error: curErr } = await admin
       .from("project_employees")
       .select("employee_id")
@@ -187,9 +167,7 @@ serve(async (req) => {
     const currentSet = new Set((current ?? []).map((r) => r.employee_id));
     const targetSet = new Set(employee_ids);
 
-    // To delete
     const toDelete = [...currentSet].filter((id) => !targetSet.has(id));
-    // To insert
     const toInsert = [...targetSet].filter((id) => !currentSet.has(id));
 
     if (toDelete.length > 0) {
@@ -221,6 +199,22 @@ serve(async (req) => {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+  }
+
+  if (isDeletePayload(body)) {
+    const project_id = body.project_id;
+
+    // Clean related rows to avoid FK issues
+    const delPE = await admin.from("project_employees").delete().eq("project_id", project_id);
+    if (delPE.error) return new Response(JSON.stringify({ error: delPE.error.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+    const delPI = await admin.from("plan_items").delete().eq("project_id", project_id);
+    if (delPI.error) return new Response(JSON.stringify({ error: delPI.error.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+    const { error } = await admin.from("projects").delete().eq("id", project_id);
+    if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
   return new Response(JSON.stringify({ error: "Invalid action" }), {

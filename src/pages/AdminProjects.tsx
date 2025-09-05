@@ -21,10 +21,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Pencil, Plus, Users } from "lucide-react";
-import { showSuccess } from "@/utils/toast";
+import { Pencil, Plus, Users, Trash2 } from "lucide-react";
+import { showSuccess, showError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
-import { createProject, listAdminProjects, setProjectAssignments, updateProject, type Employee, type Project, type Status } from "@/api/adminProjects";
+import { createProject, listAdminProjects, setProjectAssignments, updateProject, deleteProject, type Employee, type Project, type Status } from "@/api/adminProjects";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 type Assignments = Record<string, string[]>; // project_id -> employee_id[]
 
@@ -104,10 +115,14 @@ const AdminProjects = () => {
     const selected = Object.entries(assignSelection)
       .filter(([, v]) => v)
       .map(([k]) => k);
-    await setProjectAssignments(openAssignFor, selected);
-    showSuccess("Affectations mises à jour.");
-    setOpenAssignFor(null);
-    await refresh();
+    try {
+      await setProjectAssignments(openAssignFor, selected);
+      showSuccess("Affectations mises à jour.");
+      setOpenAssignFor(null);
+      await refresh();
+    } catch (e: any) {
+      showError(e?.message || "Mise à jour des affectations impossible.");
+    }
   };
 
   const openEditDialog = (p: Project) => {
@@ -124,6 +139,16 @@ const AdminProjects = () => {
     showSuccess("Projet modifié.");
     setOpenEditFor(null);
     await refresh();
+  };
+
+  const confirmDelete = async (projectId: string) => {
+    try {
+      await deleteProject(projectId);
+      showSuccess("Projet supprimé.");
+      await refresh();
+    } catch (e: any) {
+      showError(e?.message || "Suppression impossible.");
+    }
   };
 
   return (
@@ -343,6 +368,25 @@ const AdminProjects = () => {
                               </DialogFooter>
                             </DialogContent>
                           </Dialog>
+
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="outline" className="border-red-300 text-red-700 hover:bg-red-50">
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Supprimer
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Supprimer le projet ?</AlertDialogTitle>
+                                <AlertDialogDescription>Cette action supprimera aussi les affectations et créneaux liés.</AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Annuler</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => confirmDelete(p.id)}>Supprimer</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </td>
                       </tr>
                     );

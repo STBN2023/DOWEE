@@ -52,3 +52,10 @@ export async function setProjectAssignments(project_id: string, employee_ids: st
   });
   return unwrapFunction<{ ok: true }>(res);
 }
+
+export async function deleteProject(project_id: string): Promise<{ ok: true }> {
+  const res = await supabase.functions.invoke("admin-projects", {
+    body: { action: "delete", project_id },
+  });
+  return unwrapFunction<{ ok: true }>(res);
+}
