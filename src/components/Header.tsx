@@ -3,6 +3,8 @@ import { useRole } from "@/context/RoleContext";
 import { useUser } from "@/context/UserContext";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/context/AuthContext";
+import AuthUserBadge from "@/components/AuthUserBadge";
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   cn(
@@ -21,6 +23,7 @@ function fullName(e: { display_name?: string; first_name?: string; last_name?: s
 const Header = () => {
   const { role, setRole } = useRole();
   const { employees, currentEmployeeId, setCurrentEmployeeId } = useUser();
+  const { loading, session, employee } = useAuth();
 
   return (
     <header className="w-full border-b border-[#BFBFBF] bg-[#F7F7F7]">
@@ -76,6 +79,18 @@ const Header = () => {
                 ))}
               </SelectContent>
             </Select>
+
+            <div className="ml-4">
+              {loading ? (
+                <div className="text-sm text-[#214A33]/60">…</div>
+              ) : session && employee ? (
+                <AuthUserBadge />
+              ) : (
+                <NavLink to="/login" className={navLinkClass}>
+                  Se connecter
+                </NavLink>
+              )}
+            </div>
           </div>
         </div>
       </div>
