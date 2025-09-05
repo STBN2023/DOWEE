@@ -59,7 +59,6 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
       return;
     }
     const parsed = JSON.parse(raw) as Record<string, PlanItem> | PlanItem[];
-    // Support both array and record forms
     const next: Record<string, PlanItem> = Array.isArray(parsed)
       ? Object.fromEntries(parsed.map((p) => [keyOf(p.d, p.hour), p]))
       : parsed;
@@ -70,7 +69,7 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
     localStorage.setItem(storageKey, JSON.stringify(next));
   };
 
-  // Drag from project pill
+  // Drag depuis pilule projet
   const handleProjectDragStart = (projectId: string) => {
     setDragSel({ active: true, projectId, dayIndex: -1, startHour: -1, currentHour: -1 });
   };
@@ -78,7 +77,7 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
     setDragSel(initialDrag);
   };
 
-  // Highlight logic for cells
+  // Calcul du surlignage pour une cellule
   const isHighlighted = (dayIdx: number, hour: number) => {
     if (!dragSel.active) return false;
     if (dragSel.dayIndex === -1 || dragSel.startHour === -1) return false;
@@ -87,7 +86,7 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
     return hour >= a && hour <= b;
   };
 
-  // Commit selection → create N 60-min slots
+  // Validation de la sélection → crée N créneaux de 60 min
   const commitSelection = (dayIdx: number) => {
     if (!dragSel.active || dragSel.dayIndex !== dayIdx) return;
     const start = Math.min(dragSel.startHour, dragSel.currentHour);
@@ -110,9 +109,8 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
     });
   };
 
-  // Droppable cell handlers
+  // Gestion des cellules droppables
   const onCellDragEnter = (dayIdx: number, hour: number) => {
-    // Mark last hovered cell (used for deletion detection)
     lastOverCellRef.current = keyOf(days[dayIdx].iso, hour);
 
     if (!dragSel.active) return;
@@ -124,7 +122,7 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
   };
 
   const onCellDragOver: React.DragEventHandler<HTMLTableCellElement> = (e) => {
-    e.preventDefault(); // allow drop
+    e.preventDefault(); // permet le dépôt
   };
 
   const onCellDrop = (dayIdx: number) => {
@@ -134,7 +132,7 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
     }
   };
 
-  // Dragging an existing plan → delete if drag out
+  // Drag d’un créneau existant → suppression si glissé hors de la grille
   const onPlanDragStart = (k: string) => {
     movingPlanKeyRef.current = k;
     lastOverCellRef.current = null;
@@ -143,7 +141,7 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
   const onPlanDragEnd = () => {
     const movingKey = movingPlanKeyRef.current;
     movingPlanKeyRef.current = null;
-    // If no cell was hovered during drag, consider as "drag out" → delete
+    // Si aucune cellule n’a été survolée pendant le drag, considérer comme "drag out" → supprimer
     if (!movingKey || lastOverCellRef.current) {
       lastOverCellRef.current = null;
       return;
@@ -156,7 +154,7 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
     });
   };
 
-  // Week label (Mon dd/MM – Sun dd/MM)
+  // Libellé de la semaine (Lun dd/MM – Dim dd/MM)
   const weekLabel = React.useMemo(() => {
     if (days.length === 0) return "";
     const startLbl = days[0].label;
@@ -166,7 +164,7 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
 
   return (
     <div className="w-full">
-      {/* Toolbar */}
+      {/* Barre d’outils */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Button
@@ -175,7 +173,7 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
             onClick={() => setWeekStart((d) => addDays(d, -7))}
           >
             <ChevronLeft className="mr-2 h-4 w-4" />
-            Previous
+            Précédente
           </Button>
           <Button
             variant="outline"
@@ -183,21 +181,21 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
             onClick={() => setWeekStart(mondayOf(new Date()))}
           >
             <Home className="mr-2 h-4 w-4" />
-            This week
+            Cette semaine
           </Button>
           <Button
             variant="outline"
             className="border-[#BFBFBF] text-[#214A33]"
             onClick={() => setWeekStart((d) => addDays(d, 7))}
           >
-            Next
+            Suivante
             <ChevronRight className="ml-2 h-4 w-4" />
           </Button>
         </div>
         <div className="text-sm font-medium text-[#214A33]">{weekLabel}</div>
       </div>
 
-      {/* Project pills */}
+      {/* Pilules projets */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {projects.map((p) => (
           <ProjectPill
@@ -216,7 +214,7 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
           <thead>
             <tr>
               <th className="sticky left-0 z-10 w-24 bg-[#F7F7F7] p-2 text-left text-sm font-semibold text-[#214A33]">
-                Hour
+                Heure
               </th>
               {days.map((d) => (
                 <th key={d.iso} className="min-w-[120px] p-2 text-left text-sm font-semibold text-[#214A33]">
@@ -248,7 +246,7 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
                       {!hasPlan ? (
                         <div className="absolute inset-0 flex items-center justify-center">
                           <span className="pointer-events-none select-none text-xs text-[#214A33]/40">
-                            Drag a project here…
+                            Glissez un projet ici…
                           </span>
                         </div>
                       ) : (
@@ -278,7 +276,7 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
       </div>
 
       <p className="mt-3 text-xs text-[#214A33]/60">
-        Tip: keep the cursor in the same column while dragging to stretch the selection. To delete a slot, drag it outside of the grid then release.
+        Astuce : gardez le curseur dans la même colonne pendant le glisser-déposer pour étirer la sélection. Pour supprimer un créneau, faites-le glisser en dehors de la grille puis relâchez.
       </p>
     </div>
   );

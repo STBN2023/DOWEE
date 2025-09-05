@@ -11,7 +11,7 @@ const Dashboards = () => {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
-      <h1 className="mb-4 text-2xl font-semibold text-[#214A33]">Dashboards</h1>
+      <h1 className="mb-4 text-2xl font-semibold text-[#214A33]">Tableaux de bord</h1>
       <Tabs defaultValue={defaultTab} className="w-full">
         <TabsList className="bg-[#F7F7F7]">
           <TabsTrigger value="global">Global</TabsTrigger>

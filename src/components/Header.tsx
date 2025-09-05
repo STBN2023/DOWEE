@@ -30,7 +30,7 @@ const Header = () => {
                 Planning
               </NavLink>
               <NavLink to="/dashboards" className={navLinkClass}>
-                Dashboards
+                Tableaux de bord
               </NavLink>
             </nav>
           </div>
