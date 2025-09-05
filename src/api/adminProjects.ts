@@ -38,6 +38,14 @@ export async function createProject(input: { code: string; name: string; status:
   return (data as any).project as Project;
 }
 
+export async function updateProject(project_id: string, patch: Partial<{ code: string; name: string; status: Status }>): Promise<Project> {
+  const { data, error } = await supabase.functions.invoke("admin-projects", {
+    body: { action: "update", project_id, patch },
+  });
+  if (error) throw error;
+  return (data as any).project as Project;
+}
+
 export async function setProjectAssignments(project_id: string, employee_ids: string[]): Promise<{ ok: true }> {
   const { data, error } = await supabase.functions.invoke("admin-projects", {
     body: { action: "assign", project_id, employee_ids },

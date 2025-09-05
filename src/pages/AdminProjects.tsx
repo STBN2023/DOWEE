@@ -20,10 +20,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Users } from "lucide-react";
+import { Pencil, Plus, Users } from "lucide-react";
 import { showSuccess } from "@/utils/toast";
 import { cn } from "@/lib/utils";
-import { createProject, listAdminProjects, setProjectAssignments, type Employee, type Project, type Status } from "@/api/adminProjects";
+import { createProject, listAdminProjects, setProjectAssignments, updateProject, type Employee, type Project, type Status } from "@/api/adminProjects";
 
 type Assignments = Record<string, string[]>; // project_id -> employee_id[]
 
@@ -49,6 +49,13 @@ const AdminProjects = () => {
 
   const [openAssignFor, setOpenAssignFor] = React.useState<string | null>(null);
   const [assignSelection, setAssignSelection] = React.useState<Record<string, boolean>>({});
+
+  const [openEditFor, setOpenEditFor] = React.useState<Project | null>(null);
+  const [editForm, setEditForm] = React.useState<{ code: string; name: string; status: Status }>({
+    code: "",
+    name: "",
+    status: "active",
+  });
 
   const refresh = async () => {
     setLoading(true);
@@ -99,6 +106,22 @@ const AdminProjects = () => {
     await setProjectAssignments(openAssignFor, selected);
     showSuccess("Affectations mises à jour.");
     setOpenAssignFor(null);
+    await refresh();
+  };
+
+  const openEditDialog = (p: Project) => {
+    setOpenEditFor(p);
+    setEditForm({ code: p.code, name: p.name, status: p.status });
+  };
+
+  const confirmEdit = async () => {
+    if (!openEditFor) return;
+    const code = editForm.code.trim();
+    const name = editForm.name.trim();
+    if (!code || !name) return;
+    await updateProject(openEditFor.id, { code, name, status: editForm.status });
+    showSuccess("Projet modifié.");
+    setOpenEditFor(null);
     await refresh();
   };
 
@@ -222,7 +245,63 @@ const AdminProjects = () => {
                             )}
                           </div>
                         </td>
-                        <td className="p-2">
+                        <td className="p-2 flex gap-2">
+                          <Dialog open={openEditFor?.id === p.id} onOpenChange={(o) => (o ? openEditDialog(p) : setOpenEditFor(null))}>
+                            <DialogTrigger asChild>
+                              <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]">
+                                <Pencil className="mr-2 h-4 w-4" />
+                                Modifier
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Modifier le projet — {p.code}</DialogTitle>
+                              </DialogHeader>
+                              <div className="grid gap-4 py-2">
+                                <div className="grid gap-2">
+                                  <Label htmlFor={`edit-code-${p.id}`}>Code</Label>
+                                  <Input
+                                    id={`edit-code-${p.id}`}
+                                    value={editForm.code}
+                                    onChange={(e) => setEditForm((f) => ({ ...f, code: e.target.value }))}
+                                  />
+                                </div>
+                                <div className="grid gap-2">
+                                  <Label htmlFor={`edit-name-${p.id}`}>Nom</Label>
+                                  <Input
+                                    id={`edit-name-${p.id}`}
+                                    value={editForm.name}
+                                    onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                                  />
+                                </div>
+                                <div className="grid gap-2">
+                                  <Label>Statut</Label>
+                                  <Select
+                                    value={editForm.status}
+                                    onValueChange={(v) => setEditForm((f) => ({ ...f, status: v as Status }))}
+                                  >
+                                    <SelectTrigger className="w-full">
+                                      <SelectValue placeholder="Choisir un statut" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="active">Actif</SelectItem>
+                                      <SelectItem value="onhold">En pause</SelectItem>
+                                      <SelectItem value="archived">Archivé</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              </div>
+                              <DialogFooter>
+                                <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={() => setOpenEditFor(null)}>
+                                  Annuler
+                                </Button>
+                                <Button className="bg-[#F2994A] hover:bg-[#F2994A]/90 text-white" onClick={confirmEdit}>
+                                  Enregistrer
+                                </Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+
                           <Dialog open={openAssignFor === p.id} onOpenChange={(o) => (o ? openAssignDialog(p.id) : setOpenAssignFor(null))}>
                             <DialogTrigger asChild>
                               <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]">

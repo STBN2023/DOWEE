@@ -10,13 +10,17 @@ const corsHeaders = {
 type ListPayload = { action: "list" };
 type CreatePayload = { action: "create"; project: { code: string; name: string; status: "active" | "onhold" | "archived" } };
 type AssignPayload = { action: "assign"; project_id: string; employee_ids: string[] };
-type Payload = ListPayload | CreatePayload | AssignPayload;
+type UpdatePayload = { action: "update"; project_id: string; patch: Partial<{ code: string; name: string; status: "active" | "onhold" | "archived" }> };
+type Payload = ListPayload | CreatePayload | AssignPayload | UpdatePayload;
 
 function isCreatePayload(p: any): p is CreatePayload {
   return p?.action === "create" && p?.project && typeof p.project?.code === "string" && typeof p.project?.name === "string";
 }
 function isAssignPayload(p: any): p is AssignPayload {
   return p?.action === "assign" && typeof p?.project_id === "string" && Array.isArray(p?.employee_ids);
+}
+function isUpdatePayload(p: any): p is UpdatePayload {
+  return p?.action === "update" && typeof p?.project_id === "string" && p?.patch && typeof p.patch === "object";
 }
 
 serve(async (req) => {
@@ -54,23 +58,43 @@ serve(async (req) => {
     });
   }
 
-  // Service role client for cross-tenant reads/writes required by admin page
+  // Service role client for admin ops
   const admin = createClient(supabaseUrl, serviceRole, {
     global: { headers: { Authorization: `Bearer ${serviceRole}` } },
   });
 
+  // Orphan check (server-side)
+  const { data: empRow, error: empErr } = await admin
+    .from("employees")
+    .select("id")
+    .eq("id", userData.user.id)
+    .maybeSingle();
+
+  if (empErr) {
+    return new Response(JSON.stringify({ error: empErr.message }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  if (!empRow) {
+    return new Response(JSON.stringify({ error: "Forbidden: orphan session" }), {
+      status: 403,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   const body = (await req.json().catch(() => ({}))) as Partial<Payload>;
 
   if (body.action === "list") {
-    const [{ data: employees, error: empErr }, { data: projects, error: projErr }, { data: pe, error: peErr }] =
+    const [{ data: employees, error: empErr2 }, { data: projects, error: projErr }, { data: pe, error: peErr }] =
       await Promise.all([
         admin.from("employees").select("id, first_name, last_name, display_name"),
         admin.from("projects").select("id, code, name, status"),
         admin.from("project_employees").select("project_id, employee_id"),
       ]);
 
-    if (empErr || projErr || peErr) {
-      const err = empErr?.message || projErr?.message || peErr?.message || "Unknown error";
+    if (empErr2 || projErr || peErr) {
+      const err = empErr2?.message || projErr?.message || peErr?.message || "Unknown error";
       return new Response(JSON.stringify({ error: err }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -102,6 +126,33 @@ serve(async (req) => {
         name: project.name,
         status: project.status ?? "active",
       })
+      .select("id, code, name, status")
+      .single();
+
+    if (error) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    return new Response(JSON.stringify({ project: data }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  if (isUpdatePayload(body)) {
+    const { project_id, patch } = body;
+    const payload: Record<string, any> = {};
+    if (typeof patch.code === "string") payload.code = patch.code;
+    if (typeof patch.name === "string") payload.name = patch.name;
+    if (patch.status === "active" || patch.status === "onhold" || patch.status === "archived") payload.status = patch.status;
+
+    const { data, error } = await admin
+      .from("projects")
+      .update(payload)
+      .eq("id", project_id)
       .select("id, code, name, status")
       .single();
 
