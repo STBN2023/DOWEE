@@ -85,7 +85,7 @@ const AdminProjects = () => {
     name: "",
     status: "active",
     client_id: "",
-    tariff_id: "",
+    tariff_id: null,
     quote_amount: "",
   });
 
@@ -103,7 +103,7 @@ const AdminProjects = () => {
     name: "",
     status: "active",
     client_id: "",
-    tariff_id: "",
+    tariff_id: null,
     quote_amount: "",
   });
 
@@ -146,7 +146,7 @@ const AdminProjects = () => {
         quote_amount: isFinite(Number(quote)) ? Number(quote) : null,
       });
       showSuccess(`Projet créé: ${created.code}`);
-      setForm({ name: "", status: "active", client_id: "", tariff_id: "", quote_amount: "" });
+      setForm({ name: "", status: "active", client_id: "", tariff_id: null, quote_amount: "" });
       setOpenCreate(false);
       await refresh();
     } catch (e: any) {
@@ -185,7 +185,7 @@ const AdminProjects = () => {
       name: p.name,
       status: p.status,
       client_id: p.client_id || "",
-      tariff_id: p.tariff_id || "",
+      tariff_id: p.tariff_id || null,
       quote_amount: p.quote_amount != null ? String(p.quote_amount) : "",
     });
   };
@@ -277,14 +277,14 @@ const AdminProjects = () => {
                 <div className="grid gap-2">
                   <Label>Barème tarifs</Label>
                   <Select
-                    value={form.tariff_id || ""}
-                    onValueChange={(v) => setForm((f) => ({ ...f, tariff_id: v }))}
+                    value={form.tariff_id ?? "none"}
+                    onValueChange={(v) => setForm((f) => ({ ...f, tariff_id: v === "none" ? null : v }))}
                   >
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Sans barème (optionnel)" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">— Aucun —</SelectItem>
+                      <SelectItem value="none">— Aucun —</SelectItem>
                       {tariffs.map((t) => (
                         <SelectItem key={t.id} value={t.id}>
                           {t.label}
@@ -448,14 +448,14 @@ const AdminProjects = () => {
                                 <div className="grid gap-2">
                                   <Label>Barème tarifs</Label>
                                   <Select
-                                    value={editForm.tariff_id || ""}
-                                    onValueChange={(v) => setEditForm((f) => ({ ...f, tariff_id: v }))}
+                                    value={editForm.tariff_id ?? "none"}
+                                    onValueChange={(v) => setEditForm((f) => ({ ...f, tariff_id: v === "none" ? null : v }))}
                                   >
                                     <SelectTrigger className="w-full">
                                       <SelectValue placeholder="Sans barème (optionnel)" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                      <SelectItem value="">— Aucun —</SelectItem>
+                                      <SelectItem value="none">— Aucun —</SelectItem>
                                       {tariffs.map((t) => (
                                         <SelectItem key={t.id} value={t.id}>
                                           {t.label}
