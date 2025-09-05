@@ -15,6 +15,10 @@ import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./pages/Login";
 import Debug from "./pages/Debug";
+import Admin from "./pages/Admin";
+import AdminEmployees from "./pages/AdminEmployees";
+import AdminClients from "./pages/AdminClients";
+import AdminReferences from "./pages/AdminReferences";
 
 const queryClient = new QueryClient();
 
@@ -48,10 +52,42 @@ const App = () => (
                   }
                 />
                 <Route
+                  path="/admin"
+                  element={
+                    <ProtectedRoute>
+                      <Admin />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/employees"
+                  element={
+                    <ProtectedRoute>
+                      <AdminEmployees />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/clients"
+                  element={
+                    <ProtectedRoute>
+                      <AdminClients />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
                   path="/admin/projects"
                   element={
                     <ProtectedRoute>
                       <AdminProjects />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/references"
+                  element={
+                    <ProtectedRoute>
+                      <AdminReferences />
                     </ProtectedRoute>
                   }
                 />

@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import AuthUserBadge from "@/components/AuthUserBadge";
+import BurgerMenu from "@/components/BurgerMenu";
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   cn(
@@ -29,8 +30,9 @@ const Header = () => {
     <header className="w-full border-b border-[#BFBFBF] bg-[#F7F7F7]">
       <div className="mx-auto max-w-6xl px-4">
         <div className="flex h-14 items-center justify-between">
-          <div className="flex items-center gap-6">
-            <Link to="/" className="text-lg font-semibold tracking-tight text-[#214A33]">
+          <div className="flex items-center gap-3">
+            <BurgerMenu />
+            <Link to="/" className="ml-1 text-lg font-semibold tracking-tight text-[#214A33]">
               DOWEE V2
             </Link>
             <nav className="hidden md:flex items-center gap-1">
@@ -43,16 +45,9 @@ const Header = () => {
               <NavLink to="/dashboards" className={navLinkClass}>
                 Tableaux de bord
               </NavLink>
-              {role === "admin" && (
-                <>
-                  <NavLink to="/admin/projects" className={navLinkClass}>
-                    Admin Projets
-                  </NavLink>
-                  <NavLink to="/debug" className={navLinkClass}>
-                    Debug
-                  </NavLink>
-                </>
-              )}
+              <NavLink to="/admin" className={navLinkClass}>
+                Admin
+              </NavLink>
             </nav>
           </div>
           <div className="flex items-center gap-3">
@@ -85,7 +80,7 @@ const Header = () => {
               </SelectContent>
             </Select>
 
-            <div className="ml-4">
+            <div className="ml-2">
               {loading ? (
                 <div className="text-sm text-[#214A33]/60">…</div>
               ) : session && employee ? (
