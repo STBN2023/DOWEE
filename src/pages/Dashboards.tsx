@@ -2,12 +2,33 @@ import React from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRole } from "@/context/RoleContext";
+import { mondayOf } from "@/utils/date";
+import { format } from "date-fns";
+
+type PlanItem = { id: string; d: string; hour: number; projectId: string };
 
 const Dashboards = () => {
   const { role } = useRole();
+  const defaultTab = role === "admin" ? "global" : role === "manager" ? "team" : "me";
 
-  const defaultTab =
-    role === "admin" ? "global" : role === "manager" ? "team" : "me";
+  const [meProjects, setMeProjects] = React.useState<number>(0);
+  const [meHours, setMeHours] = React.useState<number>(0);
+
+  React.useEffect(() => {
+    const weekStart = mondayOf(new Date());
+    const storageKey = `dowee.plans.${format(weekStart, "yyyy-MM-dd")}`;
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) {
+      setMeProjects(0);
+      setMeHours(0);
+      return;
+    }
+    const parsed = JSON.parse(raw) as Record<string, PlanItem> | PlanItem[];
+    const entries: PlanItem[] = Array.isArray(parsed) ? parsed : Object.values(parsed);
+    const projectSet = new Set(entries.map((p) => p.projectId));
+    setMeProjects(projectSet.size);
+    setMeHours(entries.length); // 1 entrée = 1h
+  }, []);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
@@ -37,8 +58,8 @@ const Dashboards = () => {
 
         <TabsContent value="me" className="mt-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <StatCard title="Mes projets" value="—" />
-            <StatCard title="Heures planifiées (semaine)" value="—" />
+            <StatCard title="Mes projets (semaine)" value={`${meProjects}`} />
+            <StatCard title="Heures planifiées (semaine)" value={`${meHours} h`} />
           </div>
         </TabsContent>
       </Tabs>

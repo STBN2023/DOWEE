@@ -4,7 +4,19 @@ import { cn } from "@/lib/utils";
 import ProjectPill from "@/components/planning/ProjectPill";
 import { Button } from "@/components/ui/button";
 import { addDays, format } from "date-fns";
-import { ChevronLeft, ChevronRight, Home } from "lucide-react";
+import { ChevronLeft, ChevronRight, Home, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { showSuccess } from "@/utils/toast";
 
 type Project = { id: string; code: string; name: string };
 type PlanItem = { id: string; d: string; hour: number; projectId: string };
@@ -69,6 +81,12 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
     localStorage.setItem(storageKey, JSON.stringify(next));
   };
 
+  const clearWeek = () => {
+    localStorage.removeItem(storageKey);
+    setPlans({});
+    showSuccess("Semaine effacée.");
+  };
+
   // Drag depuis pilule projet
   const handleProjectDragStart = (projectId: string) => {
     setDragSel({ active: true, projectId, dayIndex: -1, startHour: -1, currentHour: -1 });
@@ -92,6 +110,7 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
     const start = Math.min(dragSel.startHour, dragSel.currentHour);
     const end = Math.max(dragSel.startHour, dragSel.currentHour);
     const d = days[dayIdx].iso;
+    const count = end - start + 1;
 
     setPlans((prev) => {
       const next = { ...prev };
@@ -107,6 +126,10 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
       persistPlans(next);
       return next;
     });
+
+    const plural = count > 1 ? "s" : "";
+    const x = count > 1 ? "x" : "";
+    showSuccess(`${count} créneau${x} ajouté${plural}.`);
   };
 
   // Gestion des cellules droppables
@@ -141,7 +164,7 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
   const onPlanDragEnd = () => {
     const movingKey = movingPlanKeyRef.current;
     movingPlanKeyRef.current = null;
-    // Si aucune cellule n’a été survolée pendant le drag, considérer comme "drag out" → supprimer
+    // Si une cellule a été survolée, on considère que le curseur est resté dans la grille → ne pas supprimer
     if (!movingKey || lastOverCellRef.current) {
       lastOverCellRef.current = null;
       return;
@@ -152,6 +175,7 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
       persistPlans(next);
       return next;
     });
+    showSuccess("Créneau supprimé.");
   };
 
   // Libellé de la semaine (Lun dd/MM – Dim dd/MM)
@@ -192,7 +216,34 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
             <ChevronRight className="ml-2 h-4 w-4" />
           </Button>
         </div>
-        <div className="text-sm font-medium text-[#214A33]">{weekLabel}</div>
+
+        <div className="flex items-center gap-2">
+          <div className="text-sm font-medium text-[#214A33]">{weekLabel}</div>
+
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="outline"
+                className="border-[#F2994A] text-[#214A33] hover:bg-[#F2994A]/10"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Effacer la semaine
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Effacer la semaine ?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Cette action supprimera tous les créneaux planifiés de cette semaine depuis votre navigateur. Elle est irréversible.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Annuler</AlertDialogCancel>
+                <AlertDialogAction onClick={clearWeek}>Effacer</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
       </div>
 
       {/* Pilules projets */}
