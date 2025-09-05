@@ -1,12 +1,16 @@
 import React from "react";
-import { weekFrom, formatHour, DayInfo } from "@/utils/date";
+import { weekFrom, formatHour, DayInfo, mondayOf } from "@/utils/date";
 import { cn } from "@/lib/utils";
+import ProjectPill from "@/components/planning/ProjectPill";
+import { Button } from "@/components/ui/button";
+import { addDays, format } from "date-fns";
+import { ChevronLeft, ChevronRight, Home } from "lucide-react";
 
 type Project = { id: string; code: string; name: string };
 type PlanItem = { id: string; d: string; hour: number; projectId: string };
 
 const HOURS_START = 8;
-const HOURS_END_EXCLUSIVE = 18; // couvre 08..17
+const HOURS_END_EXCLUSIVE = 18; // covers 08..17
 
 function keyOf(d: string, hour: number) {
   return `${d}|${hour}`;
@@ -28,7 +32,8 @@ const cellBase =
   "relative min-w-[120px] h-[56px] align-middle border border-[#BFBFBF]/60 bg-white";
 
 const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
-  const days = React.useMemo<DayInfo[]>(() => weekFrom(), []);
+  const [weekStart, setWeekStart] = React.useState<Date>(() => mondayOf(new Date()));
+  const days = React.useMemo<DayInfo[]>(() => weekFrom(weekStart), [weekStart]);
   const hours = React.useMemo<number[]>(
     () => Array.from({ length: HOURS_END_EXCLUSIVE - HOURS_START }, (_, i) => HOURS_START + i),
     []
@@ -44,7 +49,28 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
     [projects]
   );
 
-  // Drag depuis pilule projet
+  // Storage helpers (per week)
+  const storageKey = React.useMemo(() => `dowee.plans.${format(weekStart, "yyyy-MM-dd")}`, [weekStart]);
+
+  React.useEffect(() => {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) {
+      setPlans({});
+      return;
+    }
+    const parsed = JSON.parse(raw) as Record<string, PlanItem> | PlanItem[];
+    // Support both array and record forms
+    const next: Record<string, PlanItem> = Array.isArray(parsed)
+      ? Object.fromEntries(parsed.map((p) => [keyOf(p.d, p.hour), p]))
+      : parsed;
+    setPlans(next);
+  }, [storageKey]);
+
+  const persistPlans = (next: Record<string, PlanItem>) => {
+    localStorage.setItem(storageKey, JSON.stringify(next));
+  };
+
+  // Drag from project pill
   const handleProjectDragStart = (projectId: string) => {
     setDragSel({ active: true, projectId, dayIndex: -1, startHour: -1, currentHour: -1 });
   };
@@ -52,16 +78,16 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
     setDragSel(initialDrag);
   };
 
-  // Calcul du highlight pour une cellule
+  // Highlight logic for cells
   const isHighlighted = (dayIdx: number, hour: number) => {
     if (!dragSel.active) return false;
     if (dragSel.dayIndex === -1 || dragSel.startHour === -1) return false;
     if (dayIdx !== dragSel.dayIndex) return false;
     const [a, b] = [dragSel.startHour, dragSel.currentHour].sort((x, y) => x - y);
     return hour >= a && hour <= b;
-    };
+  };
 
-  // Drop logique → crée N créneaux 60 min
+  // Commit selection → create N 60-min slots
   const commitSelection = (dayIdx: number) => {
     if (!dragSel.active || dragSel.dayIndex !== dayIdx) return;
     const start = Math.min(dragSel.startHour, dragSel.currentHour);
@@ -79,13 +105,14 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
           projectId: dragSel.projectId,
         };
       }
+      persistPlans(next);
       return next;
     });
   };
 
-  // Gestion droppables sur cellules
+  // Droppable cell handlers
   const onCellDragEnter = (dayIdx: number, hour: number) => {
-    // Marque la dernière cellule survolée (utile pour suppression)
+    // Mark last hovered cell (used for deletion detection)
     lastOverCellRef.current = keyOf(days[dayIdx].iso, hour);
 
     if (!dragSel.active) return;
@@ -97,7 +124,7 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
   };
 
   const onCellDragOver: React.DragEventHandler<HTMLTableCellElement> = (e) => {
-    e.preventDefault(); // permet le drop
+    e.preventDefault(); // allow drop
   };
 
   const onCellDrop = (dayIdx: number) => {
@@ -107,7 +134,7 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
     }
   };
 
-  // Drag d'un bloc existant → suppression si drag out
+  // Dragging an existing plan → delete if drag out
   const onPlanDragStart = (k: string) => {
     movingPlanKeyRef.current = k;
     lastOverCellRef.current = null;
@@ -116,7 +143,7 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
   const onPlanDragEnd = () => {
     const movingKey = movingPlanKeyRef.current;
     movingPlanKeyRef.current = null;
-    // Si aucune cellule n'a été survolée pendant le drag, considérer comme "drag out" → supprimer
+    // If no cell was hovered during drag, consider as "drag out" → delete
     if (!movingKey || lastOverCellRef.current) {
       lastOverCellRef.current = null;
       return;
@@ -124,13 +151,53 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
     setPlans((prev) => {
       const next = { ...prev };
       delete next[movingKey];
+      persistPlans(next);
       return next;
     });
   };
 
+  // Week label (Mon dd/MM – Sun dd/MM)
+  const weekLabel = React.useMemo(() => {
+    if (days.length === 0) return "";
+    const startLbl = days[0].label;
+    const endLbl = days[6].label;
+    return `${startLbl} – ${endLbl}`;
+  }, [days]);
+
   return (
     <div className="w-full">
-      {/* Bandeau projets */}
+      {/* Toolbar */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            className="border-[#BFBFBF] text-[#214A33]"
+            onClick={() => setWeekStart((d) => addDays(d, -7))}
+          >
+            <ChevronLeft className="mr-2 h-4 w-4" />
+            Previous
+          </Button>
+          <Button
+            variant="outline"
+            className="border-[#BFBFBF] text-[#214A33]"
+            onClick={() => setWeekStart(mondayOf(new Date()))}
+          >
+            <Home className="mr-2 h-4 w-4" />
+            This week
+          </Button>
+          <Button
+            variant="outline"
+            className="border-[#BFBFBF] text-[#214A33]"
+            onClick={() => setWeekStart((d) => addDays(d, 7))}
+          >
+            Next
+            <ChevronRight className="ml-2 h-4 w-4" />
+          </Button>
+        </div>
+        <div className="text-sm font-medium text-[#214A33]">{weekLabel}</div>
+      </div>
+
+      {/* Project pills */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {projects.map((p) => (
           <ProjectPill
@@ -149,7 +216,7 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
           <thead>
             <tr>
               <th className="sticky left-0 z-10 w-24 bg-[#F7F7F7] p-2 text-left text-sm font-semibold text-[#214A33]">
-                Heure
+                Hour
               </th>
               {days.map((d) => (
                 <th key={d.iso} className="min-w-[120px] p-2 text-left text-sm font-semibold text-[#214A33]">
@@ -181,7 +248,7 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
                       {!hasPlan ? (
                         <div className="absolute inset-0 flex items-center justify-center">
                           <span className="pointer-events-none select-none text-xs text-[#214A33]/40">
-                            Glissez un projet ici…
+                            Drag a project here…
                           </span>
                         </div>
                       ) : (
@@ -211,33 +278,10 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
       </div>
 
       <p className="mt-3 text-xs text-[#214A33]/60">
-        Astuce: maintenez la souris dans la même colonne pour étirer la plage. Pour supprimer un créneau, glissez-le en dehors de la grille puis relâchez.
+        Tip: keep the cursor in the same column while dragging to stretch the selection. To delete a slot, drag it outside of the grid then release.
       </p>
     </div>
   );
 };
 
 export default PlanningGrid;
-
-// Pilule projet réutilisée
-const ProjectPill: React.FC<{
-  id: string;
-  code: string;
-  name: string;
-  onDragStart: (projectId: string) => void;
-  onDragEnd: () => void;
-}> = ({ id, code, name, onDragStart, onDragEnd }) => {
-  return (
-    <div
-      draggable
-      onDragStart={() => onDragStart(id)}
-      onDragEnd={onDragEnd}
-      className="select-none inline-flex items-center gap-2 rounded-full border border-[#BFBFBF] bg-white px-3 py-1 text-sm text-[#214A33] shadow-sm hover:shadow transition"
-      title={`${code} — ${name}`}
-    >
-      <span className="h-2 w-2 rounded-full bg-[#F2994A]" />
-      <span className="font-medium">{code}</span>
-      <span className="text-[#214A33]/70">{name}</span>
-    </div>
-  );
-};
