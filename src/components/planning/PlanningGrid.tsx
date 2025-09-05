@@ -43,7 +43,7 @@ const initialDrag: DragSel = { active: false };
 const cellBase =
   "relative min-w-[120px] h-[56px] align-middle border border-[#BFBFBF]/60 bg-white";
 
-const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
+const PlanningGrid: React.FC<{ projects: Project[]; employeeId: string }> = ({ projects, employeeId }) => {
   const [weekStart, setWeekStart] = React.useState<Date>(() => mondayOf(new Date()));
   const days = React.useMemo<DayInfo[]>(() => weekFrom(weekStart), [weekStart]);
   const hours = React.useMemo<number[]>(
@@ -61,8 +61,11 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
     [projects]
   );
 
-  // Storage helpers (per week)
-  const storageKey = React.useMemo(() => `dowee.plans.${format(weekStart, "yyyy-MM-dd")}`, [weekStart]);
+  // Storage helpers (per user + per week)
+  const storageKey = React.useMemo(
+    () => `dowee.plans.${employeeId}.${format(weekStart, "yyyy-MM-dd")}`,
+    [employeeId, weekStart]
+  );
 
   React.useEffect(() => {
     const raw = localStorage.getItem(storageKey);
@@ -291,7 +294,7 @@ const PlanningGrid: React.FC<{ projects: Project[] }> = ({ projects }) => {
                         highlight && "ring-2 ring-[#F2994A] bg-[#F2994A]/10"
                       )}
                       onDragEnter={() => onCellDragEnter(dayIdx, h)}
-                      onDragOver={onCellDragOver}
+                      onDragOver={(e) => { e.preventDefault(); }}
                       onDrop={() => onCellDrop(dayIdx)}
                     >
                       {!hasPlan ? (
