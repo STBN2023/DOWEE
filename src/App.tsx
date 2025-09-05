@@ -9,7 +9,6 @@ import Header from "./components/Header";
 import PlanningPage from "./pages/Planning";
 import Dashboards from "./pages/Dashboards";
 import { RoleProvider } from "./context/RoleContext";
-import { UserProvider } from "./context/UserContext";
 import AdminProjects from "./pages/AdminProjects";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -28,83 +27,81 @@ const App = () => (
       <Toaster />
       <Sonner />
       <AuthProvider>
-        <UserProvider>
-          <RoleProvider>
-            <BrowserRouter>
-              <Header />
-              <Routes>
-                <Route path="/" element={<Index />} />
-                <Route path="/login" element={<Login />} />
-                <Route
-                  path="/planning"
-                  element={
-                    <ProtectedRoute>
-                      <PlanningPage />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/dashboards"
-                  element={
-                    <ProtectedRoute>
-                      <Dashboards />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/admin"
-                  element={
-                    <ProtectedRoute>
-                      <Admin />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/admin/employees"
-                  element={
-                    <ProtectedRoute>
-                      <AdminEmployees />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/admin/clients"
-                  element={
-                    <ProtectedRoute>
-                      <AdminClients />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/admin/projects"
-                  element={
-                    <ProtectedRoute>
-                      <AdminProjects />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/admin/references"
-                  element={
-                    <ProtectedRoute>
-                      <AdminReferences />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/debug"
-                  element={
-                    <ProtectedRoute>
-                      <Debug />
-                    </ProtectedRoute>
-                  }
-                />
-                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </BrowserRouter>
-          </RoleProvider>
-        </UserProvider>
+        <RoleProvider>
+          <BrowserRouter>
+            <Header />
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/login" element={<Login />} />
+              <Route
+                path="/planning"
+                element={
+                  <ProtectedRoute>
+                    <PlanningPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/dashboards"
+                element={
+                  <ProtectedRoute>
+                    <Dashboards />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute>
+                    <Admin />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/employees"
+                element={
+                  <ProtectedRoute>
+                    <AdminEmployees />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/clients"
+                element={
+                  <ProtectedRoute>
+                    <AdminClients />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/projects"
+                element={
+                  <ProtectedRoute>
+                    <AdminProjects />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/references"
+                element={
+                  <ProtectedRoute>
+                    <AdminReferences />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/debug"
+                element={
+                  <ProtectedRoute>
+                    <Debug />
+                  </ProtectedRoute>
+                }
+              />
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </RoleProvider>
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>

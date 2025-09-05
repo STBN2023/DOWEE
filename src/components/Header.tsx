@@ -1,6 +1,5 @@
 import { Link, NavLink } from "react-router-dom";
 import { useRole } from "@/context/RoleContext";
-import { useUser } from "@/context/UserContext";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
@@ -15,15 +14,8 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
       : "text-[#214A33] hover:bg-[#214A33]/10 hover:text-[#214A33]"
   );
 
-function fullName(e: { display_name?: string; first_name?: string; last_name?: string; email: string }) {
-  if (e.display_name && e.display_name.trim()) return e.display_name;
-  const names = [e.first_name, e.last_name].filter(Boolean).join(" ").trim();
-  return names || e.email;
-}
-
 const Header = () => {
   const { role, setRole } = useRole();
-  const { employees, currentEmployeeId, setCurrentEmployeeId } = useUser();
   const { loading, session, employee } = useAuth();
 
   return (
@@ -60,23 +52,6 @@ const Header = () => {
                 <SelectItem value="admin">Admin</SelectItem>
                 <SelectItem value="manager">Manager</SelectItem>
                 <SelectItem value="user">User</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <span className="ml-2 text-sm text-[#214A33]/80 hidden sm:inline">Utilisateur</span>
-            <Select
-              value={currentEmployeeId ?? undefined}
-              onValueChange={(v) => setCurrentEmployeeId(v)}
-            >
-              <SelectTrigger className="w-[200px] bg-white border-[#BFBFBF] text-[#214A33]">
-                <SelectValue placeholder="Sélectionner" />
-              </SelectTrigger>
-              <SelectContent>
-                {employees.map((e) => (
-                  <SelectItem key={e.id} value={e.id}>
-                    {fullName(e)}
-                  </SelectItem>
-                ))}
               </SelectContent>
             </Select>
 

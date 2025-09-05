@@ -1,56 +1,85 @@
 import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import { showSuccess } from "@/utils/toast";
+import { useAuth } from "@/context/AuthContext";
+import { listEmployees, type Employee } from "@/api/adminEmployees";
 
 const AdminEmployees = () => {
-  const [form, setForm] = React.useState({
-    first_name: "",
-    last_name: "",
-    display_name: "",
-    email: "",
-  });
+  const { loading: authLoading, employee } = useAuth();
+  const [loading, setLoading] = React.useState(true);
+  const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
+  const [employees, setEmployees] = React.useState<Employee[]>([]);
 
-  const submit = () => {
-    if (!form.first_name || !form.last_name || !form.email) return;
-    showSuccess("Profil salarié — création simulée (UI prête).");
-    setForm({ first_name: "", last_name: "", display_name: "", email: "" });
+  const refresh = async () => {
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const data = await listEmployees();
+      setEmployees(data);
+    } catch (e: any) {
+      setErrorMsg(e?.message || "Erreur lors du chargement des profils.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (authLoading || !employee) {
+      setLoading(true);
+      return;
+    }
+    refresh();
+  }, [authLoading, employee]);
+
+  const fullName = (e: Employee) => {
+    if (e.display_name && e.display_name.trim()) return e.display_name;
+    const names = [e.first_name, e.last_name].filter(Boolean).join(" ").trim();
+    return names || e.id;
   };
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6">
+    <div className="mx-auto max-w-6xl px-4 py-6">
       <Card className="border-[#BFBFBF]">
         <CardHeader>
-          <CardTitle className="text-[#214A33]">Profils salariés — Création rapide</CardTitle>
+          <CardTitle className="text-[#214A33]">Profils salariés</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label>Prénom</Label>
-              <Input value={form.first_name} onChange={(e) => setForm((f) => ({ ...f, first_name: e.target.value }))} />
-            </div>
-            <div className="grid gap-2">
-              <Label>Nom</Label>
-              <Input value={form.last_name} onChange={(e) => setForm((f) => ({ ...f, last_name: e.target.value }))} />
-            </div>
+        <CardContent>
+          {errorMsg && (
+            <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{errorMsg}</div>
+          )}
+          <div className="overflow-x-auto rounded-md border border-[#BFBFBF] bg-white">
+            <table className="w-full border-collapse">
+              <thead className="bg-[#F7F7F7]">
+                <tr>
+                  <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Nom</th>
+                  <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Rôle</th>
+                  <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Équipe</th>
+                  <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Mise à jour</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={4} className="p-4 text-center text-sm text-[#214A33]/60">Chargement…</td>
+                  </tr>
+                ) : employees.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="p-4 text-center text-sm text-[#214A33]/60">Aucun salarié pour le moment.</td>
+                  </tr>
+                ) : (
+                  employees.map((e) => (
+                    <tr key={e.id} className="border-t border-[#BFBFBF]">
+                      <td className="p-2 text-sm">{fullName(e)}</td>
+                      <td className="p-2 text-sm">{e.role ?? "user"}</td>
+                      <td className="p-2 text-sm">{e.team ?? "—"}</td>
+                      <td className="p-2 text-sm">{e.updated_at ? new Date(e.updated_at).toLocaleString() : "—"}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
-          <div className="grid gap-2">
-            <Label>Nom d’affichage (optionnel)</Label>
-            <Input value={form.display_name} onChange={(e) => setForm((f) => ({ ...f, display_name: e.target.value }))} />
-          </div>
-          <div className="grid gap-2">
-            <Label>Email</Label>
-            <Input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
-          </div>
-          <div className="pt-2">
-            <Button className="bg-[#F2994A] text-white hover:bg-[#F2994A]/90" onClick={submit}>
-              Créer le profil
-            </Button>
-          </div>
-          <p className="text-xs text-[#214A33]/60">
-            Note: cette page gère l’UI; le branchement Supabase pourra être ajouté ultérieurement.
+          <p className="mt-3 text-xs text-[#214A33]/60">
+            Les profils sont créés automatiquement à la première connexion. Cette liste reflète les comptes existants.
           </p>
         </CardContent>
       </Card>
