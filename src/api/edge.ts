@@ -2,18 +2,21 @@ export function unwrapFunction<T>(res: { data: any; error: any }): T {
   const { data, error } = res;
   if (!error) return data as T;
 
-  // Préférence au message structurel côté Edge Function
-  const message =
-    (data && (data.error || data.message)) ||
-    (typeof data === "string" ? data : null) ||
-    error?.message ||
-    "Edge function error";
-
-  // Inclure le statut s’il est exposé (pas toujours)
+  const ctx = (error as any)?.context;
+  const ctxErr = ctx?.error;
   const status =
-    (error && ((error as any).context?.response?.status || (error as any).status)) ||
-    undefined;
+    ctx?.response?.status ??
+    (error as any)?.status;
 
-  const finalMessage = status ? `${status}: ${message}` : message;
-  throw new Error(finalMessage);
+  const messageFromCtx =
+    (typeof ctxErr === "string" ? ctxErr : null) ||
+    ctxErr?.error ||
+    ctxErr?.message ||
+    null;
+
+  const messageFromData =
+    (data && (data.error || data.message || (typeof data === "string" ? data : null))) || null;
+
+  const finalMessage = messageFromCtx || messageFromData || error?.message || "Edge function error";
+  throw new Error(status ? `${status}: ${finalMessage}` : finalMessage);
 }

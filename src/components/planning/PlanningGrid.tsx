@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { showSuccess, showError } from "@/utils/toast";
 import { getUserWeek, patchUserWeek, PlanDTO } from "@/api/userWeek";
+import { useAuth } from "@/context/AuthContext";
 
 type Project = { id: string; code: string; name: string };
 type PlanItem = { id?: string; d: string; hour: number; projectId: string };
@@ -45,6 +46,8 @@ const cellBase =
   "relative min-w-[120px] h-[56px] align-middle border border-[#BFBFBF]/60 bg-white";
 
 const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackProjects = [] }) => {
+  const { loading: authLoading, employee } = useAuth();
+
   const [weekStart, setWeekStart] = React.useState<Date>(() => mondayOf(new Date()));
   const days = React.useMemo<DayInfo[]>(() => weekFrom(weekStart), [weekStart]);
   const hours = React.useMemo<number[]>(
@@ -66,9 +69,17 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     [projects]
   );
 
-  // Chargement semaine avec gestion d’erreur
+  // Chargement semaine, seulement quand le profil est prêt
   React.useEffect(() => {
     let mounted = true;
+    if (authLoading || !employee) {
+      // Attente de l’init profil
+      setLoading(true);
+      return () => {
+        mounted = false;
+      };
+    }
+
     const fetchWeek = async () => {
       setLoading(true);
       setErrorMsg(null);
@@ -102,7 +113,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     return () => {
       mounted = false;
     };
-  }, [weekStart, fallbackProjects]);
+  }, [weekStart, fallbackProjects, authLoading, employee]);
 
   // Drag depuis pilule projet
   const handleProjectDragStart = (projectId: string) => {
@@ -122,6 +133,13 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
 
   const commitSelection = async (dayIdx: number) => {
     if (!dragSel.active || dragSel.dayIndex !== dayIdx) return;
+
+    // Ne pas lancer d’API tant que le profil n’est pas prêt
+    if (authLoading || !employee) {
+      showError("Profil en cours d’initialisation, veuillez réessayer dans un instant.");
+      return;
+    }
+
     const start = Math.min(dragSel.startHour, dragSel.currentHour);
     const end = Math.max(dragSel.startHour, dragSel.currentHour);
     const d = days[dayIdx].iso;
@@ -385,7 +403,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
                       {!hasPlan ? (
                         <div className="absolute inset-0 flex items-center justify-center">
                           <span className="pointer-events-none select-none text-xs text-[#214A33]/40">
-                            {loading ? "Chargement…" : "Glissez un projet ici…"}
+                            {loading || authLoading || !employee ? "Chargement…" : "Glissez un projet ici…"}
                           </span>
                         </div>
                       ) : (

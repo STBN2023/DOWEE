@@ -5,9 +5,11 @@ import { useRole } from "@/context/RoleContext";
 import { mondayOf } from "@/utils/date";
 import { getMetricsOverview } from "@/api/metrics";
 import { getUserWeek } from "@/api/userWeek";
+import { useAuth } from "@/context/AuthContext";
 
 const Dashboards = () => {
   const { role } = useRole();
+  const { loading: authLoading, employee } = useAuth();
   const defaultTab = role === "admin" ? "global" : role === "manager" ? "team" : "me";
 
   const [globalStats, setGlobalStats] = React.useState<{ total: number; active: number; onhold: number }>({ total: 0, active: 0, onhold: 0 });
@@ -16,24 +18,35 @@ const Dashboards = () => {
   const [meHours, setMeHours] = React.useState<number>(0);
 
   React.useEffect(() => {
-    const load = async () => {
-      const metrics = await getMetricsOverview();
-      setGlobalStats({
-        total: metrics.global.nb_projects_total,
-        active: metrics.global.nb_projects_active,
-        onhold: metrics.global.nb_projects_onhold,
-      });
-      const commercial = metrics.byTeam.find((t) => t.team === "commercial")?.nb_projects_active_distinct ?? 0;
-      const crea = metrics.byTeam.find((t) => t.team === "créa")?.nb_projects_active_distinct ?? 0;
-      const dev = metrics.byTeam.find((t) => t.team === "dev")?.nb_projects_active_distinct ?? 0;
-      setTeamStats({ commercial, crea, dev });
-      setMeProjects(metrics.me.nb_projects_mine);
+    if (authLoading || !employee) return;
 
-      const week = await getUserWeek(mondayOf(new Date()));
-      setMeHours(week.plans.length); // 1 plan = 1h
+    const load = async () => {
+      try {
+        const metrics = await getMetricsOverview();
+        setGlobalStats({
+          total: metrics.global.nb_projects_total,
+          active: metrics.global.nb_projects_active,
+          onhold: metrics.global.nb_projects_onhold,
+        });
+        const commercial = metrics.byTeam.find((t) => t.team === "commercial")?.nb_projects_active_distinct ?? 0;
+        const crea = metrics.byTeam.find((t) => t.team === "créa")?.nb_projects_active_distinct ?? 0;
+        const dev = metrics.byTeam.find((t) => t.team === "dev")?.nb_projects_active_distinct ?? 0;
+        setTeamStats({ commercial, crea, dev });
+        setMeProjects(metrics.me.nb_projects_mine);
+      } catch (e) {
+        // laisser les stats à 0 si non disponibles
+        console.warn("metrics-overview error", e);
+      }
+
+      try {
+        const week = await getUserWeek(mondayOf(new Date()));
+        setMeHours(week.plans.length); // 1 plan = 1h
+      } catch (e) {
+        console.warn("user-week error", e);
+      }
     };
     load();
-  }, []);
+  }, [authLoading, employee]);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
