@@ -1,5 +1,6 @@
 import { Link, NavLink } from "react-router-dom";
 import { useRole } from "@/context/RoleContext";
+import { useUser } from "@/context/UserContext";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
@@ -11,8 +12,15 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
       : "text-[#214A33] hover:bg-[#214A33]/10 hover:text-[#214A33]"
   );
 
+function fullName(e: { display_name?: string; first_name?: string; last_name?: string; email: string }) {
+  if (e.display_name && e.display_name.trim()) return e.display_name;
+  const names = [e.first_name, e.last_name].filter(Boolean).join(" ").trim();
+  return names || e.email;
+}
+
 const Header = () => {
   const { role, setRole } = useRole();
+  const { employees, currentEmployeeId, setCurrentEmployeeId } = useUser();
 
   return (
     <header className="w-full border-b border-[#BFBFBF] bg-[#F7F7F7]">
@@ -42,13 +50,30 @@ const Header = () => {
           <div className="flex items-center gap-3">
             <span className="text-sm text-[#214A33]/80">Vue</span>
             <Select value={role} onValueChange={(v) => setRole(v as any)}>
-              <SelectTrigger className="w-[160px] bg-white border-[#BFBFBF] text-[#214A33]">
+              <SelectTrigger className="w-[140px] bg-white border-[#BFBFBF] text-[#214A33]">
                 <SelectValue placeholder="Rôle" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="admin">Admin</SelectItem>
                 <SelectItem value="manager">Manager</SelectItem>
                 <SelectItem value="user">User</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <span className="ml-2 text-sm text-[#214A33]/80 hidden sm:inline">Utilisateur</span>
+            <Select
+              value={currentEmployeeId ?? undefined}
+              onValueChange={(v) => setCurrentEmployeeId(v)}
+            >
+              <SelectTrigger className="w-[200px] bg-white border-[#BFBFBF] text-[#214A33]">
+                <SelectValue placeholder="Sélectionner" />
+              </SelectTrigger>
+              <SelectContent>
+                {employees.map((e) => (
+                  <SelectItem key={e.id} value={e.id}>
+                    {fullName(e)}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
