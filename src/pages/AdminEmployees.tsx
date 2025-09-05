@@ -49,7 +49,7 @@ const AdminEmployees = () => {
     first_name: string;
     last_name: string;
     role: "admin" | "manager" | "user";
-    team: string; // slug sélectionné
+    team: string; // slug sélectionné, "" si aucune
   }>({ id: "", display_name: "", first_name: "", last_name: "", role: "user", team: "" });
 
   const [editFor, setEditFor] = React.useState<Employee | null>(null);
@@ -58,7 +58,7 @@ const AdminEmployees = () => {
     first_name: string;
     last_name: string;
     role: "admin" | "manager" | "user";
-    team: string; // slug sélectionné
+    team: string; // slug sélectionné, "" si aucune
   }>({ display_name: "", first_name: "", last_name: "", role: "user", team: "" });
 
   const refresh = async () => {
@@ -106,7 +106,7 @@ const AdminEmployees = () => {
       showError("L’ID utilisateur (UUID) est requis.");
       return;
     }
-    const normalizedTeam = normalizeTeamSlug(createForm.team);
+    const normalizedTeam = normalizeTeamSlug(createForm.team || null);
     try {
       await createEmployee({
         id,
@@ -114,7 +114,7 @@ const AdminEmployees = () => {
         first_name: createForm.first_name || null,
         last_name: createForm.last_name || null,
         role: createForm.role,
-        team: normalizedTeam, // stocke le slug normalisé (ex: 'créa', 'dev', 'commercial', 'direction')
+        team: normalizedTeam, // 'créa' | 'dev' | 'commercial' | 'direction' | null
       });
       showSuccess("Profil créé.");
       setOpenCreate(false);
@@ -127,7 +127,7 @@ const AdminEmployees = () => {
 
   const confirmEdit = async () => {
     if (!editFor) return;
-    const normalizedTeam = normalizeTeamSlug(editForm.team);
+    const normalizedTeam = normalizeTeamSlug(editForm.team || null);
     try {
       await updateEmployee(editFor.id, {
         display_name: editForm.display_name || null,
@@ -202,12 +202,12 @@ const AdminEmployees = () => {
                   <div className="grid gap-2">
                     <Label>Équipe (optionnel)</Label>
                     <Select
-                      value={createForm.team || ""}
-                      onValueChange={(v) => setCreateForm((f) => ({ ...f, team: v }))}
+                      value={createForm.team ? createForm.team : "none"}
+                      onValueChange={(v) => setCreateForm((f) => ({ ...f, team: v === "none" ? "" : v }))}
                     >
                       <SelectTrigger><SelectValue placeholder="Sélectionner une équipe" /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">— Aucune —</SelectItem>
+                        <SelectItem value="none">— Aucune —</SelectItem>
                         {teams.map((t) => (
                           <SelectItem key={t.id} value={t.slug}>{t.label}</SelectItem>
                         ))}
@@ -295,12 +295,12 @@ const AdminEmployees = () => {
                                   <div className="grid gap-2">
                                     <Label>Équipe (optionnel)</Label>
                                     <Select
-                                      value={editForm.team || ""}
-                                      onValueChange={(v) => setEditForm((f) => ({ ...f, team: v }))}
+                                      value={editForm.team ? editForm.team : "none"}
+                                      onValueChange={(v) => setEditForm((f) => ({ ...f, team: v === "none" ? "" : v }))}
                                     >
                                       <SelectTrigger><SelectValue placeholder="Sélectionner une équipe" /></SelectTrigger>
                                       <SelectContent>
-                                        <SelectItem value="">— Aucune —</SelectItem>
+                                        <SelectItem value="none">— Aucune —</SelectItem>
                                         {teams.map((t) => (
                                           <SelectItem key={t.id} value={t.slug}>{t.label}</SelectItem>
                                         ))}
