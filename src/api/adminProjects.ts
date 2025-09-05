@@ -10,11 +10,28 @@ export type Employee = {
   display_name?: string | null;
 };
 
+export type Client = {
+  id: string;
+  code: string;
+  name: string;
+};
+
+export type Tariff = {
+  id: string;
+  label: string;
+  rate_conception: number;
+  rate_crea: number;
+  rate_dev: number;
+};
+
 export type Project = {
   id: string;
   code: string;
   name: string;
   status: Status;
+  client_id: string | null;
+  tariff_id: string | null;
+  quote_amount: number | null;
 };
 
 export type Assignments = Record<string, string[]>;
@@ -23,14 +40,22 @@ export async function listAdminProjects(): Promise<{
   employees: Employee[];
   projects: Project[];
   assignments: Assignments;
+  clients: Client[];
+  tariffs: Tariff[];
 }> {
   const res = await supabase.functions.invoke("admin-projects", {
     body: { action: "list" },
   });
-  return unwrapFunction<{ employees: Employee[]; projects: Project[]; assignments: Assignments }>(res);
+  return unwrapFunction<{ employees: Employee[]; projects: Project[]; assignments: Assignments; clients: Client[]; tariffs: Tariff[] }>(res);
 }
 
-export async function createProject(input: { code: string; name: string; status: Status }): Promise<Project> {
+export async function createProject(input: {
+  name: string;
+  status: Status;
+  client_id: string;
+  tariff_id?: string | null;
+  quote_amount?: number | null;
+}): Promise<Project> {
   const res = await supabase.functions.invoke("admin-projects", {
     body: { action: "create", project: input },
   });
@@ -38,7 +63,13 @@ export async function createProject(input: { code: string; name: string; status:
   return data.project;
 }
 
-export async function updateProject(project_id: string, patch: Partial<{ code: string; name: string; status: Status }>): Promise<Project> {
+export async function updateProject(project_id: string, patch: Partial<{
+  name: string;
+  status: Status;
+  client_id: string;
+  tariff_id: string | null;
+  quote_amount: number | null;
+}>): Promise<Project> {
   const res = await supabase.functions.invoke("admin-projects", {
     body: { action: "update", project_id, patch },
   });

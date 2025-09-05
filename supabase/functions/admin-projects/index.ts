@@ -7,15 +7,36 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+type Status = "active" | "onhold" | "archived";
+
 type ListPayload = { action: "list" };
-type CreatePayload = { action: "create"; project: { code: string; name: string; status: "active" | "onhold" | "archived" } };
+type CreatePayload = {
+  action: "create";
+  project: {
+    name: string;
+    status?: Status;
+    client_id: string;
+    tariff_id?: string | null;
+    quote_amount?: number | null;
+  };
+};
 type AssignPayload = { action: "assign"; project_id: string; employee_ids: string[] };
-type UpdatePayload = { action: "update"; project_id: string; patch: Partial<{ code: string; name: string; status: "active" | "onhold" | "archived" }> };
+type UpdatePayload = {
+  action: "update";
+  project_id: string;
+  patch: Partial<{
+    name: string;
+    status: Status;
+    client_id: string;
+    tariff_id: string | null;
+    quote_amount: number | null;
+  }>;
+};
 type DeletePayload = { action: "delete"; project_id: string };
 type Payload = ListPayload | CreatePayload | AssignPayload | UpdatePayload | DeletePayload;
 
 function isCreatePayload(p: any): p is CreatePayload {
-  return p?.action === "create" && p?.project && typeof p.project?.code === "string" && typeof p.project?.name === "string";
+  return p?.action === "create" && p?.project && typeof p.project?.name === "string" && typeof p.project?.client_id === "string";
 }
 function isAssignPayload(p: any): p is AssignPayload {
   return p?.action === "assign" && typeof p?.project_id === "string" && Array.isArray(p?.employee_ids);
@@ -27,21 +48,19 @@ function isDeletePayload(p: any): p is DeletePayload {
   return p?.action === "delete" && typeof p?.project_id === "string";
 }
 
+function pad3(n: number) {
+  return String(n).padStart(3, "0");
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      status: 405,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -57,29 +76,29 @@ serve(async (req) => {
   }
 
   const { data: empRow, error: empErr } = await admin.from("employees").select("id").eq("id", userData.user.id).maybeSingle();
-  if (empErr) {
-    return new Response(JSON.stringify({ error: empErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  }
-  if (!empRow) {
-    return new Response(JSON.stringify({ error: "Forbidden: orphan session" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  }
+  if (empErr) return new Response(JSON.stringify({ error: empErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  if (!empRow) return new Response(JSON.stringify({ error: "Forbidden: orphan session" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   const body = (await req.json().catch(() => ({}))) as Partial<Payload>;
 
   if (body.action === "list") {
-    const [{ data: employees, error: empErr2 }, { data: projects, error: projErr }, { data: pe, error: peErr }] =
-      await Promise.all([
-        admin.from("employees").select("id, first_name, last_name, display_name"),
-        admin.from("projects").select("id, code, name, status"),
-        admin.from("project_employees").select("project_id, employee_id"),
-      ]);
+    const [
+      { data: employees, error: empErr2 },
+      { data: projects, error: projErr },
+      { data: pe, error: peErr },
+      { data: clients, error: clientsErr },
+      { data: tariffs, error: tariffsErr },
+    ] = await Promise.all([
+      admin.from("employees").select("id, first_name, last_name, display_name"),
+      admin.from("projects").select("id, code, name, status, client_id, tariff_id, quote_amount"),
+      admin.from("project_employees").select("project_id, employee_id"),
+      admin.from("clients").select("id, code, name").order("code", { ascending: true }),
+      admin.from("ref_tariffs").select("id, label, rate_conception, rate_crea, rate_dev").order("created_at", { ascending: true }),
+    ]);
 
-    if (empErr2 || projErr || peErr) {
-      const err = empErr2?.message || projErr?.message || peErr?.message || "Unknown error";
-      return new Response(JSON.stringify({ error: err }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (empErr2 || projErr || peErr || clientsErr || tariffsErr) {
+      const msg = empErr2?.message || projErr?.message || peErr?.message || clientsErr?.message || tariffsErr?.message || "Unknown error";
+      return new Response(JSON.stringify({ error: msg }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const assignments: Record<string, string[]> = {};
@@ -93,118 +112,118 @@ serve(async (req) => {
         employees: employees ?? [],
         projects: projects ?? [],
         assignments,
+        clients: clients ?? [],
+        tariffs: tariffs ?? [],
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 
   if (isCreatePayload(body)) {
-    const { project } = body;
-    const { data, error } = await admin
-      .from("projects")
-      .insert({
-        code: project.code,
-        name: project.name,
-        status: project.status ?? "active",
-      })
-      .select("id, code, name, status")
-      .single();
+    const { name, client_id } = body.project;
+    const status: Status = body.project.status ?? "active";
+    const tariff_id = body.project.tariff_id ?? null;
+    const quote_amount = body.project.quote_amount ?? null;
 
-    if (error) {
-      return new Response(JSON.stringify({ error: error.message }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    // Récupérer le code client
+    const { data: client, error: clientErr } = await admin.from("clients").select("code").eq("id", client_id).maybeSingle();
+    if (clientErr || !client) {
+      return new Response(JSON.stringify({ error: clientErr?.message || "Client inexistant" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const clientCode = String(client.code).toUpperCase().replace(/[^A-Z0-9\-]/g, "");
+    const year = new Date().getFullYear();
+
+    // Trouver le prochain numéro pour ce client et cette année
+    const prefix = `${clientCode}-${year}-`;
+    const { data: sameYear, error: listErr } = await admin
+      .from("projects")
+      .select("code")
+      .ilike("code", `${prefix}%`);
+
+    if (listErr) {
+      return new Response(JSON.stringify({ error: listErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    return new Response(JSON.stringify({ project: data }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    let maxNum = 0;
+    for (const row of sameYear ?? []) {
+      const parts = (row.code as string).split("-");
+      const last = parts[parts.length - 1];
+      const n = parseInt(last, 10);
+      if (!isNaN(n)) maxNum = Math.max(maxNum, n);
+    }
+    const nextNum = maxNum + 1;
+    const code = `${prefix}${pad3(nextNum)}`;
+
+    // Créer le projet
+    const { data: newProj, error: insErr } = await admin
+      .from("projects")
+      .insert({
+        code,
+        name,
+        status,
+        client_id,
+        tariff_id,
+        quote_amount,
+      })
+      .select("id, code, name, status, client_id, tariff_id, quote_amount")
+      .single();
+
+    if (insErr) {
+      return new Response(JSON.stringify({ error: insErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    return new Response(JSON.stringify({ project: newProj }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
   if (isUpdatePayload(body)) {
     const { project_id, patch } = body;
     const payload: Record<string, any> = {};
-    if (typeof patch.code === "string") payload.code = patch.code;
     if (typeof patch.name === "string") payload.name = patch.name;
     if (patch.status === "active" || patch.status === "onhold" || patch.status === "archived") payload.status = patch.status;
+    if (typeof patch.client_id === "string") payload.client_id = patch.client_id;
+    if ("tariff_id" in patch) payload.tariff_id = patch.tariff_id ?? null;
+    if ("quote_amount" in patch) payload.quote_amount = patch.quote_amount ?? null;
 
     const { data, error } = await admin
       .from("projects")
       .update(payload)
       .eq("id", project_id)
-      .select("id, code, name, status")
+      .select("id, code, name, status, client_id, tariff_id, quote_amount")
       .single();
 
     if (error) {
-      return new Response(JSON.stringify({ error: error.message }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    return new Response(JSON.stringify({ project: data }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(JSON.stringify({ project: data }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
   if (isAssignPayload(body)) {
     const { project_id, employee_ids } = body;
-    const { data: current, error: curErr } = await admin
-      .from("project_employees")
-      .select("employee_id")
-      .eq("project_id", project_id);
-
-    if (curErr) {
-      return new Response(JSON.stringify({ error: curErr.message }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const { data: current, error: curErr } = await admin.from("project_employees").select("employee_id").eq("project_id", project_id);
+    if (curErr) return new Response(JSON.stringify({ error: curErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const currentSet = new Set((current ?? []).map((r) => r.employee_id));
     const targetSet = new Set(employee_ids);
-
     const toDelete = [...currentSet].filter((id) => !targetSet.has(id));
     const toInsert = [...targetSet].filter((id) => !currentSet.has(id));
 
     if (toDelete.length > 0) {
-      const { error } = await admin
-        .from("project_employees")
-        .delete()
-        .eq("project_id", project_id)
-        .in("employee_id", toDelete);
-      if (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+      const { error } = await admin.from("project_employees").delete().eq("project_id", project_id).in("employee_id", toDelete);
+      if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-
     if (toInsert.length > 0) {
       const rows = toInsert.map((eid) => ({ project_id, employee_id: eid }));
       const { error } = await admin.from("project_employees").insert(rows);
-      if (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+      if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    return new Response(JSON.stringify({ ok: true }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
   if (isDeletePayload(body)) {
     const project_id = body.project_id;
 
-    // Clean related rows to avoid FK issues
     const delPE = await admin.from("project_employees").delete().eq("project_id", project_id);
     if (delPE.error) return new Response(JSON.stringify({ error: delPE.error.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
@@ -217,8 +236,5 @@ serve(async (req) => {
     return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
-  return new Response(JSON.stringify({ error: "Invalid action" }), {
-    status: 400,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  return new Response(JSON.stringify({ error: "Invalid action" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 });

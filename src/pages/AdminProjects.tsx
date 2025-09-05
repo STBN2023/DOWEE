@@ -24,7 +24,18 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Pencil, Plus, Users, Trash2 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
-import { createProject, listAdminProjects, setProjectAssignments, updateProject, deleteProject, type Employee, type Project, type Status } from "@/api/adminProjects";
+import {
+  createProject,
+  listAdminProjects,
+  setProjectAssignments,
+  updateProject,
+  deleteProject,
+  type Employee,
+  type Project,
+  type Status,
+  type Client,
+  type Tariff,
+} from "@/api/adminProjects";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,28 +56,55 @@ function fullName(e: Employee) {
   return names || "Utilisateur";
 }
 
+function eur(n: number | null | undefined) {
+  if (n == null) return "—";
+  try {
+    return n.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
+  } catch {
+    return `${n} €`;
+  }
+}
+
 const AdminProjects = () => {
   const [employees, setEmployees] = React.useState<Employee[]>([]);
   const [projects, setProjects] = React.useState<Project[]>([]);
   const [assignments, setAssignments] = React.useState<Assignments>({});
+  const [clients, setClients] = React.useState<Client[]>([]);
+  const [tariffs, setTariffs] = React.useState<Tariff[]>([]);
 
   const [loading, setLoading] = React.useState<boolean>(true);
 
   const [openCreate, setOpenCreate] = React.useState(false);
-  const [form, setForm] = React.useState<{ code: string; name: string; status: Status }>({
-    code: "",
+  const [form, setForm] = React.useState<{
+    name: string;
+    status: Status;
+    client_id: string;
+    tariff_id: string | null;
+    quote_amount: string; // garder saisie brute pour l’input
+  }>({
     name: "",
     status: "active",
+    client_id: "",
+    tariff_id: "",
+    quote_amount: "",
   });
 
   const [openAssignFor, setOpenAssignFor] = React.useState<string | null>(null);
   const [assignSelection, setAssignSelection] = React.useState<Record<string, boolean>>({});
 
   const [openEditFor, setOpenEditFor] = React.useState<Project | null>(null);
-  const [editForm, setEditForm] = React.useState<{ code: string; name: string; status: Status }>({
-    code: "",
+  const [editForm, setEditForm] = React.useState<{
+    name: string;
+    status: Status;
+    client_id: string;
+    tariff_id: string | null;
+    quote_amount: string;
+  }>({
     name: "",
     status: "active",
+    client_id: "",
+    tariff_id: "",
+    quote_amount: "",
   });
 
   const refresh = async () => {
@@ -75,6 +113,8 @@ const AdminProjects = () => {
     setEmployees(data.employees);
     setProjects(data.projects);
     setAssignments(data.assignments || {});
+    setClients(data.clients);
+    setTariffs(data.tariffs);
     setLoading(false);
   };
 
@@ -90,14 +130,28 @@ const AdminProjects = () => {
   }, []);
 
   const onCreateProject = async () => {
-    const code = form.code.trim();
     const name = form.name.trim();
-    if (!code || !name) return;
-    await createProject({ code, name, status: form.status });
-    showSuccess("Projet créé.");
-    setForm({ code: "", name: "", status: "active" });
-    setOpenCreate(false);
-    await refresh();
+    const client_id = form.client_id;
+    if (!name || !client_id) {
+      showError("Nom et client requis.");
+      return;
+    }
+    const quote = form.quote_amount ? Number(form.quote_amount.replace(",", ".")) : null;
+    try {
+      const created = await createProject({
+        name,
+        status: form.status,
+        client_id,
+        tariff_id: form.tariff_id || null,
+        quote_amount: isFinite(Number(quote)) ? Number(quote) : null,
+      });
+      showSuccess(`Projet créé: ${created.code}`);
+      setForm({ name: "", status: "active", client_id: "", tariff_id: "", quote_amount: "" });
+      setOpenCreate(false);
+      await refresh();
+    } catch (e: any) {
+      showError(e?.message || "Création impossible.");
+    }
   };
 
   const openAssignDialog = (projectId: string) => {
@@ -127,18 +181,37 @@ const AdminProjects = () => {
 
   const openEditDialog = (p: Project) => {
     setOpenEditFor(p);
-    setEditForm({ code: p.code, name: p.name, status: p.status });
+    setEditForm({
+      name: p.name,
+      status: p.status,
+      client_id: p.client_id || "",
+      tariff_id: p.tariff_id || "",
+      quote_amount: p.quote_amount != null ? String(p.quote_amount) : "",
+    });
   };
 
   const confirmEdit = async () => {
     if (!openEditFor) return;
-    const code = editForm.code.trim();
     const name = editForm.name.trim();
-    if (!code || !name) return;
-    await updateProject(openEditFor.id, { code, name, status: editForm.status });
-    showSuccess("Projet modifié.");
-    setOpenEditFor(null);
-    await refresh();
+    if (!name || !editForm.client_id) {
+      showError("Nom et client requis.");
+      return;
+    }
+    const quote = editForm.quote_amount ? Number(editForm.quote_amount.replace(",", ".")) : null;
+    try {
+      await updateProject(openEditFor.id, {
+        name,
+        status: editForm.status,
+        client_id: editForm.client_id,
+        tariff_id: editForm.tariff_id || null,
+        quote_amount: isFinite(Number(quote)) ? Number(quote) : null,
+      });
+      showSuccess("Projet modifié.");
+      setOpenEditFor(null);
+      await refresh();
+    } catch (e: any) {
+      showError(e?.message || "Modification impossible.");
+    }
   };
 
   const confirmDelete = async (projectId: string) => {
@@ -150,6 +223,8 @@ const AdminProjects = () => {
       showError(e?.message || "Suppression impossible.");
     }
   };
+
+  const selectedTariff = (id: string | null | undefined) => tariffs.find((t) => t.id === id);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
@@ -166,27 +241,83 @@ const AdminProjects = () => {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Nouveau projet</DialogTitle>
-                <DialogDescription>Renseignez le code, le nom et le statut du projet.</DialogDescription>
+                <DialogDescription>
+                  Sélectionnez le client et, si besoin, les tarifs applicables; le code sera généré automatiquement (CLIENT-YYYY-NNN).
+                </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-2">
                 <div className="grid gap-2">
-                  <Label htmlFor="code">Code</Label>
+                  <Label>Nom</Label>
                   <Input
-                    id="code"
-                    value={form.code}
-                    onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
-                    placeholder="Ex: ACME-2025-001"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="name">Nom</Label>
-                  <Input
-                    id="name"
                     value={form.name}
                     onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                     placeholder="Ex: Site vitrine"
                   />
                 </div>
+
+                <div className="grid gap-2">
+                  <Label>Client</Label>
+                  <Select
+                    value={form.client_id}
+                    onValueChange={(v) => setForm((f) => ({ ...f, client_id: v }))}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Choisir un client" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.code} — {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label>Barème tarifs</Label>
+                  <Select
+                    value={form.tariff_id || ""}
+                    onValueChange={(v) => setForm((f) => ({ ...f, tariff_id: v }))}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Sans barème (optionnel)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">— Aucun —</SelectItem>
+                      {tariffs.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {form.tariff_id && (
+                    <div className="rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-2 text-xs text-[#214A33]">
+                      {(() => {
+                        const t = selectedTariff(form.tariff_id);
+                        return t ? (
+                          <div className="flex flex-wrap gap-3">
+                            <span><span className="font-medium">Conception:</span> {eur(t.rate_conception)}</span>
+                            <span><span className="font-medium">Créa:</span> {eur(t.rate_crea)}</span>
+                            <span><span className="font-medium">Dev:</span> {eur(t.rate_dev)}</span>
+                          </div>
+                        ) : null;
+                      })()}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid gap-2">
+                  <Label>Montant total du devis (HT)</Label>
+                  <Input
+                    inputMode="decimal"
+                    placeholder="ex: 12000"
+                    value={form.quote_amount}
+                    onChange={(e) => setForm((f) => ({ ...f, quote_amount: e.target.value }))}
+                  />
+                </div>
+
                 <div className="grid gap-2">
                   <Label>Statut</Label>
                   <Select
@@ -223,26 +354,27 @@ const AdminProjects = () => {
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Code</th>
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Nom</th>
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Statut</th>
-                  <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Salariés affectés</th>
+                  <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Client</th>
+                  <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Devis HT</th>
+                  <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Salariés</th>
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={5} className="p-4 text-center text-sm text-[#214A33]/60">Chargement…</td>
+                    <td colSpan={7} className="p-4 text-center text-sm text-[#214A33]/60">Chargement…</td>
                   </tr>
                 ) : projects.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="p-4 text-center text-sm text-[#214A33]/60">
-                      Aucun projet pour le moment.
-                    </td>
+                    <td colSpan={7} className="p-4 text-center text-sm text-[#214A33]/60">Aucun projet pour le moment.</td>
                   </tr>
                 ) : (
                   projects.map((p) => {
                     const assigned = (assignments[p.id] || []).map(
                       (eid) => employees.find((e) => e.id === eid)
                     ).filter(Boolean) as Employee[];
+                    const client = clients.find((c) => c.id === p.client_id) || null;
                     return (
                       <tr key={p.id} className="border-t border-[#BFBFBF]">
                         <td className="p-2 text-sm">{p.code}</td>
@@ -259,10 +391,12 @@ const AdminProjects = () => {
                             {p.status === "active" ? "Actif" : p.status === "onhold" ? "En pause" : "Archivé"}
                           </span>
                         </td>
+                        <td className="p-2 text-sm">{client ? `${client.code} — ${client.name}` : "—"}</td>
+                        <td className="p-2 text-sm">{eur(p.quote_amount)}</td>
                         <td className="p-2">
                           <div className="flex flex-wrap gap-1">
                             {assigned.length === 0 ? (
-                              <span className="text-xs text-[#214A33]/50">Aucun salarié</span>
+                              <span className="text-xs text-[#214A33]/50">Aucun</span>
                             ) : (
                               assigned.map((e) => (
                                 <Badge key={e.id} variant="secondary" className="border-[#BFBFBF] text-[#214A33]">
@@ -282,24 +416,74 @@ const AdminProjects = () => {
                             </DialogTrigger>
                             <DialogContent>
                               <DialogHeader>
-                                <DialogTitle>Modifier le projet — {p.code}</DialogTitle>
-                                <DialogDescription>Mettre à jour le code, le nom ou le statut du projet.</DialogDescription>
+                                <DialogTitle>Modifier — {p.code}</DialogTitle>
+                                <DialogDescription>Mettre à jour le nom, le client, le barème et le devis.</DialogDescription>
                               </DialogHeader>
                               <div className="grid gap-4 py-2">
                                 <div className="grid gap-2">
-                                  <Label htmlFor={`edit-code-${p.id}`}>Code</Label>
+                                  <Label>Nom</Label>
                                   <Input
-                                    id={`edit-code-${p.id}`}
-                                    value={editForm.code}
-                                    onChange={(e) => setEditForm((f) => ({ ...f, code: e.target.value }))}
+                                    value={editForm.name}
+                                    onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
                                   />
                                 </div>
                                 <div className="grid gap-2">
-                                  <Label htmlFor={`edit-name-${p.id}`}>Nom</Label>
+                                  <Label>Client</Label>
+                                  <Select
+                                    value={editForm.client_id}
+                                    onValueChange={(v) => setEditForm((f) => ({ ...f, client_id: v }))}
+                                  >
+                                    <SelectTrigger className="w-full">
+                                      <SelectValue placeholder="Choisir un client" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {clients.map((c) => (
+                                        <SelectItem key={c.id} value={c.id}>
+                                          {c.code} — {c.name}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="grid gap-2">
+                                  <Label>Barème tarifs</Label>
+                                  <Select
+                                    value={editForm.tariff_id || ""}
+                                    onValueChange={(v) => setEditForm((f) => ({ ...f, tariff_id: v }))}
+                                  >
+                                    <SelectTrigger className="w-full">
+                                      <SelectValue placeholder="Sans barème (optionnel)" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="">— Aucun —</SelectItem>
+                                      {tariffs.map((t) => (
+                                        <SelectItem key={t.id} value={t.id}>
+                                          {t.label}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  {editForm.tariff_id && (
+                                    <div className="rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-2 text-xs text-[#214A33]">
+                                      {(() => {
+                                        const t = selectedTariff(editForm.tariff_id);
+                                        return t ? (
+                                          <div className="flex flex-wrap gap-3">
+                                            <span><span className="font-medium">Conception:</span> {eur(t.rate_conception)}</span>
+                                            <span><span className="font-medium">Créa:</span> {eur(t.rate_crea)}</span>
+                                            <span><span className="font-medium">Dev:</span> {eur(t.rate_dev)}</span>
+                                          </div>
+                                        ) : null;
+                                      })()}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="grid gap-2">
+                                  <Label>Montant total du devis (HT)</Label>
                                   <Input
-                                    id={`edit-name-${p.id}`}
-                                    value={editForm.name}
-                                    onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                                    inputMode="decimal"
+                                    value={editForm.quote_amount}
+                                    onChange={(e) => setEditForm((f) => ({ ...f, quote_amount: e.target.value }))}
                                   />
                                 </div>
                                 <div className="grid gap-2">
