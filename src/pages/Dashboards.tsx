@@ -2,7 +2,6 @@ import React from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRole } from "@/context/RoleContext";
-import { useEmployee } from "@/context/EmployeeContext";
 import { mondayOf } from "@/utils/date";
 import { format } from "date-fns";
 
@@ -10,20 +9,14 @@ type PlanItem = { id: string; d: string; hour: number; projectId: string };
 
 const Dashboards = () => {
   const { role } = useRole();
-  const { currentEmployee, currentEmployeeId } = useEmployee();
   const defaultTab = role === "admin" ? "global" : role === "manager" ? "team" : "me";
 
   const [meProjects, setMeProjects] = React.useState<number>(0);
   const [meHours, setMeHours] = React.useState<number>(0);
 
   React.useEffect(() => {
-    if (!currentEmployeeId) {
-      setMeProjects(0);
-      setMeHours(0);
-      return;
-    }
     const weekStart = mondayOf(new Date());
-    const storageKey = `dowee.plans.${currentEmployeeId}.${format(weekStart, "yyyy-MM-dd")}`;
+    const storageKey = `dowee.plans.${format(weekStart, "yyyy-MM-dd")}`;
     const raw = localStorage.getItem(storageKey);
     if (!raw) {
       setMeProjects(0);
@@ -35,14 +28,11 @@ const Dashboards = () => {
     const projectSet = new Set(entries.map((p) => p.projectId));
     setMeProjects(projectSet.size);
     setMeHours(entries.length); // 1 entrée = 1h
-  }, [currentEmployeeId]);
+  }, []);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
-      <h1 className="mb-1 text-2xl font-semibold text-[#214A33]">Tableaux de bord</h1>
-      <p className="mb-4 text-sm text-[#214A33]/70">
-        Utilisateur courant: {currentEmployee ? (currentEmployee.display_name || [currentEmployee.first_name, currentEmployee.last_name].filter(Boolean).join(" ") || currentEmployee.email) : "—"}
-      </p>
+      <h1 className="mb-4 text-2xl font-semibold text-[#214A33]">Tableaux de bord</h1>
       <Tabs defaultValue={defaultTab} className="w-full">
         <TabsList className="bg-[#F7F7F7]">
           <TabsTrigger value="global">Global</TabsTrigger>

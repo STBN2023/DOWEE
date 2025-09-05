@@ -1,6 +1,5 @@
 import { Link, NavLink } from "react-router-dom";
 import { useRole } from "@/context/RoleContext";
-import { useEmployee } from "@/context/EmployeeContext";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
@@ -14,7 +13,6 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 
 const Header = () => {
   const { role, setRole } = useRole();
-  const { employees, currentEmployeeId, setCurrentEmployeeId } = useEmployee();
 
   return (
     <header className="w-full border-b border-[#BFBFBF] bg-[#F7F7F7]">
@@ -42,25 +40,7 @@ const Header = () => {
             </nav>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-[#214A33]/80">Utilisateur</span>
-            <Select value={currentEmployeeId ?? undefined} onValueChange={(v) => setCurrentEmployeeId(v)}>
-              <SelectTrigger className="w-[200px] bg-white border-[#BFBFBF] text-[#214A33]">
-                <SelectValue placeholder="Sélectionner" />
-              </SelectTrigger>
-              <SelectContent>
-                {employees.length === 0 ? (
-                  <SelectItem value="__none__" disabled>Aucun</SelectItem>
-                ) : (
-                  employees.map((e) => (
-                    <SelectItem key={e.id} value={e.id}>
-                      {(e.display_name && e.display_name) || [e.first_name, e.last_name].filter(Boolean).join(" ") || e.email}
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
-
-            <span className="ml-3 text-sm text-[#214A33]/80">Vue</span>
+            <span className="text-sm text-[#214A33]/80">Vue</span>
             <Select value={role} onValueChange={(v) => setRole(v as any)}>
               <SelectTrigger className="w-[160px] bg-white border-[#BFBFBF] text-[#214A33]">
                 <SelectValue placeholder="Rôle" />
