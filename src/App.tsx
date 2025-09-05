@@ -9,6 +9,7 @@ import Header from "./components/Header";
 import PlanningPage from "./pages/Planning";
 import Dashboards from "./pages/Dashboards";
 import { RoleProvider } from "./context/RoleContext";
+import AdminProjects from "./pages/AdminProjects";
 
 const queryClient = new QueryClient();
 
@@ -24,6 +25,7 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/planning" element={<PlanningPage />} />
             <Route path="/dashboards" element={<Dashboards />} />
+            <Route path="/admin/projects" element={<AdminProjects />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

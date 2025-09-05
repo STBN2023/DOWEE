@@ -32,6 +32,11 @@ const Header = () => {
               <NavLink to="/dashboards" className={navLinkClass}>
                 Tableaux de bord
               </NavLink>
+              {role === "admin" && (
+                <NavLink to="/admin/projects" className={navLinkClass}>
+                  Admin Projets
+                </NavLink>
+              )}
             </nav>
           </div>
           <div className="flex items-center gap-3">
