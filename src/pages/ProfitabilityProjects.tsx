@@ -3,6 +3,9 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import { showError, showSuccess } from "@/utils/toast";
 import { getProjectsProfitability, type ProjectProfit } from "@/api/projectProfitability";
 
 function eur(n: number | null | undefined) {
@@ -28,6 +31,7 @@ const ProfitabilityProjects: React.FC = () => {
   const [clientId, setClientId] = React.useState<string>("all");
   const [q, setQ] = React.useState("");
   const [sort, setSort] = React.useState<{ key: SortKey; dir: SortDir }>({ key: "margin_pct", dir: "desc" });
+  const [exporting, setExporting] = React.useState(false);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -84,6 +88,33 @@ const ProfitabilityProjects: React.FC = () => {
     setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" }));
   };
 
+  const exportCsv = async () => {
+    try {
+      setExporting(true);
+      const body: any = { action: "export" };
+      if (clientId !== "all") body.client_id = clientId;
+      const res = await supabase.functions.invoke("export-projects-profitability", { body });
+      const csv = res.data as string;
+      if (!csv || typeof csv !== "string") throw new Error("Export vide.");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const today = new Date().toISOString().slice(0, 10);
+      const suffix = clientId !== "all" ? `_client_${clientId.slice(0,8)}` : "";
+      a.href = url;
+      a.download = `projects_profitability_${today}${suffix}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showSuccess("Export CSV généré.");
+    } catch (e: any) {
+      showError(e?.message || "Export impossible.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
       <Card className="border-[#BFBFBF]">
@@ -104,6 +135,9 @@ const ProfitabilityProjects: React.FC = () => {
                 ))}
               </SelectContent>
             </Select>
+            <Button className="bg-[#214A33] text-white hover:bg-[#214A33]/90" onClick={exportCsv} disabled={exporting}>
+              {exporting ? "Export…" : "Exporter CSV"}
+            </Button>
           </div>
         </CardHeader>
         <CardContent>

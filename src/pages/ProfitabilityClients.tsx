@@ -2,6 +2,9 @@ import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import { showError, showSuccess } from "@/utils/toast";
 import { getClientsProfitability, type ClientProfit } from "@/api/clientProfitability";
 
 function eur(n: number | null | undefined) {
@@ -26,6 +29,7 @@ const ProfitabilityClients: React.FC = () => {
   const [rows, setRows] = React.useState<ClientProfit[]>([]);
   const [q, setQ] = React.useState("");
   const [sort, setSort] = React.useState<{ key: SortKey; dir: SortDir }>({ key: "margin_pct", dir: "desc" });
+  const [exporting, setExporting] = React.useState(false);
 
   React.useEffect(() => {
     const load = async () => {
@@ -75,13 +79,42 @@ const ProfitabilityClients: React.FC = () => {
     setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" }));
   };
 
+  const exportCsv = async () => {
+    try {
+      setExporting(true);
+      const res = await supabase.functions.invoke("export-clients-profitability", { body: { action: "export" } });
+      const csv = res.data as string;
+      if (!csv || typeof csv !== "string") throw new Error("Export vide.");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const today = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `clients_profitability_${today}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showSuccess("Export CSV généré.");
+    } catch (e: any) {
+      showError(e?.message || "Export impossible.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
       <Card className="border-[#BFBFBF]">
         <CardHeader className="flex items-center justify-between">
           <CardTitle className="text-[#214A33]">Rentabilité — Clients</CardTitle>
-          <div className="w-[260px]">
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher client…" />
+          <div className="flex items-center gap-2">
+            <div className="w-[260px]">
+              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher client…" />
+            </div>
+            <Button className="bg-[#214A33] text-white hover:bg-[#214A33]/90" onClick={exportCsv} disabled={exporting}>
+              {exporting ? "Export…" : "Exporter CSV"}
+            </Button>
           </div>
         </CardHeader>
         <CardContent>
