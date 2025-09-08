@@ -33,15 +33,20 @@ const TeamPortfolio: React.FC = () => {
     const loadTeams = async () => {
       try {
         const refs = await listTeams();
-        const normalized = refs.map((t: TeamRef) => ({ slug: normalizeTeamSlug(t.slug) || t.slug, label: t.label }));
-        const uniq = new Map<string, string>();
-        for (const t of normalized) { if (!uniq.has(t.slug)) uniq.set(t.slug, t.label); }
-        const arr = Array.from(uniq.entries())
-          .filter(([slug]) => ["conception", "créa", "dev"].includes(slug))
-          .map(([slug, label]) => ({ slug, label }));
+        // Normaliser les slugs; ignorer le label DB pour l’affichage et forcer notre libellé selon le slug
+        const normalized = refs.map((t: TeamRef) => ({ slug: normalizeTeamSlug(t.slug) || t.slug }));
+        const uniq = new Set<string>();
+        for (const t of normalized) uniq.add(t.slug);
+        const labelFor = (slug: string) =>
+          slug === "conception" ? "Conception" :
+          slug === "créa" ? "Créa" :
+          slug === "dev" ? "Dev" : slug;
+        const arr = Array.from(uniq.values())
+          .filter((slug) => ["conception", "créa", "dev"].includes(slug))
+          .map((slug) => ({ slug, label: labelFor(slug) }));
         if (arr.length > 0) setTeams(arr);
       } catch {
-        // fallback already set
+        // fallback déjà en place
       }
     };
     loadTeams();
