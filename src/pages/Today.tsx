@@ -1,3 +1,4 @@
+réel).">
 import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -5,29 +6,48 @@ import { useAuth } from "@/context/AuthContext";
 import { getUserWeek } from "@/api/userWeek";
 import { mondayOf } from "@/utils/date";
 import { format } from "date-fns";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { showSuccess } from "@/utils/toast";
+import { getDayStatus, confirmDay, type DayStatus } from "@/api/dayValidation";
+import ValidationDialog from "@/components/day/ValidationDialog";
 
 type Project = { id: string; code: string; name: string };
 type Plan = { id: string; d: string; hour: number; project_id: string; planned_minutes: number; note: string | null };
 
+const END_OF_DAY_HOUR = 18; // rappel à partir de 18:00 locale
+
 const Today = () => {
+  const navigate = useNavigate();
   const { loading: authLoading, employee } = useAuth();
   const [loading, setLoading] = React.useState(true);
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
   const [plans, setPlans] = React.useState<Plan[]>([]);
   const [projects, setProjects] = React.useState<Project[]>([]);
 
-  const todayIso = React.useMemo(() => format(new Date(), "yyyy-MM-dd"), []);
+  const [dayStatus, setDayStatus] = React.useState<DayStatus | null>(null);
+  const [dialogOpen, setDialogOpen] = React.useState(false);
+
+  const today = React.useMemo(() => new Date(), []);
+  const todayIso = React.useMemo(() => format(today, "yyyy-MM-dd"), [today]);
   const dayLabel = React.useMemo(() => {
     try {
-      return new Date().toLocaleDateString("fr-FR", {
+      return today.toLocaleDateString("fr-FR", {
         weekday: "long",
         day: "2-digit",
         month: "2-digit",
       });
     } catch {
       return todayIso;
+    }
+  }, [today, todayIso]);
+
+  const refreshDayStatus = React.useCallback(async () => {
+    try {
+      const st = await getDayStatus(todayIso);
+      setDayStatus(st);
+      return st;
+    } catch {
+      return null;
     }
   }, [todayIso]);
 
@@ -50,7 +70,38 @@ const Today = () => {
       }
     };
     load();
-  }, [authLoading, employee, todayIso]);
+    refreshDayStatus();
+  }, [authLoading, employee, todayIso, refreshDayStatus]);
+
+  // Rappel automatique à partir de l'heure seuil
+  React.useEffect(() => {
+    if (!dayStatus || dayStatus.validated) return;
+
+    const checkAndOpen = () => {
+      const now = new Date();
+      if (now.getHours() >= END_OF_DAY_HOUR) {
+        setDialogOpen(true);
+      }
+    };
+
+    // Vérifier tout de suite puis à chaque minute
+    checkAndOpen();
+    const t = setInterval(checkAndOpen, 60 * 1000);
+    return () => clearInterval(t);
+  }, [dayStatus]);
+
+  // Alerte à la fermeture si non validé après l'heure seuil
+  React.useEffect(() => {
+    const beforeUnload = (e: BeforeUnloadEvent) => {
+      const now = new Date();
+      if (!dayStatus?.validated && now.getHours() >= END_OF_DAY_HOUR) {
+        e.preventDefault();
+        e.returnValue = ""; // déclenche l'alerte native du navigateur
+      }
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [dayStatus?.validated]);
 
   const byProject = React.useMemo(
     () => Object.fromEntries(projects.map((p) => [p.id, p])),
@@ -61,15 +112,34 @@ const Today = () => {
     return [...plans].sort((a, b) => a.hour - b.hour);
   }, [plans]);
 
+  const onConfirm = async () => {
+    await confirmDay(todayIso);
+    await refreshDayStatus();
+    showSuccess("Journée validée.");
+  };
+
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
       <Card className="border-[#BFBFBF]">
-        <CardHeader>
+        <CardHeader className="flex items-center justify-between">
           <CardTitle className="text-[#214A33]">Aujourd’hui — {dayLabel}</CardTitle>
+          <div className="flex gap-2">
+            {!dayStatus?.validated ? (
+              <Button
+                variant="outline"
+                className="border-[#BFBFBF] text-[#214A33]"
+                onClick={() => setDialogOpen(true)}
+              >
+                Valider ma journée
+              </Button>
+            ) : (
+              <span className="text-sm text-emerald-700">Journée validée</span>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-[#214A33]">
-            Voici ton planning prévisionnel du jour. Est-ce ok pour toi ou as-tu des modifications à apporter dans l’attribution des projets ?
+            Voici ton planning prévisionnel du jour. Ajuste si besoin, puis valide ta journée pour confirmer tes heures réelles.
           </p>
 
           {errorMsg && (
@@ -122,16 +192,28 @@ const Today = () => {
             <Button
               variant="outline"
               className="border-[#BFBFBF] text-[#214A33]"
-              onClick={() => showSuccess("C’est noté, bon courage pour la journée !")}
+              onClick={() => setDialogOpen(true)}
             >
-              C’est OK
+              Valider ma journée
             </Button>
-            <Button asChild className="bg-[#214A33] text-white hover:bg-[#214A33]/90">
-              <Link to="/day">Modifier mon planning</Link>
+            <Button className="bg-[#214A33] text-white hover:bg-[#214A33]/90" onClick={() => navigate("/day")}>
+              Modifier mon planning
             </Button>
           </div>
         </CardContent>
       </Card>
+
+      <ValidationDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        dateLabel={dayLabel}
+        canSuggestCopy={!!dayStatus?.canSuggestCopy}
+        onConfirm={onConfirm}
+        onEdit={() => {
+          setDialogOpen(false);
+          navigate("/day");
+        }}
+      />
     </div>
   );
 };
