@@ -20,8 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Pencil, Plus, Users, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { Pencil, Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
 import {
@@ -55,23 +54,18 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 
-type Assignments = Record<string, string[]>; // project_id -> employee_id[]
+type Assignments = Record<string, string[]>;
 
 function fullName(e: Employee) {
   if (e.display_name && e.display_name.trim()) return e.display_name;
   const names = [e.first_name, e.last_name].filter(Boolean).join(" ").trim();
   return names || "Utilisateur";
 }
-
 function eur(n: number | null | undefined) {
   if (n == null) return "—";
-  try {
-    return n.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
-  } catch {
-    return `${n} €`;
-  }
+  try { return n.toLocaleString("fr-FR", { style: "currency", currency: "EUR" }); }
+  catch { return `${n} €`; }
 }
-
 function scoreBadge(score?: number) {
   if (score == null) return "bg-gray-100 text-gray-600 border border-gray-200";
   if (score >= 80) return "bg-emerald-50 text-emerald-700 border border-emerald-200";
@@ -80,7 +74,7 @@ function scoreBadge(score?: number) {
   return "bg-red-50 text-red-700 border border-red-200";
 }
 
-// Helpers pour expliquer le score (même logique que la fonction edge)
+// Petites aides pour le détail du score
 function sClient(segment?: string | null): number {
   if (!segment) return 50;
   const b = segment.toLowerCase();
@@ -91,8 +85,8 @@ function sClient(segment?: string | null): number {
 function sMarge(pct: number | null): number {
   if (pct == null) return 50;
   if (pct <= 0) return 0;
-  if (pct < 20) return 20 + 2 * (pct - 1); // 22..58
-  if (pct < 40) return 60 + 2 * (pct - 20); // 60..98
+  if (pct < 20) return 20 + 2 * (pct - 1);
+  if (pct < 40) return 60 + 2 * (pct - 20);
   return 100;
 }
 function daysLeftFromIso(iso?: string | null): number | null {
@@ -122,7 +116,7 @@ const AdminProjects = () => {
   const [clients, setClients] = React.useState<Client[]>([]);
   const [tariffs, setTariffs] = React.useState<Tariff[]>([]);
   const [costs, setCosts] = React.useState<ProjectCostsMap>({});
-  const [scoreDetails, setScoreDetails] = React.useState<Record<string, ProjectScore>>({}); // project_id -> details
+  const [scoreDetails, setScoreDetails] = React.useState<Record<string, ProjectScore>>({});
 
   const [loading, setLoading] = React.useState<boolean>(true);
 
@@ -165,9 +159,7 @@ const AdminProjects = () => {
     budget_dev: "",
   });
 
-  // Toggle pour l'explication du score (bloc d'aide)
   const [showScoreHelp, setShowScoreHelp] = React.useState<boolean>(false);
-  // Lignes "Détails" ouvertes
   const [openRows, setOpenRows] = React.useState<Record<string, boolean>>({});
 
   const refresh = async () => {
@@ -198,9 +190,7 @@ const AdminProjects = () => {
       await refresh();
       if (!mounted) return;
     })();
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, []);
 
   const onCreateProject = async () => {
@@ -232,17 +222,13 @@ const AdminProjects = () => {
     setOpenAssignFor(projectId);
     const current = new Set(assignments[projectId] || []);
     const initSel: Record<string, boolean> = {};
-    employees.forEach((e) => {
-      initSel[e.id] = current.has(e.id);
-    });
+    employees.forEach((e) => { initSel[e.id] = current.has(e.id); });
     setAssignSelection(initSel);
   };
 
   const confirmAssign = async () => {
     if (!openAssignFor) return;
-    const selected = Object.entries(assignSelection)
-      .filter(([, v]) => v)
-      .map(([k]) => k);
+    const selected = Object.entries(assignSelection).filter(([, v]) => v).map(([k]) => k);
     try {
       await setProjectAssignments(openAssignFor, selected);
       showSuccess("Affectations mises à jour.");
@@ -275,12 +261,9 @@ const AdminProjects = () => {
       return;
     }
     const quote = editForm.quote_amount ? Number(editForm.quote_amount.replace(",", ".")) : null;
-    const budget_conception =
-      editForm.budget_conception.trim() === "" ? null : Number(editForm.budget_conception.replace(",", "."));
-    const budget_crea =
-      editForm.budget_crea.trim() === "" ? null : Number(editForm.budget_crea.replace(",", "."));
-    const budget_dev =
-      editForm.budget_dev.trim() === "" ? null : Number(editForm.budget_dev.replace(",", "."));
+    const budget_conception = editForm.budget_conception.trim() === "" ? null : Number(editForm.budget_conception.replace(",", "."));
+    const budget_crea = editForm.budget_crea.trim() === "" ? null : Number(editForm.budget_crea.replace(",", "."));
+    const budget_dev = editForm.budget_dev.trim() === "" ? null : Number(editForm.budget_dev.replace(",", "."));
 
     try {
       await updateProject(openEditFor.id, {
@@ -311,11 +294,7 @@ const AdminProjects = () => {
     }
   };
 
-  const selectedTariff = (id: string | null | undefined) => tariffs.find((t) => t.id === id);
-
-  const toggleRow = (id: string) => {
-    setOpenRows((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
+  const toggleRow = (id: string) => setOpenRows((prev) => ({ ...prev, [id]: !prev[id] }));
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
@@ -339,113 +318,66 @@ const AdminProjects = () => {
               <div className="grid gap-4 py-2">
                 <div className="grid gap-2">
                   <Label>Nom</Label>
-                  <Input
-                    value={form.name}
-                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                    placeholder="Ex: Site vitrine"
-                  />
+                  <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Ex: Site vitrine" />
                 </div>
-
                 <div className="grid gap-2">
                   <Label>Client</Label>
-                  <Select
-                    value={form.client_id}
-                    onValueChange={(v) => setForm((f) => ({ ...f, client_id: v }))}
-                  >
+                  <Select value={form.client_id} onValueChange={(v) => setForm((f) => ({ ...f, client_id: v }))}>
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Choisir un client" />
                     </SelectTrigger>
                     <SelectContent>
                       {clients.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.code} — {c.name}
-                        </SelectItem>
+                        <SelectItem key={c.id} value={c.id}>{c.code} — {c.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-
                 <div className="grid gap-2">
                   <Label>Barème tarifs</Label>
-                  <Select
-                    value={form.tariff_id ?? "none"}
-                    onValueChange={(v) => setForm((f) => ({ ...f, tariff_id: v === "none" ? null : v }))}
-                  >
+                  <Select value={form.tariff_id ?? "none"} onValueChange={(v) => setForm((f) => ({ ...f, tariff_id: v === "none" ? null : v }))}>
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Sans barème (optionnel)" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">— Aucun —</SelectItem>
-                      {tariffs.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {t.label}
-                        </SelectItem>
-                      ))}
+                      {tariffs.map((t) => (<SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>))}
                     </SelectContent>
                   </Select>
                 </div>
-
                 <div className="grid gap-2">
                   <Label>Montant total du devis (HT)</Label>
-                  <Input
-                    inputMode="decimal"
-                    placeholder="ex: 12000"
-                    value={form.quote_amount}
-                    onChange={(e) => setForm((f) => ({ ...f, quote_amount: e.target.value }))}
-                  />
+                  <Input inputMode="decimal" placeholder="ex: 12000" value={form.quote_amount} onChange={(e) => setForm((f) => ({ ...f, quote_amount: e.target.value }))} />
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={() => setOpenCreate(false)}>
-                  Annuler
-                </Button>
-                <Button className="bg-[#F2994A] hover:bg-[#F2994A]/90 text-white" onClick={onCreateProject}>
-                  Créer
-                </Button>
+                <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={() => setOpenCreate(false)}>Annuler</Button>
+                <Button className="bg-[#F2994A] hover:bg-[#F2994A]/90 text-white" onClick={onCreateProject}>Créer</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
         </CardHeader>
+
         <CardContent>
-          {/* Explication Score + Toggle */}
+          {/* Bloc aide Score avec bouton */}
           <div className="mb-3 rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-3 text-[12px] text-[#214A33]">
             <div className="flex items-center justify-between">
               <div className="font-medium">Comment est calculé le Score ?</div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="border-[#BFBFBF] text-[#214A33]"
-                onClick={() => setShowScoreHelp((v) => !v)}
-              >
-                {showScoreHelp ? (
-                  <>
-                    <ChevronUp className="mr-2 h-4 w-4" />
-                    Masquer
-                  </>
-                ) : (
-                  <>
-                    <ChevronDown className="mr-2 h-4 w-4" />
-                    Afficher
-                  </>
-                )}
+              <Button size="sm" variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={() => setShowScoreHelp((v) => !v)}>
+                {showScoreHelp ? (<><ChevronUp className="mr-2 h-4 w-4" />Masquer</>) : (<><ChevronDown className="mr-2 h-4 w-4" />Afficher</>)}
               </Button>
             </div>
             {showScoreHelp && (
               <ul className="mt-2 list-disc pl-5 space-y-0.5">
-                <li>
-                  Score = (0,25×S_client + 0,35×S_marge + 0,20×S_urgence + 0,10×S_récurrence + 0,10×S_strat) × (client ★ ? 1,15 : 1),
-                  borné à [0,100].
-                </li>
-                <li>S_client: Super rentable=80, Normal=50, Pas rentable=20 (d’après le segment du client).</li>
-                <li>S_marge: à partir de la marge % (≥40% → 100 ; 20–39% → 60–98 ; 1–19% → 22–58 ; ≤0% → 0).</li>
-                <li>
-                  S_urgence: ratio B = (jours restants / effort en jours) → B≤0:100 · 0&lt;B&lt;1:90 · 1≤B&lt;3:60 · B≥3:20.
-                </li>
-                <li>Couleurs: ≥80 vert · 60–79 ambre · 40–59 orange · &lt;40 rouge.</li>
+                <li>Score = (0,25×S_client + 0,35×S_marge + 0,20×S_urgence + 0,10×S_récurrence + 0,10×S_strat) × (client ★ ? 1,15 : 1), borné à [0,100].</li>
+                <li>S_client: Super rentable=80, Normal=50, Pas rentable=20 (segment client).</li>
+                <li>S_marge: ≥40% → 100 ; 20–39% → 60–98 ; 1–19% → 22–58 ; ≤0% → 0.</li>
+                <li>S_urgence: B = (jours avant échéance / effort en jours) → B≤0:100 · 0&lt;B&lt;1:90 · 1≤B&lt;3:60 · B≥3:20.</li>
               </ul>
             )}
           </div>
 
+          {/* Tableau compact (aucun scroll horizontal) */}
           <div className="rounded-md border border-[#BFBFBF]">
             <table className="w-full border-collapse">
               <thead className="bg-[#F7F7F7]">
@@ -454,30 +386,18 @@ const AdminProjects = () => {
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Nom</th>
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Statut</th>
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Score</th>
-                  {/* Colonnes secondaires masquées en petit écran */}
-                  <th className="hidden p-2 text-left text-sm font-semibold text-[#214A33] lg:table-cell">Client</th>
-                  <th className="hidden p-2 text-left text-sm font-semibold text-[#214A33] lg:table-cell">Devis HT</th>
-                  <th className="hidden p-2 text-left text-sm font-semibold text-[#214A33] lg:table-cell">Coût (planifié)</th>
-                  <th className="hidden p-2 text-left text-sm font-semibold text-[#214A33] lg:table-cell">Coût (actuel)</th>
-                  <th className="hidden p-2 text-left text-sm font-semibold text-[#214A33] lg:table-cell">Salariés</th>
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Détails</th>
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr>
-                    <td colSpan={11} className="p-4 text-center text-sm text-[#214A33]/60">Chargement…</td>
-                  </tr>
+                  <tr><td colSpan={6} className="p-4 text-center text-sm text-[#214A33]/60">Chargement…</td></tr>
                 ) : projects.length === 0 ? (
-                  <tr>
-                    <td colSpan={11} className="p-4 text-center text-sm text-[#214A33]/60">Aucun projet pour le moment.</td>
-                  </tr>
+                  <tr><td colSpan={6} className="p-4 text-center text-sm text-[#214A33]/60">Aucun projet pour le moment.</td></tr>
                 ) : (
                   projects.map((p) => {
-                    const assigned = (assignments[p.id] || []).map(
-                      (eid) => employees.find((e) => e.id === eid)
-                    ).filter(Boolean) as Employee[];
+                    const assigned = (assignments[p.id] || []).map((eid) => employees.find((e) => e.id === eid)).filter(Boolean) as Employee[];
                     const client = clients.find((c) => c.id === p.client_id) || null;
 
                     const cst = costs[p.id];
@@ -496,7 +416,7 @@ const AdminProjects = () => {
                     const sClientVal = sClient(seg);
                     const sMargeVal = sMarge(margin_pct);
                     const sUrgVal = sUrgence(dLeft, effortDays);
-                    const raw = 0.25 * sClientVal + 0.35 * sMargeVal + 0.20 * sUrgVal + 0.10 * 0 + 0.10 * 0;
+                    const raw = 0.25 * sClientVal + 0.35 * sMargeVal + 0.20 * sUrgVal;
                     const final = clamp100(Math.round((raw * (star ? 1.15 : 1)) * 100) / 100);
 
                     const open = !!openRows[p.id];
@@ -504,8 +424,8 @@ const AdminProjects = () => {
                     return (
                       <React.Fragment key={p.id}>
                         <tr className="border-t border-[#BFBFBF]">
-                          <td className="p-2 text-sm">{p.code}</td>
-                          <td className="p-2 text-sm">{p.name}</td>
+                          <td className="p-2 text-sm break-words">{p.code}</td>
+                          <td className="p-2 text-sm break-words">{p.name}</td>
                           <td className="p-2 text-sm">
                             <span
                               className={cn(
@@ -518,7 +438,6 @@ const AdminProjects = () => {
                               {p.status === "active" ? "Actif" : p.status === "onhold" ? "En pause" : "Archivé"}
                             </span>
                           </td>
-
                           <td className="p-2 text-sm">
                             {sc == null ? (
                               <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-semibold", scoreBadge(undefined))}>—</span>
@@ -533,77 +452,29 @@ const AdminProjects = () => {
                                   <div className="space-y-1 text-[#214A33]">
                                     <div className="font-medium">Détail du score</div>
                                     <div className="grid grid-cols-2 gap-1">
-                                      <div>Segment client</div>
-                                      <div className="text-right">{seg ?? "—"} {star ? "★" : ""}</div>
-                                      <div>S_client</div>
-                                      <div className="text-right">{sClientVal}</div>
-                                      <div>Marge %</div>
-                                      <div className="text-right">{margin_pct == null ? "—" : `${margin_pct.toFixed(0)}%`}</div>
-                                      <div>S_marge</div>
-                                      <div className="text-right">{Math.round(sMargeVal)}</div>
-                                      <div>Échéance</div>
-                                      <div className="text-right">{dueIso ?? "—"}</div>
-                                      <div>Effort (j)</div>
-                                      <div className="text-right">{effortDays ?? "—"}</div>
-                                      <div>Ratio B</div>
-                                      <div className="text-right">{B == null ? "—" : B.toFixed(2)}</div>
-                                      <div>S_urgence</div>
-                                      <div className="text-right">{sUrgVal}</div>
+                                      <div>Segment client</div><div className="text-right">{seg ?? "—"} {star ? "★" : ""}</div>
+                                      <div>S_client</div><div className="text-right">{sClientVal}</div>
+                                      <div>Marge %</div><div className="text-right">{margin_pct == null ? "—" : `${margin_pct.toFixed(0)}%`}</div>
+                                      <div>S_marge</div><div className="text-right">{Math.round(sMargeVal)}</div>
+                                      <div>Échéance</div><div className="text-right">{dueIso ?? "—"}</div>
+                                      <div>Effort (j)</div><div className="text-right">{effortDays ?? "—"}</div>
+                                      <div>Ratio B</div><div className="text-right">{B == null ? "—" : B.toFixed(2)}</div>
+                                      <div>S_urgence</div><div className="text-right">{sUrgVal}</div>
                                     </div>
                                     <div className="pt-1 text-[11px] text-[#214A33]/80">
-                                      Score = (0,25×{sClientVal} + 0,35×{Math.round(sMargeVal)} + 0,20×{sUrgVal} + 0 + 0)
-                                      × {star ? "1,15" : "1"}
-                                      {" = "}
-                                      <span className="font-medium">{Math.round(final)}</span>
+                                      Score ≈ 0,25×{sClientVal} + 0,35×{Math.round(sMargeVal)} + 0,20×{sUrgVal} → × {star ? "1,15" : "1"} = <span className="font-medium">{Math.round(final)}</span>
                                     </div>
                                   </div>
                                 </HoverCardContent>
                               </HoverCard>
                             )}
                           </td>
-
-                          {/* Colonnes secondaires visibles seulement en grand écran */}
-                          <td className="hidden p-2 text-sm lg:table-cell">{client ? `${client.code} — ${client.name}` : "—"}</td>
-                          <td className="hidden p-2 text-sm lg:table-cell">{eur(p.quote_amount)}</td>
-                          <td className="hidden p-2 text-sm lg:table-cell">{eur(costPlanned)}</td>
-                          <td className="hidden p-2 text-sm lg:table-cell">{eur(costActual)}</td>
-                          <td className="hidden p-2 text-sm lg:table-cell">
-                            <div className="flex flex-wrap gap-1">
-                              {assigned.length === 0 ? (
-                                <span className="text-xs text-[#214A33]/50">Aucun</span>
-                              ) : (
-                                assigned.map((e) => (
-                                  <Badge key={e.id} variant="secondary" className="border-[#BFBFBF] text-[#214A33]">
-                                    {fullName(e)}
-                                  </Badge>
-                                ))
-                              )}
-                            </div>
-                          </td>
-
                           <td className="p-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="border-[#BFBFBF] text-[#214A33]"
-                              onClick={() => toggleRow(p.id)}
-                            >
-                              {open ? (
-                                <>
-                                  <ChevronUp className="mr-2 h-4 w-4" />
-                                  Masquer
-                                </>
-                              ) : (
-                                <>
-                                  <ChevronDown className="mr-2 h-4 w-4" />
-                                  Détails
-                                </>
-                              )}
+                            <Button variant="outline" size="sm" className="border-[#BFBFBF] text-[#214A33]" onClick={() => toggleRow(p.id)}>
+                              {open ? (<><ChevronUp className="mr-2 h-4 w-4" />Masquer</>) : (<><ChevronDown className="mr-2 h-4 w-4" />Détails</>)}
                             </Button>
                           </td>
-
-                          <td className="p-2 flex gap-2">
-                            {/* Actions */}
+                          <td className="p-2 flex flex-wrap gap-2">
                             <Dialog open={openEditFor?.id === p.id} onOpenChange={(o) => (o ? openEditDialog(p) : setOpenEditFor(null))}>
                               <DialogTrigger asChild>
                                 <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]">
@@ -614,116 +485,40 @@ const AdminProjects = () => {
                               <DialogContent>
                                 <DialogHeader>
                                   <DialogTitle>Modifier — {p.code}</DialogTitle>
-                                  <DialogDescription>Mettre à jour les informations du projet, y compris les budgets par section.</DialogDescription>
+                                  <DialogDescription>Mettre à jour les informations du projet.</DialogDescription>
                                 </DialogHeader>
                                 <div className="grid gap-4 py-2">
                                   <div className="grid gap-2">
                                     <Label>Nom</Label>
-                                    <Input
-                                      value={editForm.name}
-                                      onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
-                                    />
+                                    <Input value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} />
                                   </div>
                                   <div className="grid gap-2">
                                     <Label>Client</Label>
-                                    <Select
-                                      value={editForm.client_id}
-                                      onValueChange={(v) => setEditForm((f) => ({ ...f, client_id: v }))}
-                                    >
-                                      <SelectTrigger className="w-full">
-                                        <SelectValue placeholder="Choisir un client" />
-                                      </SelectTrigger>
+                                    <Select value={editForm.client_id} onValueChange={(v) => setEditForm((f) => ({ ...f, client_id: v }))}>
+                                      <SelectTrigger className="w-full"><SelectValue placeholder="Choisir un client" /></SelectTrigger>
                                       <SelectContent>
-                                        {clients.map((c) => (
-                                          <SelectItem key={c.id} value={c.id}>
-                                            {c.code} — {c.name}
-                                          </SelectItem>
-                                        ))}
+                                        {clients.map((c) => (<SelectItem key={c.id} value={c.id}>{c.code} — {c.name}</SelectItem>))}
                                       </SelectContent>
                                     </Select>
                                   </div>
                                   <div className="grid gap-2">
                                     <Label>Barème tarifs</Label>
-                                    <Select
-                                      value={editForm.tariff_id ?? "none"}
-                                      onValueChange={(v) => setEditForm((f) => ({ ...f, tariff_id: v === "none" ? null : v }))}
-                                    >
-                                      <SelectTrigger className="w-full">
-                                        <SelectValue placeholder="Sans barème (optionnel)" />
-                                      </SelectTrigger>
+                                    <Select value={editForm.tariff_id ?? "none"} onValueChange={(v) => setEditForm((f) => ({ ...f, tariff_id: v === "none" ? null : v }))}>
+                                      <SelectTrigger className="w-full"><SelectValue placeholder="Sans barème (optionnel)" /></SelectTrigger>
                                       <SelectContent>
                                         <SelectItem value="none">— Aucun —</SelectItem>
-                                        {tariffs.map((t) => (
-                                          <SelectItem key={t.id} value={t.id}>
-                                            {t.label}
-                                          </SelectItem>
-                                        ))}
+                                        {tariffs.map((t) => (<SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>))}
                                       </SelectContent>
                                     </Select>
                                   </div>
                                   <div className="grid gap-2">
                                     <Label>Montant total du devis (HT)</Label>
-                                    <Input
-                                      inputMode="decimal"
-                                      value={editForm.quote_amount}
-                                      onChange={(e) => setEditForm((f) => ({ ...f, quote_amount: e.target.value }))}
-                                    />
-                                  </div>
-
-                                  <div className="grid gap-2 md:grid-cols-3">
-                                    <div className="grid gap-2">
-                                      <Label>Budget Conception (HT)</Label>
-                                      <Input
-                                        inputMode="decimal"
-                                        placeholder="ex: 5000"
-                                        value={editForm.budget_conception}
-                                        onChange={(e) => setEditForm((f) => ({ ...f, budget_conception: e.target.value }))}
-                                      />
-                                    </div>
-                                    <div className="grid gap-2">
-                                      <Label>Budget Créa (HT)</Label>
-                                      <Input
-                                        inputMode="decimal"
-                                        placeholder="ex: 3000"
-                                        value={editForm.budget_crea}
-                                        onChange={(e) => setEditForm((f) => ({ ...f, budget_crea: e.target.value }))}
-                                      />
-                                    </div>
-                                    <div className="grid gap-2">
-                                      <Label>Budget Dev (HT)</Label>
-                                      <Input
-                                        inputMode="decimal"
-                                        placeholder="ex: 4000"
-                                        value={editForm.budget_dev}
-                                        onChange={(e) => setEditForm((f) => ({ ...f, budget_dev: e.target.value }))}
-                                      />
-                                    </div>
-                                  </div>
-
-                                  <div className="grid gap-2">
-                                    <Label>Statut</Label>
-                                    <Select
-                                      value={editForm.status}
-                                      onValueChange={(v) => setEditForm((f) => ({ ...f, status: v as Status }))}
-                                    >
-                                      <SelectTrigger className="w-full">
-                                        <SelectValue placeholder="Choisir un statut" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="active">Actif</SelectItem>
-                                        <SelectItem value="onhold">En pause</SelectItem>
-                                        <SelectItem value="archived">Archivé</SelectItem>
-                                      </SelectContent>
-                                    </Select>
+                                    <Input inputMode="decimal" value={editForm.quote_amount} onChange={(e) => setEditForm((f) => ({ ...f, quote_amount: e.target.value }))} />
                                   </div>
                                 </div>
                                 <DialogFooter>
-                                  <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={() => setOpenEditFor(null)}>
-                                    Annuler
-                                  </Button>
-                                  <Button className="bg-[#F2994A] hover:bg-[#F2994A]/90 text-white" onClick={confirmEdit}>
-                                    Enregistrer
-                                  </Button>
+                                  <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={() => setOpenEditFor(null)}>Annuler</Button>
+                                  <Button className="bg-[#F2994A] hover:bg-[#F2994A]/90 text-white" onClick={confirmEdit}>Enregistrer</Button>
                                 </DialogFooter>
                               </DialogContent>
                             </Dialog>
@@ -749,10 +544,9 @@ const AdminProjects = () => {
                           </td>
                         </tr>
 
-                        {/* Ligne de détails (visible en petit écran, utile aussi en desktop) */}
                         {open && (
                           <tr className="border-t border-[#BFBFBF]/60 bg-white/60">
-                            <td colSpan={11} className="p-3">
+                            <td colSpan={6} className="p-3">
                               <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 text-sm text-[#214A33]">
                                 <div className="rounded-md border border-[#BFBFBF]/60 bg-[#F7F7F7] p-2">
                                   <div className="text-xs text-[#214A33]/70">Client</div>
