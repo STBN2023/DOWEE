@@ -22,6 +22,8 @@ import AdminTariffs from "./pages/AdminTariffs";
 import Today from "./pages/Today";
 import Daily from "./pages/Daily";
 import ReportsChanges from "./pages/ReportsChanges";
+import ProfitabilityClients from "./pages/ProfitabilityClients";
+import ProfitabilityProjects from "./pages/ProfitabilityProjects";
 
 const queryClient = new QueryClient();
 
@@ -74,6 +76,22 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <ReportsChanges />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/profitability/clients"
+                element={
+                  <ProtectedRoute>
+                    <ProfitabilityClients />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/profitability/projects"
+                element={
+                  <ProtectedRoute>
+                    <ProfitabilityProjects />
                   </ProtectedRoute>
                 }
               />
