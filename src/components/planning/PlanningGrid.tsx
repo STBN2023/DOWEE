@@ -52,6 +52,7 @@ type DragSel =
       dayIndex: number;
       startHour: number;
       currentHour: number;
+      startWasOccupied: boolean;
     }
   | { active: false };
 
@@ -162,12 +163,24 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     const start = Math.min(dragSel.startHour, dragSel.currentHour);
     const end = Math.max(dragSel.startHour, dragSel.currentHour);
     const d = days[dayIdx].iso;
-    const count = end - start + 1;
 
-    // Optimistic UI
+    // Déterminer les heures concernées selon la stratégie:
+    // - si la sélection a commencé sur un créneau occupé => autoriser le remplacement (toutes les heures de la plage)
+    // - sinon => n’ajouter que les heures vides (ne pas écraser)
+    const allHours = Array.from({ length: end - start + 1 }, (_, i) => start + i);
+    const targetHours = dragSel.startWasOccupied
+      ? allHours
+      : allHours.filter((h) => !plans[keyOf(d, h)]);
+
+    if (targetHours.length === 0) {
+      showError("Aucun créneau disponible dans la plage sélectionnée (déjà occupés).");
+      return;
+    }
+
+    // Optimistic UI uniquement sur les heures cible
     setPlans((prev) => {
       const next = { ...prev };
-      for (let h = start; h <= end; h++) {
+      for (const h of targetHours) {
         const k = keyOf(d, h);
         next[k] = { d, hour: h, projectId: dragSel.projectId };
       }
@@ -177,9 +190,9 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     let saved = false;
     try {
       await patchUserWeek({
-        upserts: Array.from({ length: count }, (_, i) => ({
+        upserts: targetHours.map((h) => ({
           d,
-          hour: start + i,
+          hour: h,
           project_id: dragSel.projectId,
           planned_minutes: 60,
         })),
@@ -208,6 +221,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     }
 
     if (saved) {
+      const count = targetHours.length;
       const s = count > 1 ? "x" : "";
       const aux = count > 1 ? "ajoutés" : "ajouté";
       showSuccess(`${count} créneau${s} ${aux}.`);
@@ -218,7 +232,14 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
   const onDragStart = (e: DragStartEvent) => {
     const t = e.active.data?.current as any;
     if (t?.type === "project") {
-      setDragSel({ active: true, projectId: t.projectId, dayIndex: -1, startHour: -1, currentHour: -1 });
+      setDragSel({
+        active: true,
+        projectId: t.projectId,
+        dayIndex: -1,
+        startHour: -1,
+        currentHour: -1,
+        startWasOccupied: false,
+      });
       setOverlay({ type: "project", code: t.code, name: t.name });
     } else if (t?.type === "plan") {
       const planKey = t.planKey as string;
@@ -233,10 +254,13 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     if (active?.type === "project" && over?.type === "cell") {
       const dayIdx = (over.dayIdx as number) ?? isoToIdx[over.iso as string] ?? -1;
       const hour = over.hour as number;
+      const d = over.iso as string;
       setDragSel((s) => {
         if (!s.active) return s;
         if (s.dayIndex === -1) {
-          return { ...s, dayIndex: dayIdx, startHour: hour, currentHour: hour };
+          // déterminer si le premier survol était une case déjà occupée
+          const occupied = !!plans[keyOf(d, hour)];
+          return { ...s, dayIndex: dayIdx, startHour: hour, currentHour: hour, startWasOccupied: occupied };
         }
         if (s.dayIndex === dayIdx) {
           return { ...s, currentHour: hour };
@@ -510,7 +534,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
         </div>
 
         <p className="mt-3 text-xs text-[#214A33]/60">
-          Astuce : gardez le curseur dans la même colonne pendant le glisser-déposer pour étirer la sélection. Pour supprimer un créneau, faites-le glisser en dehors de la grille puis relâchez.
+          Astuce : démarrez le glisser-déposer sur une case vide pour ajouter sans remplacer; démarrez sur une case occupée pour remplacer.
         </p>
 
         <DragOverlay>
