@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getClientView, type ClientView } from "@/api/clientView";
 import { listAdminProjects, type Project } from "@/api/adminProjects";
+import { getProjectScores, type ProjectScore } from "@/api/projectScoring";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
@@ -28,6 +29,14 @@ function marginBadge(pct: number | null) {
   return <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200">≥ 40%</Badge>;
 }
 
+function scoreBadgeClass(score?: number | null) {
+  if (score == null) return "bg-gray-100 text-gray-600 border border-gray-200";
+  if (score >= 80) return "bg-emerald-50 text-emerald-700 border border-emerald-200";
+  if (score >= 60) return "bg-amber-50 text-amber-700 border border-amber-200";
+  if (score >= 40) return "bg-orange-50 text-orange-700 border border-orange-200";
+  return "bg-red-50 text-red-700 border border-red-200";
+}
+
 const months = ["JANVIER","FEVRIER","MARS","AVRIL","MAI","JUIN","JUILLET","AOUT","SEPT.","OCT.","NOV.","DEC."];
 
 const ClientView: React.FC = () => {
@@ -42,6 +51,9 @@ const ClientView: React.FC = () => {
   const [loading, setLoading] = React.useState<boolean>(true);
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
 
+  // Scores de projets (map projet_id -> ProjectScore)
+  const [scores, setScores] = React.useState<Record<string, ProjectScore>>({});
+
   React.useEffect(() => {
     const loadProjects = async () => {
       try {
@@ -54,6 +66,21 @@ const ClientView: React.FC = () => {
       }
     };
     loadProjects();
+  }, []);
+
+  // Charger tous les scores une fois
+  React.useEffect(() => {
+    const loadScores = async () => {
+      try {
+        const arr = await getProjectScores();
+        const map: Record<string, ProjectScore> = {};
+        arr.forEach((s) => { map[s.project_id] = s; });
+        setScores(map);
+      } catch {
+        // silencieux: pas bloquant
+      }
+    };
+    loadScores();
   }, []);
 
   const load = React.useCallback(async () => {
@@ -95,6 +122,12 @@ const ClientView: React.FC = () => {
     return { value, pct };
   }, [data]);
 
+  const currentScore = React.useMemo(() => {
+    if (!projectId) return null;
+    const sc = scores[projectId]?.score;
+    return typeof sc === "number" ? Math.round(sc) : null;
+  }, [scores, projectId]);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -120,6 +153,17 @@ const ClientView: React.FC = () => {
           </SelectContent>
         </Select>
       </div>
+
+      {/* Bandeau Note (score) */}
+      {currentScore != null && (
+        <div className="rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-3 inline-flex items-center gap-3">
+          <div className="text-sm text-[#214A33]">Note (priorité)</div>
+          <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-semibold", scoreBadgeClass(currentScore))}>
+            {String(currentScore).padStart(2, "0")}
+          </span>
+          <div className="text-xs text-[#214A33]/70">Plus la note est haute, plus le projet est prioritaire.</div>
+        </div>
+      )}
 
       {errorMsg && (
         <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{errorMsg}</div>
