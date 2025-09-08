@@ -1,4 +1,3 @@
-Dashboards, sinon -> Today.">
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Auth } from "@supabase/auth-ui-react";
@@ -29,7 +28,6 @@ const Login = () => {
           navigate("/today", { replace: true });
         }
       } catch {
-        // En cas d’erreur de statut, repli sur l’accueil
         if (!cancelled) navigate("/", { replace: true });
       }
     };
