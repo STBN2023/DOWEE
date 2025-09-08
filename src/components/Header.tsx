@@ -25,22 +25,8 @@ const Header = () => {
           <div className="flex items-center gap-3">
             <BurgerMenu />
             <Link to="/" className="ml-1 text-lg font-semibold tracking-tight text-[#214A33]">
-              DOWEE V2
+              DoWee
             </Link>
-            <nav className="hidden md:flex items-center gap-1">
-              <NavLink to="/" className={navLinkClass} end>
-                Accueil
-              </NavLink>
-              <NavLink to="/planning" className={navLinkClass}>
-                Planning
-              </NavLink>
-              <NavLink to="/dashboards" className={navLinkClass}>
-                Tableaux de bord
-              </NavLink>
-              <NavLink to="/admin" className={navLinkClass}>
-                Admin
-              </NavLink>
-            </nav>
           </div>
           <div className="flex items-center gap-3">
             <span className="text-sm text-[#214A33]/80">Vue</span>
