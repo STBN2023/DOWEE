@@ -20,7 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Pencil, Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Pencil, Plus, Users, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
 import {
@@ -74,7 +75,7 @@ function scoreBadge(score?: number) {
   return "bg-red-50 text-red-700 border border-red-200";
 }
 
-// Petites aides pour le détail du score
+// Helpers score (cohérents avec l’edge function)
 function sClient(segment?: string | null): number {
   if (!segment) return 50;
   const b = segment.toLowerCase();
@@ -109,6 +110,9 @@ function sUrgence(daysLeft: number | null, effortDays: number | null): number {
 }
 function clamp100(n: number) { return Math.min(100, Math.max(0, n)); }
 
+type SortKey = "code" | "name" | "score";
+type SortDir = "asc" | "desc";
+
 const AdminProjects = () => {
   const [employees, setEmployees] = React.useState<Employee[]>([]);
   const [projects, setProjects] = React.useState<Project[]>([]);
@@ -135,9 +139,11 @@ const AdminProjects = () => {
     quote_amount: "",
   });
 
+  // Affectations
   const [openAssignFor, setOpenAssignFor] = React.useState<string | null>(null);
   const [assignSelection, setAssignSelection] = React.useState<Record<string, boolean>>({});
 
+  // Edition
   const [openEditFor, setOpenEditFor] = React.useState<Project | null>(null);
   const [editForm, setEditForm] = React.useState<{
     name: string;
@@ -159,8 +165,16 @@ const AdminProjects = () => {
     budget_dev: "",
   });
 
+  // Aide Score
   const [showScoreHelp, setShowScoreHelp] = React.useState<boolean>(false);
+  // Détails par ligne
   const [openRows, setOpenRows] = React.useState<Record<string, boolean>>({});
+
+  // Filtres + tri
+  const [q, setQ] = React.useState("");
+  const [statusFilter, setStatusFilter] = React.useState<"all" | Status>("all");
+  const [clientFilter, setClientFilter] = React.useState<string>("all");
+  const [sort, setSort] = React.useState<{ key: SortKey; dir: SortDir }>({ key: "score", dir: "desc" });
 
   const refresh = async () => {
     setLoading(true);
@@ -284,15 +298,30 @@ const AdminProjects = () => {
     }
   };
 
-  const confirmDelete = async (projectId: string) => {
-    try {
-      await deleteProject(projectId);
-      showSuccess("Projet supprimé.");
-      await refresh();
-    } catch (e: any) {
-      showError(e?.message || "Suppression impossible.");
+  // Liste filtrée + triée
+  const filtered = React.useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    let arr = [...projects];
+
+    if (statusFilter !== "all") arr = arr.filter((p) => p.status === statusFilter);
+    if (clientFilter !== "all") arr = arr.filter((p) => p.client_id === clientFilter);
+    if (needle) {
+      arr = arr.filter((p) => (p.code + " " + p.name).toLowerCase().includes(needle));
     }
-  };
+
+    const dirMul = sort.dir === "asc" ? 1 : -1;
+    arr.sort((a, b) => {
+      if (sort.key === "code") return a.code.localeCompare(b.code) * dirMul;
+      if (sort.key === "name") return a.name.localeCompare(b.name) * dirMul;
+
+      // score
+      const sa = scoreDetails[a.id]?.score ?? -Infinity;
+      const sb = scoreDetails[b.id]?.score ?? -Infinity;
+      return (sa - sb) * dirMul;
+    });
+
+    return arr;
+  }, [projects, q, statusFilter, clientFilter, sort, scoreDetails]);
 
   const toggleRow = (id: string) => setOpenRows((prev) => ({ ...prev, [id]: !prev[id] }));
 
@@ -311,9 +340,7 @@ const AdminProjects = () => {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Nouveau projet</DialogTitle>
-                <DialogDescription>
-                  Sélectionnez le client et, si besoin, les tarifs applicables; le code sera généré automatiquement (CLIENT-YYYY-NNN).
-                </DialogDescription>
+                <DialogDescription>Le code est généré (CLIENT-YYYY-NNN).</DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-2">
                 <div className="grid gap-2">
@@ -323,22 +350,16 @@ const AdminProjects = () => {
                 <div className="grid gap-2">
                   <Label>Client</Label>
                   <Select value={form.client_id} onValueChange={(v) => setForm((f) => ({ ...f, client_id: v }))}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Choisir un client" />
-                    </SelectTrigger>
+                    <SelectTrigger className="w-full"><SelectValue placeholder="Choisir un client" /></SelectTrigger>
                     <SelectContent>
-                      {clients.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>{c.code} — {c.name}</SelectItem>
-                      ))}
+                      {clients.map((c) => (<SelectItem key={c.id} value={c.id}>{c.code} — {c.name}</SelectItem>))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="grid gap-2">
                   <Label>Barème tarifs</Label>
                   <Select value={form.tariff_id ?? "none"} onValueChange={(v) => setForm((f) => ({ ...f, tariff_id: v === "none" ? null : v }))}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Sans barème (optionnel)" />
-                    </SelectTrigger>
+                    <SelectTrigger className="w-full"><SelectValue placeholder="Sans barème (optionnel)" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">— Aucun —</SelectItem>
                       {tariffs.map((t) => (<SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>))}
@@ -359,7 +380,7 @@ const AdminProjects = () => {
         </CardHeader>
 
         <CardContent>
-          {/* Bloc aide Score avec bouton */}
+          {/* Aide Score + Toggle */}
           <div className="mb-3 rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-3 text-[12px] text-[#214A33]">
             <div className="flex items-center justify-between">
               <div className="font-medium">Comment est calculé le Score ?</div>
@@ -369,15 +390,55 @@ const AdminProjects = () => {
             </div>
             {showScoreHelp && (
               <ul className="mt-2 list-disc pl-5 space-y-0.5">
-                <li>Score = (0,25×S_client + 0,35×S_marge + 0,20×S_urgence + 0,10×S_récurrence + 0,10×S_strat) × (client ★ ? 1,15 : 1), borné à [0,100].</li>
-                <li>S_client: Super rentable=80, Normal=50, Pas rentable=20 (segment client).</li>
+                <li>Score = (0,25×S_client + 0,35×S_marge + 0,20×S_urgence + 0,10×S_récurrence + 0,10×S_strat) × (★ ? 1,15 : 1), borné à [0,100].</li>
+                <li>S_client: Super rentable=80, Normal=50, Pas rentable=20.</li>
                 <li>S_marge: ≥40% → 100 ; 20–39% → 60–98 ; 1–19% → 22–58 ; ≤0% → 0.</li>
-                <li>S_urgence: B = (jours avant échéance / effort en jours) → B≤0:100 · 0&lt;B&lt;1:90 · 1≤B&lt;3:60 · B≥3:20.</li>
+                <li>S_urgence: B = (jours restants / effort en jours) → B≤0:100 · 0&lt;B&lt;1:90 · 1≤B&lt;3:60 · B≥3:20.</li>
               </ul>
             )}
           </div>
 
-          {/* Tableau compact (aucun scroll horizontal) */}
+          {/* Filtres & tri */}
+          <div className="mb-3 grid gap-2 md:grid-cols-4">
+            <div className="md:col-span-2">
+              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher (code ou nom)..." />
+            </div>
+            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
+              <SelectTrigger className="bg-white border-[#BFBFBF] text-[#214A33]"><SelectValue placeholder="Statut" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les statuts</SelectItem>
+                <SelectItem value="active">Actif</SelectItem>
+                <SelectItem value="onhold">En pause</SelectItem>
+                <SelectItem value="archived">Archivé</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={clientFilter} onValueChange={setClientFilter}>
+              <SelectTrigger className="bg-white border-[#BFBFBF] text-[#214A33]"><SelectValue placeholder="Client" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les clients</SelectItem>
+                {clients.map((c) => (<SelectItem key={c.id} value={c.id}>{c.code} — {c.name}</SelectItem>))}
+              </SelectContent>
+            </Select>
+            <div className="flex items-center gap-2">
+              <Select value={sort.key} onValueChange={(v) => setSort((s) => ({ ...s, key: v as SortKey }))}>
+                <SelectTrigger className="bg-white border-[#BFBFBF] text-[#214A33]"><SelectValue placeholder="Tri" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="score">Score</SelectItem>
+                  <SelectItem value="code">Code</SelectItem>
+                  <SelectItem value="name">Nom</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={sort.dir} onValueChange={(v) => setSort((s) => ({ ...s, dir: v as SortDir }))}>
+                <SelectTrigger className="w-[130px] bg-white border-[#BFBFBF] text-[#214A33]"><SelectValue placeholder="Sens" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="asc">Croissant</SelectItem>
+                  <SelectItem value="desc">Décroissant</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Tableau compact */}
           <div className="rounded-md border border-[#BFBFBF]">
             <table className="w-full border-collapse">
               <thead className="bg-[#F7F7F7]">
@@ -393,10 +454,10 @@ const AdminProjects = () => {
               <tbody>
                 {loading ? (
                   <tr><td colSpan={6} className="p-4 text-center text-sm text-[#214A33]/60">Chargement…</td></tr>
-                ) : projects.length === 0 ? (
-                  <tr><td colSpan={6} className="p-4 text-center text-sm text-[#214A33]/60">Aucun projet pour le moment.</td></tr>
+                ) : filtered.length === 0 ? (
+                  <tr><td colSpan={6} className="p-4 text-center text-sm text-[#214A33]/60">Aucun résultat.</td></tr>
                 ) : (
-                  projects.map((p) => {
+                  filtered.map((p) => {
                     const assigned = (assignments[p.id] || []).map((eid) => employees.find((e) => e.id === eid)).filter(Boolean) as Employee[];
                     const client = clients.find((c) => c.id === p.client_id) || null;
 
@@ -475,6 +536,41 @@ const AdminProjects = () => {
                             </Button>
                           </td>
                           <td className="p-2 flex flex-wrap gap-2">
+                            <Dialog open={openAssignFor === p.id} onOpenChange={(o) => (o ? openAssignDialog(p.id) : setOpenAssignFor(null))}>
+                              <DialogTrigger asChild>
+                                <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]">
+                                  <Users className="mr-2 h-4 w-4" />
+                                  Affecter
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent>
+                                <DialogHeader>
+                                  <DialogTitle>Affectations — {p.code}</DialogTitle>
+                                  <DialogDescription>Sélectionnez les salariés affectés à ce projet.</DialogDescription>
+                                </DialogHeader>
+                                <div className="max-h-[50vh] overflow-auto rounded-md border border-[#BFBFBF] p-2">
+                                  <ul className="space-y-2">
+                                    {employees.map((e) => {
+                                      const checked = !!assignSelection[e.id];
+                                      return (
+                                        <li key={e.id} className="flex items-center gap-2">
+                                          <Checkbox
+                                            checked={checked}
+                                            onCheckedChange={(val) => setAssignSelection((s) => ({ ...s, [e.id]: !!val }))}
+                                          />
+                                          <span className="text-sm text-[#214A33]">{fullName(e)}</span>
+                                        </li>
+                                      );
+                                    })}
+                                  </ul>
+                                </div>
+                                <DialogFooter>
+                                  <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={() => setOpenAssignFor(null)}>Annuler</Button>
+                                  <Button className="bg-[#F2994A] hover:bg-[#F2994A]/90 text-white" onClick={confirmAssign}>Enregistrer</Button>
+                                </DialogFooter>
+                              </DialogContent>
+                            </Dialog>
+
                             <Dialog open={openEditFor?.id === p.id} onOpenChange={(o) => (o ? openEditDialog(p) : setOpenEditFor(null))}>
                               <DialogTrigger asChild>
                                 <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]">
@@ -533,11 +629,11 @@ const AdminProjects = () => {
                               <AlertDialogContent>
                                 <AlertDialogHeader>
                                   <AlertDialogTitle>Supprimer le projet ?</AlertDialogTitle>
-                                  <AlertDialogDescription>Cette action supprimera aussi les affectations et créneaux liés.</AlertDialogDescription>
+                                  <AlertDialogDescription>Les affectations et créneaux liés seront supprimés.</AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                   <AlertDialogCancel>Annuler</AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => confirmDelete(p.id)}>Supprimer</AlertDialogAction>
+                                  <AlertDialogAction onClick={() => deleteProject(p.id).then(() => refresh()).then(() => showSuccess("Projet supprimé.")).catch((e) => showError(e?.message || "Suppression impossible."))}>Supprimer</AlertDialogAction>
                                 </AlertDialogFooter>
                               </AlertDialogContent>
                             </AlertDialog>
