@@ -22,6 +22,8 @@ const Dashboards = () => {
   const [tc, setTc] = React.useState<TimeCostOverview | null>(null);
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
 
+  const [showGlobalDetails, setShowGlobalDetails] = React.useState(false);
+
   React.useEffect(() => {
     if (authLoading || !employee) return;
 
@@ -63,70 +65,80 @@ const Dashboards = () => {
   }, [tc?.range]);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6">
-      <h1 className="mb-1 text-2xl font-semibold text-[#214A33]">Tableaux de bord</h1>
-      <div className="mb-4 text-xs text-[#214A33]/70">
+    <div className="mx-auto max-w-6xl px-4 py-4">
+      <h1 className="mb-1 text-xl font-semibold text-[#214A33]">Tableaux de bord</h1>
+      <div className="mb-3 text-[12px] text-[#214A33]/70">
         Semaine: {rangeLabel || "—"}
       </div>
       {errorMsg && (
-        <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{errorMsg}</div>
+        <div className="mb-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{errorMsg}</div>
       )}
       <Tabs defaultValue={defaultTab} className="w-full">
         <TabsList className="bg-[#F7F7F7]">
           <TabsTrigger value="global">Global</TabsTrigger>
+          <TabsTrigger value="client">Client</TabsTrigger>
           <TabsTrigger value="team">Équipe</TabsTrigger>
           <TabsTrigger value="me">Moi</TabsTrigger>
-          <TabsTrigger value="client">Client</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="global" className="mt-4">
-          <div className="grid gap-4 sm:grid-cols-3">
+        <TabsContent value="global" className="mt-3">
+          <div className="grid gap-3 sm:grid-cols-3">
             <StatCard title="Projets total" value={`${globalStats.total}`} />
             <StatCard title="Actifs" value={`${globalStats.active}`} />
             <StatCard title="En pause" value={`${globalStats.onhold}`} />
           </div>
-          <h2 className="mt-6 mb-2 text-lg font-semibold text-[#214A33]">Temps (semaine)</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <StatCard title="Heures planifiées" value={`${tc?.global.hours_planned?.toFixed(1) ?? "0.0"} h`} />
-            <StatCard title="Heures réelles" value={`${tc?.global.hours_actual?.toFixed(1) ?? "0.0"} h`} />
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <StatCard title="Heures planifiées (semaine)" value={`${tc?.global.hours_planned?.toFixed(1) ?? "0.0"} h`} />
+            <StatCard title="Heures réelles (semaine)" value={`${tc?.global.hours_actual?.toFixed(1) ?? "0.0"} h`} />
           </div>
-          <h2 className="mt-6 mb-2 text-lg font-semibold text-[#214A33]">Coûts (semaine)</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <StatCard title="Coût planifié" value={eur(tc?.global.cost_planned)} />
-            <StatCard title="Coût réel" value={eur(tc?.global.cost_actual)} />
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <StatCard title="Coût planifié (semaine)" value={eur(tc?.global.cost_planned)} />
+            <StatCard title="Coût réel (semaine)" value={eur(tc?.global.cost_actual)} />
           </div>
 
-          {/* Vue annuelle agrégée */}
-          <GlobalPortfolio />
+          <div className="mt-3 flex justify-end">
+            <button
+              className="text-xs underline text-[#214A33] hover:text-[#214A33]/80"
+              onClick={() => setShowGlobalDetails((v) => !v)}
+            >
+              {showGlobalDetails ? "Masquer les détails annuels" : "Afficher les détails annuels"}
+            </button>
+          </div>
+
+          {showGlobalDetails && (
+            <div className="mt-2">
+              <GlobalPortfolio />
+            </div>
+          )}
         </TabsContent>
 
-        <TabsContent value="team" className="mt-4">
-          <div className="grid gap-4 sm:grid-cols-3">
+        <TabsContent value="client" className="mt-3">
+          <ClientView />
+        </TabsContent>
+
+        <TabsContent value="team" className="mt-3">
+          <div className="grid gap-3 sm:grid-cols-3">
             <StatCard title="Commercial (actifs)" value={`${teamStats.commercial}`} />
             <StatCard title="Créa (actifs)" value={`${teamStats.crea}`} />
             <StatCard title="Dev (actifs)" value={`${teamStats.dev}`} />
           </div>
-
-          {/* Vue annuelle par équipe */}
-          <TeamPortfolio />
+          <div className="mt-2">
+            <TeamPortfolio />
+          </div>
         </TabsContent>
 
-        <TabsContent value="me" className="mt-4">
-          <div className="grid gap-4 sm:grid-cols-2">
+        <TabsContent value="me" className="mt-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <StatCard title="Mes heures planifiées (semaine)" value={`${tc?.me.hours_planned?.toFixed(1) ?? "0.0"} h`} />
             <StatCard title="Mes heures réelles (semaine)" value={`${tc?.me.hours_actual?.toFixed(1) ?? "0.0"} h`} />
           </div>
-          <div className="grid gap-4 sm:grid-cols-2 mt-4">
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <StatCard title="Mon coût planifié (semaine)" value={eur(tc?.me.cost_planned)} />
             <StatCard title="Mon coût réel (semaine)" value={eur(tc?.me.cost_actual)} />
           </div>
-
-          {/* Vue annuelle personnelle */}
-          <MePortfolio />
-        </TabsContent>
-
-        <TabsContent value="client" className="mt-4">
-          <ClientView />
+          <div className="mt-2">
+            <MePortfolio />
+          </div>
         </TabsContent>
       </Tabs>
     </div>
@@ -135,11 +147,11 @@ const Dashboards = () => {
 
 const StatCard = ({ title, value }: { title: string; value: string }) => (
   <Card className="border-[#BFBFBF]">
-    <CardHeader>
-      <CardTitle className="text-sm text-[#214A33]/80">{title}</CardTitle>
+    <CardHeader className="py-2">
+      <CardTitle className="text-[12px] text-[#214A33]/80">{title}</CardTitle>
     </CardHeader>
-    <CardContent>
-      <div className="text-3xl font-bold text-[#214A33]">{value}</div>
+    <CardContent className="py-2">
+      <div className="text-2xl font-bold text-[#214A33]">{value}</div>
     </CardContent>
   </Card>
 );

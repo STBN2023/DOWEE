@@ -59,9 +59,10 @@ function sectionSlug(team: string | null | undefined): "conception" | "crea" | "
   return k === "rate_crea" ? "crea" : (k === "rate_dev" ? "dev" : "conception");
 }
 function displayName(e: EmployeeRow): string {
+  const names = [e.first_name ?? "", e.last_name ?? ""].join(" ").trim();
+  if (names) return names;
   if (e.display_name && e.display_name.trim()) return e.display_name;
-  const n = [e.first_name ?? "", e.last_name ?? ""].join(" ").trim();
-  return n || e.id;
+  return e.id;
 }
 function round2(n: number) { return Math.round(n * 100) / 100; }
 
@@ -202,21 +203,6 @@ serve(async (req) => {
   activeProjects.forEach((p) => {
     projTariff.set(p.id, p.tariff_id ? (tariffsMap.get(p.tariff_id) ?? null) : null);
   });
-
-  // For faster check project_id per row, fetch also project_id for rows; since we didn't include it in `rows` after filter, reloading with project_id would have been better, but we already ensured we filtered by project list when fetching.
-  // Cost by employee's team
-  for (const r of rows) {
-    const emp = empMap.get(r.employee_id);
-    const sec = sectionSlug(emp?.team ?? null);
-    const minutes = r.minutes ?? 0;
-    const hours = minutes / 60;
-
-    // No tariff per-row; approximate with average rate by section is not desired. Since we don't have row.project_id here, ensure we included it by requery above when mapping.
-    // To keep code consistent with rows, we need project_id to locate tariff; adjust: re-fetch actuals/plans including project_id above (already included), so compute again with local vars.
-
-    // We will recompute using a parallel fetch that included project_id; Above we kept it while mapping? No; we dropped it. Let's quickly refetch minimal arrays to compute cost precisely.
-
-  }
 
   // Re-fetch detailed rows with project_id for accurate costing
   let rowsDetailed: Array<{ project_id: string; employee_id: string; d: string; minutes: number }> = [];

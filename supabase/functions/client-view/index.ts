@@ -55,9 +55,10 @@ function sectionSlug(team: string | null | undefined): "conception" | "crea" | "
   return key === "rate_crea" ? "crea" : key === "rate_dev" ? "dev" : "conception";
 }
 function displayName(e: EmployeeRow): string {
+  const names = [e.first_name ?? "", e.last_name ?? ""].join(" ").trim();
+  if (names) return names;
   if (e.display_name && e.display_name.trim()) return e.display_name;
-  const n = [e.first_name ?? "", e.last_name ?? ""].join(" ").trim();
-  return n || e.id;
+  return e.id;
 }
 
 serve(async (req) => {
