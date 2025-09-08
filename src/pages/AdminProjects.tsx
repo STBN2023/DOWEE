@@ -82,7 +82,7 @@ const AdminProjects = () => {
     status: Status;
     client_id: string;
     tariff_id: string | null;
-    quote_amount: string; // garder saisie brute pour l’input
+    quote_amount: string;
   }>({
     name: "",
     status: "active",
@@ -101,12 +101,18 @@ const AdminProjects = () => {
     client_id: string;
     tariff_id: string | null;
     quote_amount: string;
+    budget_conception: string;
+    budget_crea: string;
+    budget_dev: string;
   }>({
     name: "",
     status: "active",
     client_id: "",
     tariff_id: null,
     quote_amount: "",
+    budget_conception: "",
+    budget_crea: "",
+    budget_dev: "",
   });
 
   const refresh = async () => {
@@ -118,12 +124,10 @@ const AdminProjects = () => {
     setClients(data.clients);
     setTariffs(data.tariffs);
 
-    // Charger les coûts après la liste (les coûts couvrent tous les projets)
     try {
       const c = await getProjectCosts();
       setCosts(c);
     } catch (e) {
-      // silencieux: si erreur, la colonne affichera "—"
       console.warn("getProjectCosts error", e);
     }
 
@@ -199,6 +203,9 @@ const AdminProjects = () => {
       client_id: p.client_id || "",
       tariff_id: p.tariff_id || null,
       quote_amount: p.quote_amount != null ? String(p.quote_amount) : "",
+      budget_conception: p.budget_conception != null ? String(p.budget_conception) : "",
+      budget_crea: p.budget_crea != null ? String(p.budget_crea) : "",
+      budget_dev: p.budget_dev != null ? String(p.budget_dev) : "",
     });
   };
 
@@ -210,6 +217,13 @@ const AdminProjects = () => {
       return;
     }
     const quote = editForm.quote_amount ? Number(editForm.quote_amount.replace(",", ".")) : null;
+    const budget_conception =
+      editForm.budget_conception.trim() === "" ? null : Number(editForm.budget_conception.replace(",", "."));
+    const budget_crea =
+      editForm.budget_crea.trim() === "" ? null : Number(editForm.budget_crea.replace(",", "."));
+    const budget_dev =
+      editForm.budget_dev.trim() === "" ? null : Number(editForm.budget_dev.replace(",", "."));
+
     try {
       await updateProject(openEditFor.id, {
         name,
@@ -217,6 +231,9 @@ const AdminProjects = () => {
         client_id: editForm.client_id,
         tariff_id: editForm.tariff_id || null,
         quote_amount: isFinite(Number(quote)) ? Number(quote) : null,
+        budget_conception: isFinite(Number(budget_conception as any)) ? (budget_conception as number) : null,
+        budget_crea: isFinite(Number(budget_crea as any)) ? (budget_crea as number) : null,
+        budget_dev: isFinite(Number(budget_dev as any)) ? (budget_dev as number) : null,
       });
       showSuccess("Projet modifié.");
       setOpenEditFor(null);
@@ -329,23 +346,6 @@ const AdminProjects = () => {
                     onChange={(e) => setForm((f) => ({ ...f, quote_amount: e.target.value }))}
                   />
                 </div>
-
-                <div className="grid gap-2">
-                  <Label>Statut</Label>
-                  <Select
-                    value={form.status}
-                    onValueChange={(v) => setForm((f) => ({ ...f, status: v as Status }))}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Choisir un statut" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">Actif</SelectItem>
-                      <SelectItem value="onhold">En pause</SelectItem>
-                      <SelectItem value="archived">Archivé</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={() => setOpenCreate(false)}>
@@ -428,7 +428,6 @@ const AdminProjects = () => {
                           </div>
                         </td>
                         <td className="p-2 flex gap-2">
-                          {/* Actions existantes (Modifier, Affecter, Supprimer) */}
                           <Dialog open={openEditFor?.id === p.id} onOpenChange={(o) => (o ? openEditDialog(p) : setOpenEditFor(null))}>
                             <DialogTrigger asChild>
                               <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]">
@@ -439,7 +438,7 @@ const AdminProjects = () => {
                             <DialogContent>
                               <DialogHeader>
                                 <DialogTitle>Modifier — {p.code}</DialogTitle>
-                                <DialogDescription>Mettre à jour le nom, le client, le barème et le devis.</DialogDescription>
+                                <DialogDescription>Mettre à jour les informations du projet, y compris les budgets par section.</DialogDescription>
                               </DialogHeader>
                               <div className="grid gap-4 py-2">
                                 <div className="grid gap-2">
@@ -508,6 +507,37 @@ const AdminProjects = () => {
                                     onChange={(e) => setEditForm((f) => ({ ...f, quote_amount: e.target.value }))}
                                   />
                                 </div>
+
+                                <div className="grid gap-2 md:grid-cols-3">
+                                  <div className="grid gap-2">
+                                    <Label>Budget Conception (HT)</Label>
+                                    <Input
+                                      inputMode="decimal"
+                                      placeholder="ex: 5000"
+                                      value={editForm.budget_conception}
+                                      onChange={(e) => setEditForm((f) => ({ ...f, budget_conception: e.target.value }))}
+                                    />
+                                  </div>
+                                  <div className="grid gap-2">
+                                    <Label>Budget Créa (HT)</Label>
+                                    <Input
+                                      inputMode="decimal"
+                                      placeholder="ex: 3000"
+                                      value={editForm.budget_crea}
+                                      onChange={(e) => setEditForm((f) => ({ ...f, budget_crea: e.target.value }))}
+                                    />
+                                  </div>
+                                  <div className="grid gap-2">
+                                    <Label>Budget Dev (HT)</Label>
+                                    <Input
+                                      inputMode="decimal"
+                                      placeholder="ex: 4000"
+                                      value={editForm.budget_dev}
+                                      onChange={(e) => setEditForm((f) => ({ ...f, budget_dev: e.target.value }))}
+                                    />
+                                  </div>
+                                </div>
+
                                 <div className="grid gap-2">
                                   <Label>Statut</Label>
                                   <Select

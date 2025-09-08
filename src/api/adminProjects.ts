@@ -32,6 +32,9 @@ export type Project = {
   client_id: string | null;
   tariff_id: string | null;
   quote_amount: number | null;
+  budget_conception: number | null;
+  budget_crea: number | null;
+  budget_dev: number | null;
 };
 
 export type Assignments = Record<string, string[]>;
@@ -55,6 +58,9 @@ export async function createProject(input: {
   client_id: string;
   tariff_id?: string | null;
   quote_amount?: number | null;
+  budget_conception?: number | null;
+  budget_crea?: number | null;
+  budget_dev?: number | null;
 }): Promise<Project> {
   const res = await supabase.functions.invoke("admin-projects", {
     body: { action: "create", project: input },
@@ -69,6 +75,9 @@ export async function updateProject(project_id: string, patch: Partial<{
   client_id: string;
   tariff_id: string | null;
   quote_amount: number | null;
+  budget_conception: number | null;
+  budget_crea: number | null;
+  budget_dev: number | null;
 }>): Promise<Project> {
   const res = await supabase.functions.invoke("admin-projects", {
     body: { action: "update", project_id, patch },

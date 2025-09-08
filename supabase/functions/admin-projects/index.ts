@@ -18,6 +18,10 @@ type CreatePayload = {
     client_id: string;
     tariff_id?: string | null;
     quote_amount?: number | null;
+    // budgets optionnels à la création
+    budget_conception?: number | null;
+    budget_crea?: number | null;
+    budget_dev?: number | null;
   };
 };
 type AssignPayload = { action: "assign"; project_id: string; employee_ids: string[] };
@@ -30,6 +34,9 @@ type UpdatePayload = {
     client_id: string;
     tariff_id: string | null;
     quote_amount: number | null;
+    budget_conception: number | null;
+    budget_crea: number | null;
+    budget_dev: number | null;
   }>;
 };
 type DeletePayload = { action: "delete"; project_id: string };
@@ -90,7 +97,7 @@ serve(async (req) => {
       { data: tariffs, error: tariffsErr },
     ] = await Promise.all([
       admin.from("employees").select("id, first_name, last_name, display_name"),
-      admin.from("projects").select("id, code, name, status, client_id, tariff_id, quote_amount"),
+      admin.from("projects").select("id, code, name, status, client_id, tariff_id, quote_amount, budget_conception, budget_crea, budget_dev"),
       admin.from("project_employees").select("project_id, employee_id"),
       admin.from("clients").select("id, code, name").order("code", { ascending: true }),
       admin.from("ref_tariffs").select("id, label, rate_conception, rate_crea, rate_dev").order("created_at", { ascending: true }),
@@ -124,6 +131,8 @@ serve(async (req) => {
     const status: Status = body.project.status ?? "active";
     const tariff_id = body.project.tariff_id ?? null;
     const quote_amount = body.project.quote_amount ?? null;
+
+    const { budget_conception = null, budget_crea = null, budget_dev = null } = body.project;
 
     // Récupérer le code client
     const { data: client, error: clientErr } = await admin.from("clients").select("code").eq("id", client_id).maybeSingle();
@@ -164,8 +173,11 @@ serve(async (req) => {
         client_id,
         tariff_id,
         quote_amount,
+        budget_conception,
+        budget_crea,
+        budget_dev,
       })
-      .select("id, code, name, status, client_id, tariff_id, quote_amount")
+      .select("id, code, name, status, client_id, tariff_id, quote_amount, budget_conception, budget_crea, budget_dev")
       .single();
 
     if (insErr) {
@@ -183,12 +195,15 @@ serve(async (req) => {
     if (typeof patch.client_id === "string") payload.client_id = patch.client_id;
     if ("tariff_id" in patch) payload.tariff_id = patch.tariff_id ?? null;
     if ("quote_amount" in patch) payload.quote_amount = patch.quote_amount ?? null;
+    if ("budget_conception" in patch) payload.budget_conception = patch.budget_conception ?? null;
+    if ("budget_crea" in patch) payload.budget_crea = patch.budget_crea ?? null;
+    if ("budget_dev" in patch) payload.budget_dev = patch.budget_dev ?? null;
 
     const { data, error } = await admin
       .from("projects")
       .update(payload)
       .eq("id", project_id)
-      .select("id, code, name, status, client_id, tariff_id, quote_amount")
+      .select("id, code, name, status, client_id, tariff_id, quote_amount, budget_conception, budget_crea, budget_dev")
       .single();
 
     if (error) {
