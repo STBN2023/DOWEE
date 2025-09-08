@@ -122,7 +122,6 @@ const Daily = () => {
       showSuccess("Créneau ajouté.");
     } catch (e: any) {
       showError(e?.message || "Ajout impossible.");
-      // reload to rollback
       loadDay();
     }
   };
@@ -172,7 +171,6 @@ const Daily = () => {
       await patchUserWeek({
         upserts: targetHours.map((h) => ({ d: iso, hour: h, project_id: dragSel.projectId, planned_minutes: 60 })),
       });
-      // re-sync to get ids
       await loadDay();
       showSuccess(`${targetHours.length} créneau${targetHours.length > 1 ? "x" : ""} ajouté${targetHours.length > 1 ? "s" : ""}.`);
     } catch (e: any) {
@@ -291,7 +289,6 @@ const Daily = () => {
       await assignOne(hour, selectedProjectId);
       return;
     }
-    // Sans projet sélectionné: rien (on évite les clics accidentels)
   };
 
   const onCellDoubleClick = async (hour: number) => {
@@ -301,12 +298,13 @@ const Daily = () => {
   };
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6">
+    <div className="mx-auto max-w-3xl px-3 py-3">
       <Card className="border-[#BFBFBF]">
-        <CardHeader className="flex items-center justify-between">
-          <CardTitle className="text-[#214A33]">Journée — {dayLabel}</CardTitle>
+        <CardHeader className="flex items-center justify-between py-3">
+          <CardTitle className="text-base font-semibold text-[#214A33]">Journée — {dayLabel}</CardTitle>
           <div className="flex flex-wrap gap-2">
             <Button
+              size="sm"
               variant="outline"
               className="border-[#BFBFBF] text-[#214A33]"
               onClick={() => setDate((d) => addDays(d, -1))}
@@ -315,6 +313,7 @@ const Daily = () => {
               Précédent
             </Button>
             <Button
+              size="sm"
               variant="outline"
               className="border-[#BFBFBF] text-[#214A33]"
               onClick={() => setDate(new Date())}
@@ -323,6 +322,7 @@ const Daily = () => {
               Aujourd’hui
             </Button>
             <Button
+              size="sm"
               variant="outline"
               className="border-[#BFBFBF] text-[#214A33]"
               onClick={() => setDate((d) => addDays(d, 1))}
@@ -332,7 +332,7 @@ const Daily = () => {
             </Button>
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]">
+                <Button size="sm" variant="outline" className="border-[#BFBFBF] text-[#214A33]">
                   <CalendarDays className="mr-2 h-4 w-4" />
                   Choisir une date
                 </Button>
@@ -349,9 +349,9 @@ const Daily = () => {
             </Popover>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-2">
           {errorMsg && (
-            <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <div className="mb-3 rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-700">
               {errorMsg}
             </div>
           )}
@@ -364,7 +364,7 @@ const Daily = () => {
             onDragEnd={onDragEnd}
           >
             {/* Sélection projet */}
-            <div className="mb-4 flex flex-wrap items-center gap-2">
+            <div className="mb-3 flex w-full items-center gap-2 overflow-x-auto">
               {projects.length === 0 ? (
                 <div className="text-sm text-[#214A33]/60">Aucun projet assigné.</div>
               ) : (
@@ -375,7 +375,7 @@ const Daily = () => {
                       key={p.id}
                       onClick={() => setSelectedProjectId((cur) => (cur === p.id ? null : p.id))}
                       className={cn(
-                        "select-none inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm transition",
+                        "select-none inline-flex items-center gap-2 rounded-full border px-2 py-0.5 text-xs transition",
                         active
                           ? "border-[#214A33] bg-[#214A33] text-white"
                           : "border-[#BFBFBF] bg-white text-[#214A33] hover:shadow"
@@ -391,13 +391,13 @@ const Daily = () => {
               )}
             </div>
 
-            {/* Grille jour */}
-            <div className="overflow-hidden rounded-md border border-[#BFBFBF] bg-[#F7F7F7]">
+            {/* Grille jour dans une zone à hauteur adaptative */}
+            <div className="overflow-auto rounded-md border border-[#BFBFBF] bg-[#F7F7F7] max-h-[calc(100vh-220px)]">
               <table className="w-full border-collapse">
                 <thead>
                   <tr>
-                    <th className="w-28 bg-[#F7F7F7] p-2 text-left text-sm font-semibold text-[#214A33]">Heure</th>
-                    <th className="min-w-[260px] p-2 text-left text-sm font-semibold text-[#214A33]">Créneau</th>
+                    <th className="w-24 bg-[#F7F7F7] p-2 text-left text-xs font-semibold text-[#214A33]">Heure</th>
+                    <th className="min-w-[220px] p-2 text-left text-xs font-semibold text-[#214A33]">Créneau</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -406,12 +406,12 @@ const Daily = () => {
                     const proj = has ? byProject[plans[h].projectId] : undefined;
                     return (
                       <tr key={h}>
-                        <td className="w-28 bg-[#F7F7F7] p-2 text-sm text-[#214A33]/80">{String(h).padStart(2, "0")}:00</td>
+                        <td className="w-24 bg-[#F7F7F7] p-2 text-xs text-[#214A33]/80">{String(h).padStart(2, "0")}:00</td>
                         <CellDroppable
                           id={`cell-${iso}|${h}`}
                           data={{ type: "cell", iso, hour: h, dayIdx: 0 }}
                           className={cn(
-                            "relative h-20 align-middle border border-[#BFBFBF]/60 bg-white",
+                            "relative h-12 align-middle border border-[#BFBFBF]/60 bg-white",
                             isHighlighted(h) && "ring-2 ring-[#F2994A] bg-[#F2994A]/10"
                           )}
                         >
@@ -421,8 +421,8 @@ const Daily = () => {
                             onDoubleClick={() => onCellDoubleClick(h)}
                           >
                             {!has ? (
-                              <div className="h-full w-full flex items-center justify-center">
-                                <span className="pointer-events-none select-none text-xs text-[#214A33]/40">
+                              <div className="flex h-full w-full items-center justify-center">
+                                <span className="pointer-events-none select-none text-[11px] text-[#214A33]/40">
                                   Cliquez ou déposez un projet…
                                 </span>
                               </div>
@@ -443,9 +443,8 @@ const Daily = () => {
               </table>
             </div>
 
-            <p className="mt-3 text-xs text-[#214A33]/60">
-              Conseil: sélectionnez un projet puis cliquez sur plusieurs heures pour l’assigner rapidement.
-              Double-cliquez sur un créneau pour le supprimer. Le glisser-déposer vertical reste disponible.
+            <p className="mt-2 hidden text-[11px] text-[#214A33]/60 md:block">
+              Astuce: sélectionnez un projet puis cliquez sur plusieurs heures pour l’assigner rapidement. Double-cliquez sur un créneau pour le supprimer.
             </p>
 
             <DragOverlay>
