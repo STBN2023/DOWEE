@@ -123,13 +123,22 @@ serve(async (req) => {
     });
   }
 
-  const teams = ["commercial", "créa", "dev"] as const;
+  const teams = ["conception", "créa", "dev"] as const;
   const byTeamMap = new Map<string, Set<string>>();
   teams.forEach((t) => byTeamMap.set(t, new Set()));
 
+  function normalizeTeam(raw?: string | null): "conception" | "créa" | "dev" | null {
+    if (!raw) return null;
+    const base = raw.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (base === "crea" || base === "creation") return "créa";
+    if (base === "dev" || base === "developpement" || base === "developement") return "dev";
+    if (base === "commercial" || base === "conception") return "conception";
+    return null;
+  }
+
   for (const row of pe ?? []) {
     if (!allowedProjectIds.has(row.project_id)) continue;
-    const team = empTeam.get(row.employee_id) ?? null;
+    const team = normalizeTeam(empTeam.get(row.employee_id) ?? null);
     if (team && byTeamMap.has(team)) {
       byTeamMap.get(team)!.add(row.project_id);
     }

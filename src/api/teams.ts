@@ -18,7 +18,7 @@ export async function listTeams(): Promise<TeamRef[]> {
   return (data ?? []) as TeamRef[];
 }
 
-// Normalise les variantes vers l’attendu par les métriques: "commercial" | "créa" | "dev" | "direction"
+// Normalise les variantes vers l’attendu par les métriques: "conception" | "créa" | "dev" | "direction"
 export function normalizeTeamSlug(input?: string | null): string | null {
   if (!input) return null;
   const base = input
@@ -26,10 +26,10 @@ export function normalizeTeamSlug(input?: string | null): string | null {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, ""); // strip accents
 
-  if (base === "commercial") return "commercial";
+  if (base === "commercial" || base === "conception") return "conception";
   if (base === "direction") return "direction";
   if (base === "crea" || base === "creation") return "créa";
-  if (base === "dev" || base === "developpement" || base === "developpement") return "dev";
+  if (base === "dev" || base === "developpement" || base === "developement") return "dev";
 
   // fallback: renvoyer tel quel (permet d'accepter d'autres futures équipes)
   return input;

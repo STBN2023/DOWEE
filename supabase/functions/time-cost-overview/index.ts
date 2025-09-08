@@ -44,7 +44,8 @@ function mapTeamToRateKey(team: string | null | undefined): "rate_conception" | 
   const base = team.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   if (base === "crea" || base === "creation") return "rate_crea";
   if (base === "dev" || base === "developpement" || base === "developement") return "rate_dev";
-  return "rate_conception"; // commercial, direction, autres → conception
+  // conception (ou commercial legacy) → conception par défaut
+  return "rate_conception";
 }
 
 serve(async (req) => {
@@ -73,7 +74,10 @@ serve(async (req) => {
   // Auth + orphan check
   const { data: userData } = await userClient.auth.getUser();
   if (!userData?.user) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
   const userId = userData.user.id;
 
@@ -121,7 +125,7 @@ serve(async (req) => {
   });
 
   // Helpers
-  const teams = ["commercial", "créa", "dev"] as const;
+  const teams = ["conception", "créa", "dev"] as const;
   type Agg = { hours_planned: number; hours_actual: number; cost_planned: number; cost_actual: number };
   const global: Agg = { hours_planned: 0, hours_actual: 0, cost_planned: 0, cost_actual: 0 };
   const byTeam = new Map<string, Agg>();
@@ -141,7 +145,15 @@ serve(async (req) => {
     global.cost_planned += cost;
 
     const normTeam = team ? team.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") : "";
-    const mappedTeam = normTeam === "crea" || normTeam === "creation" ? "créa" : (normTeam === "dev" || normTeam === "developpement" || normTeam === "developement" ? "dev" : (normTeam === "commercial" ? "commercial" : null));
+    const mappedTeam =
+      normTeam === "crea" || normTeam === "creation"
+        ? "créa"
+        : normTeam === "dev" || normTeam === "developpement" || normTeam === "developement"
+        ? "dev"
+        : normTeam
+        ? "conception"
+        : null;
+
     if (mappedTeam && byTeam.has(mappedTeam)) {
       const agg = byTeam.get(mappedTeam)!;
       agg.hours_planned += hours;
@@ -167,7 +179,15 @@ serve(async (req) => {
     global.cost_actual += cost;
 
     const normTeam = team ? team.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") : "";
-    const mappedTeam = normTeam === "crea" || normTeam === "creation" ? "créa" : (normTeam === "dev" || normTeam === "developpement" || normTeam === "developement" ? "dev" : (normTeam === "commercial" ? "commercial" : null));
+    const mappedTeam =
+      normTeam === "crea" || normTeam === "creation"
+        ? "créa"
+        : normTeam === "dev" || normTeam === "developpement" || normTeam === "developement"
+        ? "dev"
+        : normTeam
+        ? "conception"
+        : null;
+
     if (mappedTeam && byTeam.has(mappedTeam)) {
       const agg = byTeam.get(mappedTeam)!;
       agg.hours_actual += hours;

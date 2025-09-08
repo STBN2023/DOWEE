@@ -5,7 +5,7 @@ export type Agg = { hours_planned: number; hours_actual: number; cost_planned: n
 export type TimeCostOverview = {
   range: { start: string; end: string };
   global: Agg;
-  byTeam: Array<{ team: "commercial" | "créa" | "dev"; hours_planned: number; hours_actual: number; cost_planned: number; cost_actual: number }>;
+  byTeam: Array<{ team: "conception" | "créa" | "dev"; hours_planned: number; hours_actual: number; cost_planned: number; cost_actual: number }>;
   me: Agg;
 };
 

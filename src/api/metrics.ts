@@ -3,7 +3,7 @@ import { unwrapFunction } from "@/api/edge";
 
 export type MetricsOverview = {
   global: { nb_projects_total: number; nb_projects_active: number; nb_projects_onhold: number };
-  byTeam: { team: "commercial" | "créa" | "dev"; nb_projects_active_distinct: number }[];
+  byTeam: { team: "conception" | "créa" | "dev"; nb_projects_active_distinct: number }[];
   me: { nb_projects_mine: number };
 };
 

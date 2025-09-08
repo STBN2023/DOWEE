@@ -12,7 +12,7 @@ function eur(n: number | null | undefined) {
 const months = ["JANVIER","FEVRIER","MARS","AVRIL","MAI","JUIN","JUILLET","AOUT","SEPT.","OCT.","NOV.","DEC."];
 
 const fallbackTeams = [
-  { slug: "commercial", label: "Commercial" },
+  { slug: "conception", label: "Conception" },
   { slug: "créa", label: "Créa" },
   { slug: "dev", label: "Dev" },
 ];
@@ -23,7 +23,7 @@ const TeamPortfolio: React.FC = () => {
   const years = React.useMemo(() => [thisYear - 1, thisYear, thisYear + 1], [thisYear]);
 
   const [teams, setTeams] = React.useState<Array<{ slug: string; label: string }>>(fallbackTeams);
-  const [team, setTeam] = React.useState<string>("commercial");
+  const [team, setTeam] = React.useState<string>("conception");
 
   const [data, setData] = React.useState<PortfolioView | null>(null);
   const [loading, setLoading] = React.useState<boolean>(true);
@@ -37,7 +37,7 @@ const TeamPortfolio: React.FC = () => {
         const uniq = new Map<string, string>();
         for (const t of normalized) { if (!uniq.has(t.slug)) uniq.set(t.slug, t.label); }
         const arr = Array.from(uniq.entries())
-          .filter(([slug]) => ["commercial", "créa", "dev"].includes(slug))
+          .filter(([slug]) => ["conception", "créa", "dev"].includes(slug))
           .map(([slug, label]) => ({ slug, label }));
         if (arr.length > 0) setTeams(arr);
       } catch {

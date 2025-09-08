@@ -17,7 +17,7 @@ const Dashboards = () => {
   const defaultTab = role === "admin" ? "global" : role === "manager" ? "team" : "me";
 
   const [globalStats, setGlobalStats] = React.useState<{ total: number; active: number; onhold: number }>({ total: 0, active: 0, onhold: 0 });
-  const [teamStats, setTeamStats] = React.useState<{ commercial: number; crea: number; dev: number }>({ commercial: 0, crea: 0, dev: 0 });
+  const [teamStats, setTeamStats] = React.useState<{ conception: number; crea: number; dev: number }>({ conception: 0, crea: 0, dev: 0 });
 
   const [tc, setTc] = React.useState<TimeCostOverview | null>(null);
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
@@ -40,10 +40,10 @@ const Dashboards = () => {
           active: metrics.global.nb_projects_active,
           onhold: metrics.global.nb_projects_onhold,
         });
-        const commercial = metrics.byTeam.find((t) => t.team === "commercial")?.nb_projects_active_distinct ?? 0;
+        const conception = metrics.byTeam.find((t) => t.team === "conception")?.nb_projects_active_distinct ?? 0;
         const crea = metrics.byTeam.find((t) => t.team === "créa")?.nb_projects_active_distinct ?? 0;
         const dev = metrics.byTeam.find((t) => t.team === "dev")?.nb_projects_active_distinct ?? 0;
-        setTeamStats({ commercial, crea, dev });
+        setTeamStats({ conception, crea, dev });
 
         setTc(timeCost);
       } catch (e: any) {
@@ -118,27 +118,27 @@ const Dashboards = () => {
           <ClientView />
         </TabsContent>
 
-        {/* TEAM */}
+        {/* TEAM — compact */}
         <TabsContent value="team" className="mt-3">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <StatCard title="Commercial (actifs)" value={`${teamStats.commercial}`} />
-            <StatCard title="Créa (actifs)" value={`${teamStats.crea}`} />
-            <StatCard title="Dev (actifs)" value={`${teamStats.dev}`} />
+          <div className="grid gap-2 sm:grid-cols-3">
+            <StatCard compact title="Conception (actifs)" value={`${teamStats.conception}`} />
+            <StatCard compact title="Créa (actifs)" value={`${teamStats.crea}`} />
+            <StatCard compact title="Dev (actifs)" value={`${teamStats.dev}`} />
           </div>
           <div className="mt-2">
             <TeamPortfolio />
           </div>
         </TabsContent>
 
-        {/* ME */}
+        {/* ME — compact */}
         <TabsContent value="me" className="mt-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <StatCard title="Mes heures planifiées (semaine)" value={`${tc?.me.hours_planned?.toFixed(1) ?? "0.0"} h`} />
-            <StatCard title="Mes heures réelles (semaine)" value={`${tc?.me.hours_actual?.toFixed(1) ?? "0.0"} h`} />
+          <div className="grid gap-2 sm:grid-cols-2">
+            <StatCard compact title="Mes heures planifiées (semaine)" value={`${tc?.me.hours_planned?.toFixed(1) ?? "0.0"} h`} />
+            <StatCard compact title="Mes heures réelles (semaine)" value={`${tc?.me.hours_actual?.toFixed(1) ?? "0.0"} h`} />
           </div>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <StatCard title="Mon coût planifié (semaine)" value={eur(tc?.me.cost_planned)} />
-            <StatCard title="Mon coût réel (semaine)" value={eur(tc?.me.cost_actual)} />
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <StatCard compact title="Mon coût planifié (semaine)" value={eur(tc?.me.cost_planned)} />
+            <StatCard compact title="Mon coût réel (semaine)" value={eur(tc?.me.cost_actual)} />
           </div>
           <div className="mt-2">
             <MePortfolio />

@@ -40,10 +40,10 @@ function isoWeek(d: Date): number {
   const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
   return Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
 }
-function normalizeTeamSlug(input?: string | null): "commercial" | "créa" | "dev" | string | null {
+function normalizeTeamSlug(input?: string | null): "conception" | "créa" | "dev" | string | null {
   if (!input) return null;
   const base = input.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  if (base === "commercial") return "commercial";
+  if (base === "commercial" || base === "conception") return "conception";
   if (base === "crea" || base === "creation") return "créa";
   if (base === "dev" || base === "developpement" || base === "developement") return "dev";
   return input;
@@ -314,5 +314,8 @@ serve(async (req) => {
     }
   };
 
-  return new Response(JSON.stringify(response), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  return new Response(JSON.stringify(response), {
+    status: 200,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 });
