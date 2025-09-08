@@ -408,14 +408,45 @@ const AdminProjects = () => {
           <div className="mb-3 rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-3 text-[12px] text-[#214A33]">
             <div className="flex items-center justify-between">
               <div className="font-medium">Comment est calculé le Score ?</div>
-              <Button size="sm" variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={() => setShowScoreHelp((v) => !v)}>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-[#BFBFBF] text-[#214A33]"
+                onClick={() => setShowScoreHelp((v) => !v)}
+                aria-expanded={showScoreHelp}
+                aria-controls="score-help"
+              >
                 {showScoreHelp ? (<><ChevronUp className="mr-2 h-4 w-4" />Masquer</>) : (<><ChevronDown className="mr-2 h-4 w-4" />Afficher</>)}
               </Button>
             </div>
-            <ul className="mt-2 list-disc pl-5 space-y-0.5">
-              <li>Score = (0,25×S_client + 0,35×S_marge + 0,20×S_urgence + 0,10×S_récurrence + 0,10×S_strat) × (★ ? 1,15 : 1).</li>
-              <li>S_urgence utilise B = Jours restants / Effort (jours).</li>
-            </ul>
+
+            {showScoreHelp && (
+              <div id="score-help" className="mt-2 space-y-3">
+                <div className="rounded-md border border-[#BFBFBF]/60 bg-white p-2">
+                  <div className="mb-1 text-[12px] font-semibold text-[#214A33]">Version courte (débutant)</div>
+                  <ul className="list-disc pl-5 space-y-0.5">
+                    <li>Le score va de 0 à 100. Plus c’est haut, plus le projet est prioritaire.</li>
+                    <li>Il dépend de 3 idées simples: le type de client, la marge prévue, et l’urgence.</li>
+                    <li>Client: “super rentable” monte le score; “pas rentable” le baisse.</li>
+                    <li>Marge: plus le pourcentage est élevé, mieux c’est.</li>
+                    <li>Urgence: si l’échéance est proche par rapport à l’effort (B petit), le score augmente.</li>
+                  </ul>
+                  <div className="mt-2 text-[11px] text-[#214A33]/80">
+                    Exemple: client normal, marge 30%, échéance bientôt (B≈0,8) → score autour de 70–85 (prioritaire).
+                  </div>
+                </div>
+
+                <div className="rounded-md border border-[#BFBFBF]/60 bg-white p-2">
+                  <div className="mb-1 text-[12px] font-semibold text-[#214A33]">Détail (avancé)</div>
+                  <ul className="list-disc pl-5 space-y-0.5">
+                    <li>Score = (0,25×S_client + 0,35×S_marge + 0,20×S_urgence + 0,10×S_récurrence + 0,10×S_strat) × (★ ? 1,15 : 1), borné à [0,100].</li>
+                    <li>S_client: Super rentable=80, Normal=50, Pas rentable=20.</li>
+                    <li>S_marge: ≥40% → 100 ; 20–39% → 60–98 ; 1–19% → 22–58 ; ≤0% → 0.</li>
+                    <li>S_urgence: B = (jours restants / effort en jours) → B≤0:100 · 0&lt;B&lt;1:90 · 1≤B&lt;3:60 · B≥3:20.</li>
+                  </ul>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Filtres & tri */}
