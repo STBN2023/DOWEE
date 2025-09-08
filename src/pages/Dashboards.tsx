@@ -65,9 +65,9 @@ const Dashboards = () => {
   }, [tc?.range]);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-4">
-      <h1 className="mb-1 text-xl font-semibold text-[#214A33]">Tableaux de bord</h1>
-      <div className="mb-3 text-[12px] text-[#214A33]/70">
+    <div className="mx-auto max-w-6xl px-4 py-3">
+      <h1 className="mb-1 text-lg font-semibold text-[#214A33]">Tableaux de bord</h1>
+      <div className="mb-2 text-[11px] text-[#214A33]/70">
         Semaine: {rangeLabel || "—"}
       </div>
       {errorMsg && (
@@ -81,24 +81,25 @@ const Dashboards = () => {
           <TabsTrigger value="me">Moi</TabsTrigger>
         </TabsList>
 
+        {/* GLOBAL — compact */}
         <TabsContent value="global" className="mt-3">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <StatCard title="Projets total" value={`${globalStats.total}`} />
-            <StatCard title="Actifs" value={`${globalStats.active}`} />
-            <StatCard title="En pause" value={`${globalStats.onhold}`} />
+          <div className="grid gap-2 sm:grid-cols-3">
+            <StatCard compact title="Projets total" value={`${globalStats.total}`} />
+            <StatCard compact title="Actifs" value={`${globalStats.active}`} />
+            <StatCard compact title="En pause" value={`${globalStats.onhold}`} />
           </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <StatCard title="Heures planifiées (semaine)" value={`${tc?.global.hours_planned?.toFixed(1) ?? "0.0"} h`} />
-            <StatCard title="Heures réelles (semaine)" value={`${tc?.global.hours_actual?.toFixed(1) ?? "0.0"} h`} />
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <StatCard compact title="Heures planifiées (semaine)" value={`${tc?.global.hours_planned?.toFixed(1) ?? "0.0"} h`} />
+            <StatCard compact title="Heures réelles (semaine)" value={`${tc?.global.hours_actual?.toFixed(1) ?? "0.0"} h`} />
           </div>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <StatCard title="Coût planifié (semaine)" value={eur(tc?.global.cost_planned)} />
-            <StatCard title="Coût réel (semaine)" value={eur(tc?.global.cost_actual)} />
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <StatCard compact title="Coût planifié (semaine)" value={eur(tc?.global.cost_planned)} />
+            <StatCard compact title="Coût réel (semaine)" value={eur(tc?.global.cost_actual)} />
           </div>
 
-          <div className="mt-3 flex justify-end">
+          <div className="mt-2 flex justify-end">
             <button
-              className="text-xs underline text-[#214A33] hover:text-[#214A33]/80"
+              className="text-[11px] underline text-[#214A33] hover:text-[#214A33]/80"
               onClick={() => setShowGlobalDetails((v) => !v)}
             >
               {showGlobalDetails ? "Masquer les détails annuels" : "Afficher les détails annuels"}
@@ -112,10 +113,12 @@ const Dashboards = () => {
           )}
         </TabsContent>
 
+        {/* CLIENT */}
         <TabsContent value="client" className="mt-3">
           <ClientView />
         </TabsContent>
 
+        {/* TEAM */}
         <TabsContent value="team" className="mt-3">
           <div className="grid gap-3 sm:grid-cols-3">
             <StatCard title="Commercial (actifs)" value={`${teamStats.commercial}`} />
@@ -127,6 +130,7 @@ const Dashboards = () => {
           </div>
         </TabsContent>
 
+        {/* ME */}
         <TabsContent value="me" className="mt-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <StatCard title="Mes heures planifiées (semaine)" value={`${tc?.me.hours_planned?.toFixed(1) ?? "0.0"} h`} />
@@ -145,13 +149,13 @@ const Dashboards = () => {
   );
 };
 
-const StatCard = ({ title, value }: { title: string; value: string }) => (
+const StatCard = ({ title, value, compact = false }: { title: string; value: string; compact?: boolean }) => (
   <Card className="border-[#BFBFBF]">
-    <CardHeader className="py-2">
-      <CardTitle className="text-[12px] text-[#214A33]/80">{title}</CardTitle>
+    <CardHeader className={compact ? "py-1" : "py-2"}>
+      <CardTitle className={`${compact ? "text-[11px]" : "text-sm"} text-[#214A33]/80`}>{title}</CardTitle>
     </CardHeader>
-    <CardContent className="py-2">
-      <div className="text-2xl font-bold text-[#214A33]">{value}</div>
+    <CardContent className={compact ? "py-1" : "py-2"}>
+      <div className={`${compact ? "text-xl" : "text-3xl"} font-bold text-[#214A33] tabular-nums`}>{value}</div>
     </CardContent>
   </Card>
 );
