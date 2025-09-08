@@ -99,8 +99,11 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
   // Chargement semaine, quand le profil est prêt
   React.useEffect(() => {
     let mounted = true;
+
+    // Si le profil n'est pas prêt, on n'affiche pas "Chargement..." dans les cellules,
+    // mais on ne tente pas de charger la semaine (placeholder non-bloquant).
     if (authLoading || !employee) {
-      setLoading(true);
+      setLoading(false);
       return () => {
         mounted = false;
       };
@@ -257,6 +260,64 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     } else if (active?.type === "plan") {
       const movingKey = movingPlanKeyRef.current;
       movingPlanKeyRef.current = null;
+
+      // Déplacement sur une autre cellule
+      if (over?.type === "cell" && movingKey) {
+        const origin = plans[movingKey];
+        if (!origin) {
+          setOverlay({ type: null });
+          return;
+        }
+        const targetD = over.iso as string;
+        const targetH = over.hour as number;
+        const targetKey = keyOf(targetD, targetH);
+
+        // no-op si même cellule
+        if (targetKey === movingKey) {
+          setOverlay({ type: null });
+          return;
+        }
+
+        // Optimistic: déplacer localement
+        setPlans((prev) => {
+          const next = { ...prev };
+          delete next[movingKey];
+          next[targetKey] = { d: targetD, hour: targetH, projectId: origin.projectId };
+          return next;
+        });
+
+        // Serveur: delete origin + upsert target
+        try {
+          await patchUserWeek({
+            deletes: [
+              origin.id ? { id: origin.id } : { d: origin.d, hour: origin.hour },
+            ],
+            upserts: [
+              { d: targetD, hour: targetH, project_id: origin.projectId, planned_minutes: 60 },
+            ],
+          });
+
+          // Re-sync pour récupérer le nouvel id
+          try {
+            const refreshed = await getUserWeek(weekStart);
+            const synced: Record<string, PlanItem> = {};
+            refreshed.plans.forEach((p) => {
+              synced[keyOf(p.d, p.hour)] = { id: p.id, d: p.d, hour: p.hour, projectId: p.project_id };
+            });
+            setPlans(synced);
+          } catch {
+            // garder l’état optimistic si la sync échoue
+          }
+
+          showSuccess("Créneau déplacé.");
+        } catch (err: any) {
+          showError(err?.message || "Déplacement impossible.");
+          // Optionnel: on pourrait recharger pour annuler l'optimistic si besoin
+        }
+
+        setOverlay({ type: null });
+        return;
+      }
 
       // Suppression si lâché hors de toute cellule
       if (!over && movingKey) {
@@ -427,7 +488,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
                         {!hasPlan ? (
                           <div className="absolute inset-0 flex items-center justify-center">
                             <span className="pointer-events-none select-none text-xs text-[#214A33]/40">
-                              {loading || authLoading || !employee ? "Chargement…" : "Glissez un projet ici…"}
+                              {loading ? "Chargement…" : "Glissez un projet ici…"}
                             </span>
                           </div>
                         ) : (
