@@ -165,8 +165,10 @@ const AdminProjects = () => {
     budget_dev: "",
   });
 
-  // Toggle pour l'explication du score
+  // Toggle pour l'explication du score (bloc d'aide)
   const [showScoreHelp, setShowScoreHelp] = React.useState<boolean>(false);
+  // Lignes "Détails" ouvertes
+  const [openRows, setOpenRows] = React.useState<Record<string, boolean>>({});
 
   const refresh = async () => {
     setLoading(true);
@@ -311,10 +313,14 @@ const AdminProjects = () => {
 
   const selectedTariff = (id: string | null | undefined) => tariffs.find((t) => t.id === id);
 
+  const toggleRow = (id: string) => {
+    setOpenRows((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
       <Card className="border-[#BFBFBF]">
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex items-center justify-between">
           <CardTitle className="text-[#214A33]">Admin — Projets</CardTitle>
           <Dialog open={openCreate} onOpenChange={setOpenCreate}>
             <DialogTrigger asChild>
@@ -400,7 +406,6 @@ const AdminProjects = () => {
             </DialogContent>
           </Dialog>
         </CardHeader>
-
         <CardContent>
           {/* Explication Score + Toggle */}
           <div className="mb-3 rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-3 text-[12px] text-[#214A33]">
@@ -441,7 +446,7 @@ const AdminProjects = () => {
             )}
           </div>
 
-          <div className="overflow-x-auto rounded-md border border-[#BFBFBF]">
+          <div className="rounded-md border border-[#BFBFBF]">
             <table className="w-full border-collapse">
               <thead className="bg-[#F7F7F7]">
                 <tr>
@@ -449,22 +454,24 @@ const AdminProjects = () => {
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Nom</th>
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Statut</th>
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Score</th>
-                  <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Client</th>
-                  <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Devis HT</th>
-                  <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Coût (planifié)</th>
-                  <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Coût (actuel)</th>
-                  <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Salariés</th>
+                  {/* Colonnes secondaires masquées en petit écran */}
+                  <th className="hidden p-2 text-left text-sm font-semibold text-[#214A33] lg:table-cell">Client</th>
+                  <th className="hidden p-2 text-left text-sm font-semibold text-[#214A33] lg:table-cell">Devis HT</th>
+                  <th className="hidden p-2 text-left text-sm font-semibold text-[#214A33] lg:table-cell">Coût (planifié)</th>
+                  <th className="hidden p-2 text-left text-sm font-semibold text-[#214A33] lg:table-cell">Coût (actuel)</th>
+                  <th className="hidden p-2 text-left text-sm font-semibold text-[#214A33] lg:table-cell">Salariés</th>
+                  <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Détails</th>
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={10} className="p-4 text-center text-sm text-[#214A33]/60">Chargement…</td>
+                    <td colSpan={11} className="p-4 text-center text-sm text-[#214A33]/60">Chargement…</td>
                   </tr>
                 ) : projects.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="p-4 text-center text-sm text-[#214A33]/60">Aucun projet pour le moment.</td>
+                    <td colSpan={11} className="p-4 text-center text-sm text-[#214A33]/60">Aucun projet pour le moment.</td>
                   </tr>
                 ) : (
                   projects.map((p) => {
@@ -473,9 +480,9 @@ const AdminProjects = () => {
                     ).filter(Boolean) as Employee[];
                     const client = clients.find((c) => c.id === p.client_id) || null;
 
-                    const c = costs[p.id];
-                    const costPlanned = c?.cost_planned ?? null;
-                    const costActual = c?.cost_actual ?? null;
+                    const cst = costs[p.id];
+                    const costPlanned = cst?.cost_planned ?? null;
+                    const costActual = cst?.cost_actual ?? null;
 
                     const details = scoreDetails[p.id];
                     const sc = details?.score;
@@ -492,229 +499,304 @@ const AdminProjects = () => {
                     const raw = 0.25 * sClientVal + 0.35 * sMargeVal + 0.20 * sUrgVal + 0.10 * 0 + 0.10 * 0;
                     const final = clamp100(Math.round((raw * (star ? 1.15 : 1)) * 100) / 100);
 
+                    const open = !!openRows[p.id];
+
                     return (
-                      <tr key={p.id} className="border-t border-[#BFBFBF]">
-                        <td className="p-2 text-sm">{p.code}</td>
-                        <td className="p-2 text-sm">{p.name}</td>
-                        <td className="p-2 text-sm">
-                          <span
-                            className={cn(
-                              "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
-                              p.status === "active" && "bg-emerald-50 text-emerald-700 border border-emerald-200",
-                              p.status === "onhold" && "bg-amber-50 text-amber-700 border border-amber-200",
-                              p.status === "archived" && "bg-gray-100 text-gray-600 border border-gray-200"
-                            )}
-                          >
-                            {p.status === "active" ? "Actif" : p.status === "onhold" ? "En pause" : "Archivé"}
-                          </span>
-                        </td>
+                      <React.Fragment key={p.id}>
+                        <tr className="border-t border-[#BFBFBF]">
+                          <td className="p-2 text-sm">{p.code}</td>
+                          <td className="p-2 text-sm">{p.name}</td>
+                          <td className="p-2 text-sm">
+                            <span
+                              className={cn(
+                                "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
+                                p.status === "active" && "bg-emerald-50 text-emerald-700 border border-emerald-200",
+                                p.status === "onhold" && "bg-amber-50 text-amber-700 border border-amber-200",
+                                p.status === "archived" && "bg-gray-100 text-gray-600 border border-gray-200"
+                              )}
+                            >
+                              {p.status === "active" ? "Actif" : p.status === "onhold" ? "En pause" : "Archivé"}
+                            </span>
+                          </td>
 
-                        <td className="p-2 text-sm">
-                          {sc == null ? (
-                            <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-semibold", scoreBadge(undefined))}>—</span>
-                          ) : (
-                            <HoverCard>
-                              <HoverCardTrigger asChild>
-                                <span className={cn("inline-flex cursor-help rounded-full px-2 py-0.5 text-xs font-semibold", scoreBadge(sc))}>
-                                  {Math.round(sc).toString().padStart(2, "0")}
-                                </span>
-                              </HoverCardTrigger>
-                              <HoverCardContent className="w-80 text-xs">
-                                <div className="space-y-1 text-[#214A33]">
-                                  <div className="font-medium">Détail du score</div>
-                                  <div className="grid grid-cols-2 gap-1">
-                                    <div>Segment client</div>
-                                    <div className="text-right">{seg ?? "—"} {star ? "★" : ""}</div>
-                                    <div>S_client</div>
-                                    <div className="text-right">{sClientVal}</div>
-                                    <div>Marge %</div>
-                                    <div className="text-right">{margin_pct == null ? "—" : `${margin_pct.toFixed(0)}%`}</div>
-                                    <div>S_marge</div>
-                                    <div className="text-right">{Math.round(sMargeVal)}</div>
-                                    <div>Échéance</div>
-                                    <div className="text-right">{dueIso ?? "—"}</div>
-                                    <div>Effort (j)</div>
-                                    <div className="text-right">{effortDays ?? "—"}</div>
-                                    <div>Ratio B</div>
-                                    <div className="text-right">{B == null ? "—" : B.toFixed(2)}</div>
-                                    <div>S_urgence</div>
-                                    <div className="text-right">{sUrgVal}</div>
-                                  </div>
-                                  <div className="pt-1 text-[11px] text-[#214A33]/80">
-                                    Score = (0,25×{sClientVal} + 0,35×{Math.round(sMargeVal)} + 0,20×{sUrgVal} + 0 + 0)
-                                    × {star ? "1,15" : "1"}
-                                    {" = "}
-                                    <span className="font-medium">{Math.round(final)}</span>
-                                  </div>
-                                </div>
-                              </HoverCardContent>
-                            </HoverCard>
-                          )}
-                        </td>
-
-                        <td className="p-2 text-sm">{client ? `${client.code} — ${client.name}` : "—"}</td>
-                        <td className="p-2 text-sm">{eur(p.quote_amount)}</td>
-                        <td className="p-2 text-sm">{eur(costPlanned)}</td>
-                        <td className="p-2 text-sm">{eur(costActual)}</td>
-                        <td className="p-2">
-                          <div className="flex flex-wrap gap-1">
-                            {assigned.length === 0 ? (
-                              <span className="text-xs text-[#214A33]/50">Aucun</span>
+                          <td className="p-2 text-sm">
+                            {sc == null ? (
+                              <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-semibold", scoreBadge(undefined))}>—</span>
                             ) : (
-                              assigned.map((e) => (
-                                <Badge key={e.id} variant="secondary" className="border-[#BFBFBF] text-[#214A33]">
-                                  {fullName(e)}
-                                </Badge>
-                              ))
+                              <HoverCard>
+                                <HoverCardTrigger asChild>
+                                  <span className={cn("inline-flex cursor-help rounded-full px-2 py-0.5 text-xs font-semibold", scoreBadge(sc))}>
+                                    {Math.round(sc).toString().padStart(2, "0")}
+                                  </span>
+                                </HoverCardTrigger>
+                                <HoverCardContent className="w-80 text-xs">
+                                  <div className="space-y-1 text-[#214A33]">
+                                    <div className="font-medium">Détail du score</div>
+                                    <div className="grid grid-cols-2 gap-1">
+                                      <div>Segment client</div>
+                                      <div className="text-right">{seg ?? "—"} {star ? "★" : ""}</div>
+                                      <div>S_client</div>
+                                      <div className="text-right">{sClientVal}</div>
+                                      <div>Marge %</div>
+                                      <div className="text-right">{margin_pct == null ? "—" : `${margin_pct.toFixed(0)}%`}</div>
+                                      <div>S_marge</div>
+                                      <div className="text-right">{Math.round(sMargeVal)}</div>
+                                      <div>Échéance</div>
+                                      <div className="text-right">{dueIso ?? "—"}</div>
+                                      <div>Effort (j)</div>
+                                      <div className="text-right">{effortDays ?? "—"}</div>
+                                      <div>Ratio B</div>
+                                      <div className="text-right">{B == null ? "—" : B.toFixed(2)}</div>
+                                      <div>S_urgence</div>
+                                      <div className="text-right">{sUrgVal}</div>
+                                    </div>
+                                    <div className="pt-1 text-[11px] text-[#214A33]/80">
+                                      Score = (0,25×{sClientVal} + 0,35×{Math.round(sMargeVal)} + 0,20×{sUrgVal} + 0 + 0)
+                                      × {star ? "1,15" : "1"}
+                                      {" = "}
+                                      <span className="font-medium">{Math.round(final)}</span>
+                                    </div>
+                                  </div>
+                                </HoverCardContent>
+                              </HoverCard>
                             )}
-                          </div>
-                        </td>
-                        <td className="p-2 flex gap-2">
-                          {/* Actions (inchangées) */}
-                          <Dialog open={openEditFor?.id === p.id} onOpenChange={(o) => (o ? openEditDialog(p) : setOpenEditFor(null))}>
-                            <DialogTrigger asChild>
-                              <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]">
-                                <Pencil className="mr-2 h-4 w-4" />
-                                Modifier
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                              <DialogHeader>
-                                <DialogTitle>Modifier — {p.code}</DialogTitle>
-                                <DialogDescription>Mettre à jour les informations du projet, y compris les budgets par section.</DialogDescription>
-                              </DialogHeader>
-                              <div className="grid gap-4 py-2">
-                                <div className="grid gap-2">
-                                  <Label>Nom</Label>
-                                  <Input
-                                    value={editForm.name}
-                                    onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
-                                  />
-                                </div>
-                                <div className="grid gap-2">
-                                  <Label>Client</Label>
-                                  <Select
-                                    value={editForm.client_id}
-                                    onValueChange={(v) => setEditForm((f) => ({ ...f, client_id: v }))}
-                                  >
-                                    <SelectTrigger className="w-full">
-                                      <SelectValue placeholder="Choisir un client" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {clients.map((c) => (
-                                        <SelectItem key={c.id} value={c.id}>
-                                          {c.code} — {c.name}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                                <div className="grid gap-2">
-                                  <Label>Barème tarifs</Label>
-                                  <Select
-                                    value={editForm.tariff_id ?? "none"}
-                                    onValueChange={(v) => setEditForm((f) => ({ ...f, tariff_id: v === "none" ? null : v }))}
-                                  >
-                                    <SelectTrigger className="w-full">
-                                      <SelectValue placeholder="Sans barème (optionnel)" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="none">— Aucun —</SelectItem>
-                                      {tariffs.map((t) => (
-                                        <SelectItem key={t.id} value={t.id}>
-                                          {t.label}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                                <div className="grid gap-2">
-                                  <Label>Montant total du devis (HT)</Label>
-                                  <Input
-                                    inputMode="decimal"
-                                    value={editForm.quote_amount}
-                                    onChange={(e) => setEditForm((f) => ({ ...f, quote_amount: e.target.value }))}
-                                  />
-                                </div>
+                          </td>
 
-                                <div className="grid gap-2 md:grid-cols-3">
+                          {/* Colonnes secondaires visibles seulement en grand écran */}
+                          <td className="hidden p-2 text-sm lg:table-cell">{client ? `${client.code} — ${client.name}` : "—"}</td>
+                          <td className="hidden p-2 text-sm lg:table-cell">{eur(p.quote_amount)}</td>
+                          <td className="hidden p-2 text-sm lg:table-cell">{eur(costPlanned)}</td>
+                          <td className="hidden p-2 text-sm lg:table-cell">{eur(costActual)}</td>
+                          <td className="hidden p-2 text-sm lg:table-cell">
+                            <div className="flex flex-wrap gap-1">
+                              {assigned.length === 0 ? (
+                                <span className="text-xs text-[#214A33]/50">Aucun</span>
+                              ) : (
+                                assigned.map((e) => (
+                                  <Badge key={e.id} variant="secondary" className="border-[#BFBFBF] text-[#214A33]">
+                                    {fullName(e)}
+                                  </Badge>
+                                ))
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="p-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="border-[#BFBFBF] text-[#214A33]"
+                              onClick={() => toggleRow(p.id)}
+                            >
+                              {open ? (
+                                <>
+                                  <ChevronUp className="mr-2 h-4 w-4" />
+                                  Masquer
+                                </>
+                              ) : (
+                                <>
+                                  <ChevronDown className="mr-2 h-4 w-4" />
+                                  Détails
+                                </>
+                              )}
+                            </Button>
+                          </td>
+
+                          <td className="p-2 flex gap-2">
+                            {/* Actions */}
+                            <Dialog open={openEditFor?.id === p.id} onOpenChange={(o) => (o ? openEditDialog(p) : setOpenEditFor(null))}>
+                              <DialogTrigger asChild>
+                                <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]">
+                                  <Pencil className="mr-2 h-4 w-4" />
+                                  Modifier
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent>
+                                <DialogHeader>
+                                  <DialogTitle>Modifier — {p.code}</DialogTitle>
+                                  <DialogDescription>Mettre à jour les informations du projet, y compris les budgets par section.</DialogDescription>
+                                </DialogHeader>
+                                <div className="grid gap-4 py-2">
                                   <div className="grid gap-2">
-                                    <Label>Budget Conception (HT)</Label>
+                                    <Label>Nom</Label>
                                     <Input
-                                      inputMode="decimal"
-                                      placeholder="ex: 5000"
-                                      value={editForm.budget_conception}
-                                      onChange={(e) => setEditForm((f) => ({ ...f, budget_conception: e.target.value }))}
+                                      value={editForm.name}
+                                      onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
                                     />
                                   </div>
                                   <div className="grid gap-2">
-                                    <Label>Budget Créa (HT)</Label>
-                                    <Input
-                                      inputMode="decimal"
-                                      placeholder="ex: 3000"
-                                      value={editForm.budget_crea}
-                                      onChange={(e) => setEditForm((f) => ({ ...f, budget_crea: e.target.value }))}
-                                    />
+                                    <Label>Client</Label>
+                                    <Select
+                                      value={editForm.client_id}
+                                      onValueChange={(v) => setEditForm((f) => ({ ...f, client_id: v }))}
+                                    >
+                                      <SelectTrigger className="w-full">
+                                        <SelectValue placeholder="Choisir un client" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {clients.map((c) => (
+                                          <SelectItem key={c.id} value={c.id}>
+                                            {c.code} — {c.name}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
                                   </div>
                                   <div className="grid gap-2">
-                                    <Label>Budget Dev (HT)</Label>
+                                    <Label>Barème tarifs</Label>
+                                    <Select
+                                      value={editForm.tariff_id ?? "none"}
+                                      onValueChange={(v) => setEditForm((f) => ({ ...f, tariff_id: v === "none" ? null : v }))}
+                                    >
+                                      <SelectTrigger className="w-full">
+                                        <SelectValue placeholder="Sans barème (optionnel)" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="none">— Aucun —</SelectItem>
+                                        {tariffs.map((t) => (
+                                          <SelectItem key={t.id} value={t.id}>
+                                            {t.label}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div className="grid gap-2">
+                                    <Label>Montant total du devis (HT)</Label>
                                     <Input
                                       inputMode="decimal"
-                                      placeholder="ex: 4000"
-                                      value={editForm.budget_dev}
-                                      onChange={(e) => setEditForm((f) => ({ ...f, budget_dev: e.target.value }))}
+                                      value={editForm.quote_amount}
+                                      onChange={(e) => setEditForm((f) => ({ ...f, quote_amount: e.target.value }))}
                                     />
+                                  </div>
+
+                                  <div className="grid gap-2 md:grid-cols-3">
+                                    <div className="grid gap-2">
+                                      <Label>Budget Conception (HT)</Label>
+                                      <Input
+                                        inputMode="decimal"
+                                        placeholder="ex: 5000"
+                                        value={editForm.budget_conception}
+                                        onChange={(e) => setEditForm((f) => ({ ...f, budget_conception: e.target.value }))}
+                                      />
+                                    </div>
+                                    <div className="grid gap-2">
+                                      <Label>Budget Créa (HT)</Label>
+                                      <Input
+                                        inputMode="decimal"
+                                        placeholder="ex: 3000"
+                                        value={editForm.budget_crea}
+                                        onChange={(e) => setEditForm((f) => ({ ...f, budget_crea: e.target.value }))}
+                                      />
+                                    </div>
+                                    <div className="grid gap-2">
+                                      <Label>Budget Dev (HT)</Label>
+                                      <Input
+                                        inputMode="decimal"
+                                        placeholder="ex: 4000"
+                                        value={editForm.budget_dev}
+                                        onChange={(e) => setEditForm((f) => ({ ...f, budget_dev: e.target.value }))}
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <div className="grid gap-2">
+                                    <Label>Statut</Label>
+                                    <Select
+                                      value={editForm.status}
+                                      onValueChange={(v) => setEditForm((f) => ({ ...f, status: v as Status }))}
+                                    >
+                                      <SelectTrigger className="w-full">
+                                        <SelectValue placeholder="Choisir un statut" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="active">Actif</SelectItem>
+                                        <SelectItem value="onhold">En pause</SelectItem>
+                                        <SelectItem value="archived">Archivé</SelectItem>
+                                      </SelectContent>
+                                    </Select>
                                   </div>
                                 </div>
+                                <DialogFooter>
+                                  <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={() => setOpenEditFor(null)}>
+                                    Annuler
+                                  </Button>
+                                  <Button className="bg-[#F2994A] hover:bg-[#F2994A]/90 text-white" onClick={confirmEdit}>
+                                    Enregistrer
+                                  </Button>
+                                </DialogFooter>
+                              </DialogContent>
+                            </Dialog>
 
-                                <div className="grid gap-2">
-                                  <Label>Statut</Label>
-                                  <Select
-                                    value={editForm.status}
-                                    onValueChange={(v) => setEditForm((f) => ({ ...f, status: v as Status }))}
-                                  >
-                                    <SelectTrigger className="w-full">
-                                      <SelectValue placeholder="Choisir un statut" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="active">Actif</SelectItem>
-                                      <SelectItem value="onhold">En pause</SelectItem>
-                                      <SelectItem value="archived">Archivé</SelectItem>
-                                    </SelectContent>
-                                  </Select>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="outline" className="border-red-300 text-red-700 hover:bg-red-50">
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Supprimer
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Supprimer le projet ?</AlertDialogTitle>
+                                  <AlertDialogDescription>Cette action supprimera aussi les affectations et créneaux liés.</AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Annuler</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => confirmDelete(p.id)}>Supprimer</AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </td>
+                        </tr>
+
+                        {/* Ligne de détails (visible en petit écran, utile aussi en desktop) */}
+                        {open && (
+                          <tr className="border-t border-[#BFBFBF]/60 bg-white/60">
+                            <td colSpan={11} className="p-3">
+                              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 text-sm text-[#214A33]">
+                                <div className="rounded-md border border-[#BFBFBF]/60 bg-[#F7F7F7] p-2">
+                                  <div className="text-xs text-[#214A33]/70">Client</div>
+                                  <div>{client ? `${client.code} — ${client.name}` : "—"}</div>
+                                </div>
+                                <div className="rounded-md border border-[#BFBFBF]/60 bg-[#F7F7F7] p-2">
+                                  <div className="text-xs text-[#214A33]/70">Devis HT</div>
+                                  <div className="tabular-nums">{eur(p.quote_amount)}</div>
+                                </div>
+                                <div className="rounded-md border border-[#BFBFBF]/60 bg-[#F7F7F7] p-2">
+                                  <div className="text-xs text-[#214A33]/70">Coût planifié</div>
+                                  <div className="tabular-nums">{eur(costPlanned)}</div>
+                                </div>
+                                <div className="rounded-md border border-[#BFBFBF]/60 bg-[#F7F7F7] p-2">
+                                  <div className="text-xs text-[#214A33]/70">Coût actuel</div>
+                                  <div className="tabular-nums">{eur(costActual)}</div>
+                                </div>
+                                <div className="rounded-md border border-[#BFBFBF]/60 bg-[#F7F7F7] p-2">
+                                  <div className="text-xs text-[#214A33]/70">Échéance</div>
+                                  <div>{dueIso ?? "—"}</div>
+                                </div>
+                                <div className="rounded-md border border-[#BFBFBF]/60 bg-[#F7F7F7] p-2">
+                                  <div className="text-xs text-[#214A33]/70">Effort (jours) / B</div>
+                                  <div>{effortDays ?? "—"} {B != null ? `(B=${B.toFixed(2)})` : ""}</div>
+                                </div>
+                                <div className="rounded-md border border-[#BFBFBF]/60 bg-[#F7F7F7] p-2 md:col-span-2 lg:col-span-3">
+                                  <div className="text-xs text-[#214A33]/70">Salariés affectés</div>
+                                  <div className="mt-1 flex flex-wrap gap-1">
+                                    {assigned.length === 0 ? (
+                                      <span className="text-xs text-[#214A33]/60">Aucun</span>
+                                    ) : (
+                                      assigned.map((e) => (
+                                        <Badge key={e.id} variant="secondary" className="border-[#BFBFBF] text-[#214A33]">
+                                          {fullName(e)}
+                                        </Badge>
+                                      ))
+                                    )}
+                                  </div>
                                 </div>
                               </div>
-                              <DialogFooter>
-                                <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={() => setOpenEditFor(null)}>
-                                  Annuler
-                                </Button>
-                                <Button className="bg-[#F2994A] hover:bg-[#F2994A]/90 text-white" onClick={confirmEdit}>
-                                  Enregistrer
-                                </Button>
-                              </DialogFooter>
-                            </DialogContent>
-                          </Dialog>
-
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="outline" className="border-red-300 text-red-700 hover:bg-red-50">
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Supprimer
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Supprimer le projet ?</AlertDialogTitle>
-                                <AlertDialogDescription>Cette action supprimera aussi les affectations et créneaux liés.</AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Annuler</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => confirmDelete(p.id)}>Supprimer</AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </td>
-                      </tr>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     );
                   })
                 )}
