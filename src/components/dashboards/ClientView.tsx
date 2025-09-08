@@ -4,11 +4,28 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { getClientView, type ClientView } from "@/api/clientView";
 import { listAdminProjects, type Project } from "@/api/adminProjects";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 function eur(n: number | null | undefined) {
   if (n == null) return "—";
   try { return n.toLocaleString("fr-FR", { style: "currency", currency: "EUR" }); }
   catch { return `${n} €`; }
+}
+
+function marginBadge(pct: number | null) {
+  if (pct == null) {
+    return <Badge variant="secondary" className="border-[#BFBFBF] text-[#214A33]">—</Badge>;
+  }
+  if (pct <= 0) {
+    return <Badge className="bg-red-50 text-red-700 border border-red-200">≤ 0%</Badge>;
+  }
+  if (pct < 20) {
+    return <Badge className="bg-orange-50 text-orange-700 border border-orange-200">1–19%</Badge>;
+  }
+  if (pct < 40) {
+    return <Badge className="bg-amber-50 text-amber-700 border border-amber-200">20–39%</Badge>;
+  }
+  return <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200">≥ 40%</Badge>;
 }
 
 const months = ["JANVIER","FEVRIER","MARS","AVRIL","MAI","JUIN","JUILLET","AOUT","SEPT.","OCT.","NOV.","DEC."];
@@ -29,8 +46,9 @@ const ClientView: React.FC = () => {
     const loadProjects = async () => {
       try {
         const payload = await listAdminProjects();
-        setProjects(payload.projects.filter((p) => p.status !== "archived"));
-        setProjectId((prev) => prev || (payload.projects.find((p) => p.status !== "archived")?.id ?? ""));
+        const active = payload.projects.filter((p) => p.status !== "archived");
+        setProjects(active);
+        setProjectId((prev) => prev || (active[0]?.id ?? ""));
       } catch (e: any) {
         setErrorMsg(e?.message || "Impossible de charger les projets.");
       }
@@ -66,6 +84,15 @@ const ClientView: React.FC = () => {
       buckets[m].sort((a, b) => a.week - b.week);
     }
     return buckets;
+  }, [data]);
+
+  const margin = React.useMemo(() => {
+    if (!data) return { value: null as number | null, pct: null as number | null };
+    const sold = data.sold.total_ht ?? 0;
+    const cost = data.realized.total_cost ?? 0;
+    const value = (sold || 0) - (cost || 0);
+    const pct = sold ? (value / sold) * 100 : null;
+    return { value, pct };
   }, [data]);
 
   return (
@@ -146,9 +173,27 @@ const ClientView: React.FC = () => {
             </Card>
           </div>
 
-          {/* Equipe / Heures */}
+          {/* Rentabilité (marge et % avec badge couleur) */}
           <div className="grid gap-4 md:grid-cols-3">
             <Card className="border-[#BFBFBF] md:col-span-1">
+              <CardHeader><CardTitle className="text-[#214A33] text-base">Rentabilité</CardTitle></CardHeader>
+              <CardContent>
+                <div className="rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-3">
+                  <div className="text-sm text-[#214A33]/80">Marge</div>
+                  <div className="text-2xl font-semibold text-[#214A33]">{eur(margin.value)}</div>
+                  <div className="mt-2 flex items-center gap-2 text-sm text-[#214A33]">
+                    <span className="tabular-nums">{margin.pct == null ? "—" : `${margin.pct.toFixed(0)}%`}</span>
+                    {marginBadge(margin.pct)}
+                  </div>
+                </div>
+                <div className="mt-2 text-[11px] text-[#214A33]/60">
+                  Codes couleur: ≥40% vert, 20–39% jaune, 1–19% orange, ≤0% rouge.
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Equipe / Heures */}
+            <Card className="border-[#BFBFBF] md:col-span-2">
               <CardHeader><CardTitle className="text-[#214A33] text-base">Équipe — Temps passé</CardTitle></CardHeader>
               <CardContent>
                 <div className="mb-2 text-xs text-[#214A33]/70">en heures</div>
@@ -171,49 +216,49 @@ const ClientView: React.FC = () => {
                 </div>
               </CardContent>
             </Card>
-
-            {/* Tableau hebdo S1..S52 */}
-            <Card className="border-[#BFBFBF] md:col-span-2">
-              <CardHeader><CardTitle className="text-[#214A33] text-base">Répartition hebdomadaire — {year}</CardTitle></CardHeader>
-              <CardContent>
-                <div className="overflow-auto rounded-md border border-[#BFBFBF]">
-                  <table className="w-[900px] min-w-full border-collapse text-xs">
-                    <thead>
-                      <tr>
-                        {months.map((m) => (
-                          <th key={m} className="bg-[#F7F7F7] p-2 text-left font-semibold text-[#214A33]">{m}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        {Array.from({ length: 12 }).map((_, mi) => {
-                          const monthIdx = mi + 1;
-                          const weeks = weeklyByMonth[monthIdx] ?? [];
-                          return (
-                            <td key={monthIdx} className="align-top border-t border-[#BFBFBF] p-1">
-                              <div className="grid grid-cols-6 gap-1">
-                                {weeks.map((w) => (
-                                  <div key={w.week} className={cn(
-                                    "rounded-sm border border-[#BFBFBF]/60 px-1 py-0.5 text-center",
-                                    w.hours > 0 ? "bg-[#F2994A]/10 text-[#214A33]" : "bg-white text-[#214A33]/60"
-                                  )}>
-                                    <div className="text-[10px] font-medium">S{w.week}</div>
-                                    <div className="tabular-nums">{w.hours.toFixed(1)}</div>
-                                  </div>
-                                ))}
-                              </div>
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                <div className="mt-2 text-[11px] text-[#214A33]/60">Astuce: survolez le tableau pour défiler horizontalement si besoin.</div>
-              </CardContent>
-            </Card>
           </div>
+
+          {/* Tableau hebdo S1..S52 */}
+          <Card className="border-[#BFBFBF]">
+            <CardHeader><CardTitle className="text-[#214A33] text-base">Répartition hebdomadaire — {year}</CardTitle></CardHeader>
+            <CardContent>
+              <div className="overflow-auto rounded-md border border-[#BFBFBF]">
+                <table className="w-[900px] min-w-full border-collapse text-xs">
+                  <thead>
+                    <tr>
+                      {months.map((m) => (
+                        <th key={m} className="bg-[#F7F7F7] p-2 text-left font-semibold text-[#214A33]">{m}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      {Array.from({ length: 12 }).map((_, mi) => {
+                        const monthIdx = mi + 1;
+                        const weeks = weeklyByMonth[monthIdx] ?? [];
+                        return (
+                          <td key={monthIdx} className="align-top border-t border-[#BFBFBF] p-1">
+                            <div className="grid grid-cols-6 gap-1">
+                              {weeks.map((w) => (
+                                <div key={w.week} className={cn(
+                                  "rounded-sm border border-[#BFBFBF]/60 px-1 py-0.5 text-center",
+                                  w.hours > 0 ? "bg-[#F2994A]/10 text-[#214A33]" : "bg-white text-[#214A33]/60"
+                                )}>
+                                  <div className="text-[10px] font-medium">S{w.week}</div>
+                                  <div className="tabular-nums">{w.hours.toFixed(1)}</div>
+                                </div>
+                              ))}
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-2 text-[11px] text-[#214A33]/60">Astuce: survolez le tableau pour défiler horizontalement si besoin.</div>
+            </CardContent>
+          </Card>
         </>
       )}
     </div>
