@@ -34,7 +34,7 @@ const Index = () => {
                   Bonjour {firstName} 👋
                 </div>
                 <Button asChild className="bg-[#214A33] hover:bg-[#214A33]/90 text-white">
-                  <Link to="/planning">Let&apos;s go</Link>
+                  <Link to="/today">Let&apos;s go</Link>
                 </Button>
               </div>
             ) : (

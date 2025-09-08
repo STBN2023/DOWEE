@@ -19,6 +19,7 @@ import AdminEmployees from "./pages/AdminEmployees";
 import AdminClients from "./pages/AdminClients";
 import AdminReferences from "./pages/AdminReferences";
 import AdminTariffs from "./pages/AdminTariffs";
+import Today from "./pages/Today";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +35,14 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/login" element={<Login />} />
+              <Route
+                path="/today"
+                element={
+                  <ProtectedRoute>
+                    <Today />
+                  </ProtectedRoute>
+                }
+              />
               <Route
                 path="/planning"
                 element={
