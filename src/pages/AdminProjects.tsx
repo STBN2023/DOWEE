@@ -49,6 +49,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { getProjectCosts, type ProjectCostsMap } from "@/api/projectCosts";
 import { getProjectScores, type ProjectScore } from "@/api/projectScoring";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 
 type Assignments = Record<string, string[]>; // project_id -> employee_id[]
 
@@ -75,6 +80,41 @@ function scoreBadge(score?: number) {
   return "bg-red-50 text-red-700 border border-red-200";
 }
 
+// Helpers pour expliquer le score (même logique que la fonction edge)
+function sClient(segment?: string | null): number {
+  if (!segment) return 50;
+  const b = segment.toLowerCase();
+  if (b.includes("super")) return 80;
+  if (b.includes("pas")) return 20;
+  return 50;
+}
+function sMarge(pct: number | null): number {
+  if (pct == null) return 50;
+  if (pct <= 0) return 0;
+  if (pct < 20) return 20 + 2 * (pct - 1); // 22..58
+  if (pct < 40) return 60 + 2 * (pct - 20); // 60..98
+  return 100;
+}
+function daysLeftFromIso(iso?: string | null): number | null {
+  if (!iso) return null;
+  const [y, m, d] = iso.split("-").map((x) => parseInt(x, 10));
+  if (!y || !m || !d) return null;
+  const due = new Date(Date.UTC(y, m - 1, d));
+  const today = new Date();
+  const now = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+  const diffDays = Math.floor((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  return diffDays;
+}
+function sUrgence(daysLeft: number | null, effortDays: number | null): number {
+  if (daysLeft == null || effortDays == null || effortDays <= 0) return 50;
+  const B = daysLeft / effortDays;
+  if (B <= 0) return 100;
+  if (B < 1) return 90;
+  if (B < 3) return 60;
+  return 20;
+}
+function clamp100(n: number) { return Math.min(100, Math.max(0, n)); }
+
 const AdminProjects = () => {
   const [employees, setEmployees] = React.useState<Employee[]>([]);
   const [projects, setProjects] = React.useState<Project[]>([]);
@@ -82,7 +122,7 @@ const AdminProjects = () => {
   const [clients, setClients] = React.useState<Client[]>([]);
   const [tariffs, setTariffs] = React.useState<Tariff[]>([]);
   const [costs, setCosts] = React.useState<ProjectCostsMap>({});
-  const [scores, setScores] = React.useState<Record<string, number>>({}); // project_id -> score
+  const [scoreDetails, setScoreDetails] = React.useState<Record<string, ProjectScore>>({}); // project_id -> details
 
   const [loading, setLoading] = React.useState<boolean>(true);
 
@@ -137,9 +177,9 @@ const AdminProjects = () => {
     try {
       const [c, sc] = await Promise.all([getProjectCosts(), getProjectScores()]);
       setCosts(c);
-      const map: Record<string, number> = {};
-      sc.forEach((s) => { map[s.project_id] = s.score; });
-      setScores(map);
+      const map: Record<string, ProjectScore> = {};
+      sc.forEach((s) => { map[s.project_id] = s; });
+      setScoreDetails(map);
     } catch (e) {
       console.warn("getProjectCosts/getProjectScores error", e);
     }
@@ -357,7 +397,20 @@ const AdminProjects = () => {
             </DialogContent>
           </Dialog>
         </CardHeader>
+
         <CardContent>
+          {/* Explication Score */}
+          <div className="mb-3 rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-3 text-[12px] text-[#214A33]">
+            <div className="font-medium">Comment est calculé le Score ?</div>
+            <ul className="mt-1 list-disc pl-5 space-y-0.5">
+              <li>Score = (0,25×S_client + 0,35×S_marge + 0,20×S_urgence + 0,10×S_récurrence + 0,10×S_strat) × (client ★ ? 1,15 : 1), borné à [0,100].</li>
+              <li>S_client: Super rentable=80, Normal=50, Pas rentable=20 (d’après le segment du client).</li>
+              <li>S_marge: à partir de la marge % (≥40% → 100 ; 20–39% → 60–98 ; 1–19% → 22–58 ; ≤0% → 0).</li>
+              <li>S_urgence: ratio B = (jours restants / effort en jours) → B≤0:100 · 0&lt;B&lt;1:90 · 1≤B&lt;3:60 · B≥3:20.</li>
+              <li>Couleurs: ≥80 vert · 60–79 ambre · 40–59 orange · &lt;40 rouge.</li>
+            </ul>
+          </div>
+
           <div className="overflow-x-auto rounded-md border border-[#BFBFBF]">
             <table className="w-full border-collapse">
               <thead className="bg-[#F7F7F7]">
@@ -394,7 +447,20 @@ const AdminProjects = () => {
                     const costPlanned = c?.cost_planned ?? null;
                     const costActual = c?.cost_actual ?? null;
 
-                    const sc = scores[p.id];
+                    const details = scoreDetails[p.id];
+                    const sc = details?.score;
+                    const seg = details?.segment ?? null;
+                    const star = !!details?.star;
+                    const margin_pct = details?.margin_pct ?? null;
+                    const dueIso = details?.due_date ?? null;
+                    const effortDays = details?.effort_days ?? null;
+                    const dLeft = daysLeftFromIso(dueIso);
+                    const B = (dLeft == null || effortDays == null || effortDays <= 0) ? null : (dLeft / effortDays);
+                    const sClientVal = sClient(seg);
+                    const sMargeVal = sMarge(margin_pct);
+                    const sUrgVal = sUrgence(dLeft, effortDays);
+                    const raw = 0.25 * sClientVal + 0.35 * sMargeVal + 0.20 * sUrgVal + 0.10 * 0 + 0.10 * 0;
+                    const final = clamp100(Math.round((raw * (star ? 1.15 : 1)) * 100) / 100);
 
                     return (
                       <tr key={p.id} className="border-t border-[#BFBFBF]">
@@ -414,9 +480,46 @@ const AdminProjects = () => {
                         </td>
 
                         <td className="p-2 text-sm">
-                          <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-semibold", scoreBadge(sc))}>
-                            {isFinite(Number(sc)) ? Math.round(sc).toString().padStart(2, "0") : "—"}
-                          </span>
+                          {sc == null ? (
+                            <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-semibold", scoreBadge(undefined))}>—</span>
+                          ) : (
+                            <HoverCard>
+                              <HoverCardTrigger asChild>
+                                <span className={cn("inline-flex cursor-help rounded-full px-2 py-0.5 text-xs font-semibold", scoreBadge(sc))}>
+                                  {Math.round(sc).toString().padStart(2, "0")}
+                                </span>
+                              </HoverCardTrigger>
+                              <HoverCardContent className="w-80 text-xs">
+                                <div className="space-y-1 text-[#214A33]">
+                                  <div className="font-medium">Détail du score</div>
+                                  <div className="grid grid-cols-2 gap-1">
+                                    <div>Segment client</div>
+                                    <div className="text-right">{seg ?? "—"} {star ? "★" : ""}</div>
+                                    <div>S_client</div>
+                                    <div className="text-right">{sClientVal}</div>
+                                    <div>Marge %</div>
+                                    <div className="text-right">{margin_pct == null ? "—" : `${margin_pct.toFixed(0)}%`}</div>
+                                    <div>S_marge</div>
+                                    <div className="text-right">{Math.round(sMargeVal)}</div>
+                                    <div>Échéance</div>
+                                    <div className="text-right">{dueIso ?? "—"}</div>
+                                    <div>Effort (j)</div>
+                                    <div className="text-right">{effortDays ?? "—"}</div>
+                                    <div>Ratio B</div>
+                                    <div className="text-right">{B == null ? "—" : B.toFixed(2)}</div>
+                                    <div>S_urgence</div>
+                                    <div className="text-right">{sUrgVal}</div>
+                                  </div>
+                                  <div className="pt-1 text-[11px] text-[#214A33]/80">
+                                    Score = (0,25×{sClientVal} + 0,35×{Math.round(sMargeVal)} + 0,20×{sUrgVal} + 0 + 0)
+                                    × {star ? "1,15" : "1"}
+                                    {" = "}
+                                    <span className="font-medium">{Math.round(final)}</span>
+                                  </div>
+                                </div>
+                              </HoverCardContent>
+                            </HoverCard>
+                          )}
                         </td>
 
                         <td className="p-2 text-sm">{client ? `${client.code} — ${client.name}` : "—"}</td>
@@ -556,45 +659,6 @@ const AdminProjects = () => {
                                   Annuler
                                 </Button>
                                 <Button className="bg-[#F2994A] hover:bg-[#F2994A]/90 text-white" onClick={confirmEdit}>
-                                  Enregistrer
-                                </Button>
-                              </DialogFooter>
-                            </DialogContent>
-                          </Dialog>
-
-                          <Dialog open={openAssignFor === p.id} onOpenChange={(o) => (o ? openAssignDialog(p.id) : setOpenAssignFor(null))}>
-                            <DialogTrigger asChild>
-                              <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]">
-                                <Users className="mr-2 h-4 w-4" />
-                                Affecter
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                              <DialogHeader>
-                                <DialogTitle>Affecter des salariés — {p.code}</DialogTitle>
-                                <DialogDescription>Sélectionnez les collaborateurs à affecter à ce projet.</DialogDescription>
-                              </DialogHeader>
-                              <div className="max-h-[300px] overflow-auto pr-1">
-                                {employees.map((e) => (
-                                  <label key={e.id} className="flex items-center gap-3 py-2">
-                                    <Checkbox
-                                      checked={!!assignSelection[e.id]}
-                                      onCheckedChange={(v) =>
-                                        setAssignSelection((sel) => ({
-                                          ...sel,
-                                          [e.id]: Boolean(v),
-                                        }))
-                                      }
-                                    />
-                                    <span className="text-sm text-[#214A33]">{fullName(e)}</span>
-                                  </label>
-                                ))}
-                              </div>
-                              <DialogFooter>
-                                <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={() => setOpenAssignFor(null)}>
-                                  Annuler
-                                </Button>
-                                <Button className="bg-[#F2994A] hover:bg-[#F2994A]/90 text-white" onClick={confirmAssign}>
                                   Enregistrer
                                 </Button>
                               </DialogFooter>
