@@ -6,6 +6,7 @@ import { mondayOf } from "@/utils/date";
 import { getMetricsOverview } from "@/api/metrics";
 import { useAuth } from "@/context/AuthContext";
 import { getTimeCostOverview, type TimeCostOverview } from "@/api/timeCost";
+import ClientView from "@/components/dashboards/ClientView";
 
 const Dashboards = () => {
   const { role } = useRole();
@@ -72,6 +73,7 @@ const Dashboards = () => {
           <TabsTrigger value="global">Global</TabsTrigger>
           <TabsTrigger value="team">Équipe</TabsTrigger>
           <TabsTrigger value="me">Moi</TabsTrigger>
+          <TabsTrigger value="client">Client</TabsTrigger>
         </TabsList>
 
         <TabsContent value="global" className="mt-4">
@@ -134,6 +136,10 @@ const Dashboards = () => {
             <StatCard title="Mon coût planifié (semaine)" value={eur(tc?.me.cost_planned)} />
             <StatCard title="Mon coût réel (semaine)" value={eur(tc?.me.cost_actual)} />
           </div>
+        </TabsContent>
+
+        <TabsContent value="client" className="mt-4">
+          <ClientView />
         </TabsContent>
       </Tabs>
     </div>
