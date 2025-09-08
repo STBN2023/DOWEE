@@ -204,7 +204,6 @@ const AdminProjects = () => {
       await refresh();
       if (!mounted) return;
     })();
-    return () => { mounted = false; };
   }, []);
 
   const onCreateProject = async () => {
@@ -326,7 +325,7 @@ const AdminProjects = () => {
   const toggleRow = (id: string) => setOpenRows((prev) => ({ ...prev, [id]: !prev[id] }));
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6">
+    <div className="mx-auto max-w-[1280px] px-6 py-6">
       <Card className="border-[#BFBFBF]">
         <CardHeader className="flex items-center justify-between">
           <CardTitle className="text-[#214A33]">Admin — Projets</CardTitle>
@@ -342,7 +341,7 @@ const AdminProjects = () => {
                 <DialogTitle>Nouveau projet</DialogTitle>
                 <DialogDescription>Le code est généré (CLIENT-YYYY-NNN).</DialogDescription>
               </DialogHeader>
-              <div className="grid gap-4 py-2">
+              <div className="grid grid-cols-2 gap-4 py-2">
                 <div className="grid gap-2">
                   <Label>Nom</Label>
                   <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Ex: Site vitrine" />
@@ -398,9 +397,9 @@ const AdminProjects = () => {
             )}
           </div>
 
-          {/* Filtres & tri */}
-          <div className="mb-3 grid gap-2 md:grid-cols-4">
-            <div className="md:col-span-2">
+          {/* Filtres & tri (desktop uniquement) */}
+          <div className="mb-3 grid grid-cols-4 gap-3">
+            <div className="col-span-2">
               <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher (code ou nom)..." />
             </div>
             <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
@@ -419,7 +418,7 @@ const AdminProjects = () => {
                 {clients.map((c) => (<SelectItem key={c.id} value={c.id}>{c.code} — {c.name}</SelectItem>))}
               </SelectContent>
             </Select>
-            <div className="flex items-center gap-2">
+            <div className="col-span-2 flex items-center gap-2">
               <Select value={sort.key} onValueChange={(v) => setSort((s) => ({ ...s, key: v as SortKey }))}>
                 <SelectTrigger className="bg-white border-[#BFBFBF] text-[#214A33]"><SelectValue placeholder="Tri" /></SelectTrigger>
                 <SelectContent>
@@ -438,7 +437,7 @@ const AdminProjects = () => {
             </div>
           </div>
 
-          {/* Tableau compact */}
+          {/* Tableau compact desktop */}
           <div className="rounded-md border border-[#BFBFBF]">
             <table className="w-full border-collapse">
               <thead className="bg-[#F7F7F7]">
@@ -485,8 +484,8 @@ const AdminProjects = () => {
                     return (
                       <React.Fragment key={p.id}>
                         <tr className="border-t border-[#BFBFBF]">
-                          <td className="p-2 text-sm break-words">{p.code}</td>
-                          <td className="p-2 text-sm break-words">{p.name}</td>
+                          <td className="p-2 text-sm">{p.code}</td>
+                          <td className="p-2 text-sm">{p.name}</td>
                           <td className="p-2 text-sm">
                             <span
                               className={cn(
@@ -548,7 +547,7 @@ const AdminProjects = () => {
                                   <DialogTitle>Affectations — {p.code}</DialogTitle>
                                   <DialogDescription>Sélectionnez les salariés affectés à ce projet.</DialogDescription>
                                 </DialogHeader>
-                                <div className="max-h-[50vh] overflow-auto rounded-md border border-[#BFBFBF] p-2">
+                                <div className="max-h-[60vh] overflow-auto rounded-md border border-[#BFBFBF] p-2">
                                   <ul className="space-y-2">
                                     {employees.map((e) => {
                                       const checked = !!assignSelection[e.id];
@@ -583,7 +582,7 @@ const AdminProjects = () => {
                                   <DialogTitle>Modifier — {p.code}</DialogTitle>
                                   <DialogDescription>Mettre à jour les informations du projet.</DialogDescription>
                                 </DialogHeader>
-                                <div className="grid gap-4 py-2">
+                                <div className="grid grid-cols-2 gap-4 py-2">
                                   <div className="grid gap-2">
                                     <Label>Nom</Label>
                                     <Input value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} />
@@ -643,7 +642,7 @@ const AdminProjects = () => {
                         {open && (
                           <tr className="border-t border-[#BFBFBF]/60 bg-white/60">
                             <td colSpan={6} className="p-3">
-                              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 text-sm text-[#214A33]">
+                              <div className="grid grid-cols-3 gap-3 text-sm text-[#214A33]">
                                 <div className="rounded-md border border-[#BFBFBF]/60 bg-[#F7F7F7] p-2">
                                   <div className="text-xs text-[#214A33]/70">Client</div>
                                   <div>{client ? `${client.code} — ${client.name}` : "—"}</div>
@@ -668,7 +667,7 @@ const AdminProjects = () => {
                                   <div className="text-xs text-[#214A33]/70">Effort (jours) / B</div>
                                   <div>{effortDays ?? "—"} {B != null ? `(B=${B.toFixed(2)})` : ""}</div>
                                 </div>
-                                <div className="rounded-md border border-[#BFBFBF]/60 bg-[#F7F7F7] p-2 md:col-span-2 lg:col-span-3">
+                                <div className="col-span-3 rounded-md border border-[#BFBFBF]/60 bg-[#F7F7F7] p-2">
                                   <div className="text-xs text-[#214A33]/70">Salariés affectés</div>
                                   <div className="mt-1 flex flex-wrap gap-1">
                                     {assigned.length === 0 ? (
