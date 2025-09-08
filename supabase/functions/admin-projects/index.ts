@@ -22,6 +22,9 @@ type CreatePayload = {
     budget_conception?: number | null;
     budget_crea?: number | null;
     budget_dev?: number | null;
+    // nouveaux champs
+    due_date?: string | null; // YYYY-MM-DD
+    effort_days?: number | null;
   };
 };
 type AssignPayload = { action: "assign"; project_id: string; employee_ids: string[] };
@@ -37,6 +40,9 @@ type UpdatePayload = {
     budget_conception: number | null;
     budget_crea: number | null;
     budget_dev: number | null;
+    // nouveaux champs
+    due_date: string | null;
+    effort_days: number | null;
   }>;
 };
 type DeletePayload = { action: "delete"; project_id: string };
@@ -97,7 +103,7 @@ serve(async (req) => {
       { data: tariffs, error: tariffsErr },
     ] = await Promise.all([
       admin.from("employees").select("id, first_name, last_name, display_name"),
-      admin.from("projects").select("id, code, name, status, client_id, tariff_id, quote_amount, budget_conception, budget_crea, budget_dev"),
+      admin.from("projects").select("id, code, name, status, client_id, tariff_id, quote_amount, budget_conception, budget_crea, budget_dev, due_date, effort_days"),
       admin.from("project_employees").select("project_id, employee_id"),
       admin.from("clients").select("id, code, name").order("code", { ascending: true }),
       admin.from("ref_tariffs").select("id, label, rate_conception, rate_crea, rate_dev").order("created_at", { ascending: true }),
@@ -133,6 +139,8 @@ serve(async (req) => {
     const quote_amount = body.project.quote_amount ?? null;
 
     const { budget_conception = null, budget_crea = null, budget_dev = null } = body.project;
+    const due_date = typeof body.project.due_date === "string" ? body.project.due_date : null;
+    const effort_days = typeof body.project.effort_days === "number" ? body.project.effort_days : null;
 
     // Récupérer le code client
     const { data: client, error: clientErr } = await admin.from("clients").select("code").eq("id", client_id).maybeSingle();
@@ -176,8 +184,10 @@ serve(async (req) => {
         budget_conception,
         budget_crea,
         budget_dev,
+        due_date,
+        effort_days,
       })
-      .select("id, code, name, status, client_id, tariff_id, quote_amount, budget_conception, budget_crea, budget_dev")
+      .select("id, code, name, status, client_id, tariff_id, quote_amount, budget_conception, budget_crea, budget_dev, due_date, effort_days")
       .single();
 
     if (insErr) {
@@ -198,12 +208,14 @@ serve(async (req) => {
     if ("budget_conception" in patch) payload.budget_conception = patch.budget_conception ?? null;
     if ("budget_crea" in patch) payload.budget_crea = patch.budget_crea ?? null;
     if ("budget_dev" in patch) payload.budget_dev = patch.budget_dev ?? null;
+    if ("due_date" in patch) payload.due_date = patch.due_date ?? null;
+    if ("effort_days" in patch) payload.effort_days = patch.effort_days ?? null;
 
     const { data, error } = await admin
       .from("projects")
       .update(payload)
       .eq("id", project_id)
-      .select("id, code, name, status, client_id, tariff_id, quote_amount, budget_conception, budget_crea, budget_dev")
+      .select("id, code, name, status, client_id, tariff_id, quote_amount, budget_conception, budget_crea, budget_dev, due_date, effort_days")
       .single();
 
     if (error) {
@@ -247,7 +259,6 @@ serve(async (req) => {
 
     const { error } = await admin.from("projects").delete().eq("id", project_id);
     if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-
     return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 

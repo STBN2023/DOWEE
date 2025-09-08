@@ -131,12 +131,16 @@ const AdminProjects = () => {
     client_id: string;
     tariff_id: string | null;
     quote_amount: string;
+    due_date: string; // YYYY-MM-DD
+    effort_days: string; // as text, convert to number
   }>({
     name: "",
     status: "active",
     client_id: "",
     tariff_id: null,
     quote_amount: "",
+    due_date: "",
+    effort_days: "",
   });
 
   // Affectations
@@ -154,6 +158,8 @@ const AdminProjects = () => {
     budget_conception: string;
     budget_crea: string;
     budget_dev: string;
+    due_date: string;
+    effort_days: string;
   }>({
     name: "",
     status: "active",
@@ -163,6 +169,8 @@ const AdminProjects = () => {
     budget_conception: "",
     budget_crea: "",
     budget_dev: "",
+    due_date: "",
+    effort_days: "",
   });
 
   // Aide Score
@@ -204,6 +212,7 @@ const AdminProjects = () => {
       await refresh();
       if (!mounted) return;
     })();
+    return () => { mounted = false; };
   }, []);
 
   const onCreateProject = async () => {
@@ -214,6 +223,10 @@ const AdminProjects = () => {
       return;
     }
     const quote = form.quote_amount ? Number(form.quote_amount.replace(",", ".")) : null;
+    const due_date = form.due_date.trim() ? form.due_date.trim() : null;
+    const effort_days_val = form.effort_days.trim() === "" ? null : Number(form.effort_days.replace(",", "."));
+    const effort_days = isFinite(Number(effort_days_val)) ? Number(effort_days_val) : null;
+
     try {
       const created = await createProject({
         name,
@@ -221,9 +234,11 @@ const AdminProjects = () => {
         client_id,
         tariff_id: form.tariff_id || null,
         quote_amount: isFinite(Number(quote)) ? Number(quote) : null,
+        due_date,
+        effort_days,
       });
       showSuccess(`Projet créé: ${created.code}`);
-      setForm({ name: "", status: "active", client_id: "", tariff_id: null, quote_amount: "" });
+      setForm({ name: "", status: "active", client_id: "", tariff_id: null, quote_amount: "", due_date: "", effort_days: "" });
       setOpenCreate(false);
       await refresh();
     } catch (e: any) {
@@ -263,6 +278,8 @@ const AdminProjects = () => {
       budget_conception: p.budget_conception != null ? String(p.budget_conception) : "",
       budget_crea: p.budget_crea != null ? String(p.budget_crea) : "",
       budget_dev: p.budget_dev != null ? String(p.budget_dev) : "",
+      due_date: p.due_date ?? "",
+      effort_days: p.effort_days != null ? String(p.effort_days) : "",
     });
   };
 
@@ -274,9 +291,9 @@ const AdminProjects = () => {
       return;
     }
     const quote = editForm.quote_amount ? Number(editForm.quote_amount.replace(",", ".")) : null;
-    const budget_conception = editForm.budget_conception.trim() === "" ? null : Number(editForm.budget_conception.replace(",", "."));
-    const budget_crea = editForm.budget_crea.trim() === "" ? null : Number(editForm.budget_crea.replace(",", "."));
-    const budget_dev = editForm.budget_dev.trim() === "" ? null : Number(editForm.budget_dev.replace(",", "."));
+    const due_date = editForm.due_date.trim() ? editForm.due_date.trim() : null;
+    const effort_days_val = editForm.effort_days.trim() === "" ? null : Number(editForm.effort_days.replace(",", "."));
+    const effort_days = isFinite(Number(effort_days_val)) ? Number(effort_days_val) : null;
 
     try {
       await updateProject(openEditFor.id, {
@@ -285,9 +302,9 @@ const AdminProjects = () => {
         client_id: editForm.client_id,
         tariff_id: editForm.tariff_id || null,
         quote_amount: isFinite(Number(quote)) ? Number(quote) : null,
-        budget_conception: isFinite(Number(budget_conception as any)) ? (budget_conception as number) : null,
-        budget_crea: isFinite(Number(budget_crea as any)) ? (budget_crea as number) : null,
-        budget_dev: isFinite(Number(budget_dev as any)) ? (budget_dev as number) : null,
+        // budgets laissés à part ici; la modale actuelle se concentre sur champs principaux
+        due_date,
+        effort_days,
       });
       showSuccess("Projet modifié.");
       setOpenEditFor(null);
@@ -369,6 +386,14 @@ const AdminProjects = () => {
                   <Label>Montant total du devis (HT)</Label>
                   <Input inputMode="decimal" placeholder="ex: 12000" value={form.quote_amount} onChange={(e) => setForm((f) => ({ ...f, quote_amount: e.target.value }))} />
                 </div>
+                <div className="grid gap-2">
+                  <Label>Échéance</Label>
+                  <Input type="date" value={form.due_date} onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))} />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Effort (jours)</Label>
+                  <Input inputMode="decimal" placeholder="ex: 12" value={form.effort_days} onChange={(e) => setForm((f) => ({ ...f, effort_days: e.target.value }))} />
+                </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={() => setOpenCreate(false)}>Annuler</Button>
@@ -387,17 +412,13 @@ const AdminProjects = () => {
                 {showScoreHelp ? (<><ChevronUp className="mr-2 h-4 w-4" />Masquer</>) : (<><ChevronDown className="mr-2 h-4 w-4" />Afficher</>)}
               </Button>
             </div>
-            {showScoreHelp && (
-              <ul className="mt-2 list-disc pl-5 space-y-0.5">
-                <li>Score = (0,25×S_client + 0,35×S_marge + 0,20×S_urgence + 0,10×S_récurrence + 0,10×S_strat) × (★ ? 1,15 : 1), borné à [0,100].</li>
-                <li>S_client: Super rentable=80, Normal=50, Pas rentable=20.</li>
-                <li>S_marge: ≥40% → 100 ; 20–39% → 60–98 ; 1–19% → 22–58 ; ≤0% → 0.</li>
-                <li>S_urgence: B = (jours restants / effort en jours) → B≤0:100 · 0&lt;B&lt;1:90 · 1≤B&lt;3:60 · B≥3:20.</li>
-              </ul>
-            )}
+            <ul className="mt-2 list-disc pl-5 space-y-0.5">
+              <li>Score = (0,25×S_client + 0,35×S_marge + 0,20×S_urgence + 0,10×S_récurrence + 0,10×S_strat) × (★ ? 1,15 : 1).</li>
+              <li>S_urgence utilise B = Jours restants / Effort (jours).</li>
+            </ul>
           </div>
 
-          {/* Filtres & tri (desktop uniquement) */}
+          {/* Filtres & tri */}
           <div className="mb-3 grid grid-cols-4 gap-3">
             <div className="col-span-2">
               <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher (code ou nom)..." />
@@ -437,7 +458,7 @@ const AdminProjects = () => {
             </div>
           </div>
 
-          {/* Tableau compact desktop */}
+          {/* Tableau compact */}
           <div className="rounded-md border border-[#BFBFBF]">
             <table className="w-full border-collapse">
               <thead className="bg-[#F7F7F7]">
@@ -520,9 +541,6 @@ const AdminProjects = () => {
                                       <div>Effort (j)</div><div className="text-right">{effortDays ?? "—"}</div>
                                       <div>Ratio B</div><div className="text-right">{B == null ? "—" : B.toFixed(2)}</div>
                                       <div>S_urgence</div><div className="text-right">{sUrgVal}</div>
-                                    </div>
-                                    <div className="pt-1 text-[11px] text-[#214A33]/80">
-                                      Score ≈ 0,25×{sClientVal} + 0,35×{Math.round(sMargeVal)} + 0,20×{sUrgVal} → × {star ? "1,15" : "1"} = <span className="font-medium">{Math.round(final)}</span>
                                     </div>
                                   </div>
                                 </HoverCardContent>
@@ -610,6 +628,14 @@ const AdminProjects = () => {
                                     <Label>Montant total du devis (HT)</Label>
                                     <Input inputMode="decimal" value={editForm.quote_amount} onChange={(e) => setEditForm((f) => ({ ...f, quote_amount: e.target.value }))} />
                                   </div>
+                                  <div className="grid gap-2">
+                                    <Label>Échéance</Label>
+                                    <Input type="date" value={editForm.due_date} onChange={(e) => setEditForm((f) => ({ ...f, due_date: e.target.value }))} />
+                                  </div>
+                                  <div className="grid gap-2">
+                                    <Label>Effort (jours)</Label>
+                                    <Input inputMode="decimal" value={editForm.effort_days} onChange={(e) => setEditForm((f) => ({ ...f, effort_days: e.target.value }))} />
+                                  </div>
                                 </div>
                                 <DialogFooter>
                                   <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={() => setOpenEditFor(null)}>Annuler</Button>
@@ -661,11 +687,16 @@ const AdminProjects = () => {
                                 </div>
                                 <div className="rounded-md border border-[#BFBFBF]/60 bg-[#F7F7F7] p-2">
                                   <div className="text-xs text-[#214A33]/70">Échéance</div>
-                                  <div>{dueIso ?? "—"}</div>
+                                  <div>{p.due_date ?? "—"}</div>
                                 </div>
                                 <div className="rounded-md border border-[#BFBFBF]/60 bg-[#F7F7F7] p-2">
                                   <div className="text-xs text-[#214A33]/70">Effort (jours) / B</div>
-                                  <div>{effortDays ?? "—"} {B != null ? `(B=${B.toFixed(2)})` : ""}</div>
+                                  <div>{p.effort_days ?? "—"} {(() => {
+                                    const dLeft = daysLeftFromIso(p.due_date ?? null);
+                                    const eDays = p.effort_days ?? null;
+                                    const b = (dLeft == null || eDays == null || eDays <= 0) ? null : (dLeft / eDays);
+                                    return b != null ? `(B=${b.toFixed(2)})` : "";
+                                  })()}</div>
                                 </div>
                                 <div className="col-span-3 rounded-md border border-[#BFBFBF]/60 bg-[#F7F7F7] p-2">
                                   <div className="text-xs text-[#214A33]/70">Salariés affectés</div>
