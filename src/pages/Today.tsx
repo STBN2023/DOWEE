@@ -1,4 +1,3 @@
-réel).">
 import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { getUserWeek } from "@/api/userWeek";
 import { mondayOf } from "@/utils/date";
 import { format } from "date-fns";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { showSuccess } from "@/utils/toast";
 import { getDayStatus, confirmDay, type DayStatus } from "@/api/dayValidation";
 import ValidationDialog from "@/components/day/ValidationDialog";
@@ -96,7 +95,7 @@ const Today = () => {
       const now = new Date();
       if (!dayStatus?.validated && now.getHours() >= END_OF_DAY_HOUR) {
         e.preventDefault();
-        e.returnValue = ""; // déclenche l'alerte native du navigateur
+        e.returnValue = "";
       }
     };
     window.addEventListener("beforeunload", beforeUnload);
