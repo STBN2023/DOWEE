@@ -1,6 +1,7 @@
 import React from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { useRole } from "@/context/RoleContext";
 import { mondayOf } from "@/utils/date";
 import { getMetricsOverview } from "@/api/metrics";
@@ -10,6 +11,8 @@ import ClientView from "@/components/dashboards/ClientView";
 import GlobalPortfolio from "@/components/dashboards/GlobalPortfolio";
 import TeamPortfolio from "@/components/dashboards/TeamPortfolio";
 import MePortfolio from "@/components/dashboards/MePortfolio";
+import { addDays } from "date-fns";
+import { ChevronLeft, ChevronRight, Home } from "lucide-react";
 
 const Dashboards = () => {
   const { role } = useRole();
@@ -24,6 +27,9 @@ const Dashboards = () => {
 
   const [showGlobalDetails, setShowGlobalDetails] = React.useState(false);
 
+  // Nouvelle navigation de semaine
+  const [weekStart, setWeekStart] = React.useState<Date>(() => mondayOf(new Date()));
+
   React.useEffect(() => {
     if (authLoading || !employee) return;
 
@@ -32,7 +38,7 @@ const Dashboards = () => {
       try {
         const [metrics, timeCost] = await Promise.all([
           getMetricsOverview(),
-          getTimeCostOverview({ start: mondayOf(new Date()).toISOString().slice(0, 10) }),
+          getTimeCostOverview({ start: weekStart.toISOString().slice(0, 10) }),
         ]);
 
         setGlobalStats({
@@ -51,7 +57,7 @@ const Dashboards = () => {
       }
     };
     load();
-  }, [authLoading, employee]);
+  }, [authLoading, employee, weekStart]);
 
   const rangeLabel = React.useMemo(() => {
     if (!tc?.range) return "";
@@ -67,12 +73,46 @@ const Dashboards = () => {
   return (
     <div className="mx-auto max-w-6xl px-4 py-3">
       <h1 className="mb-1 text-lg font-semibold text-[#214A33]">Tableaux de bord</h1>
-      <div className="mb-2 text-[11px] text-[#214A33]/70">
-        Semaine: {rangeLabel || "—"}
+
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="text-[11px] text-[#214A33]/70">
+          Semaine: {rangeLabel || "—"}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-[#BFBFBF] text-[#214A33]"
+            onClick={() => setWeekStart((d) => addDays(d, -7))}
+          >
+            <ChevronLeft className="mr-2 h-4 w-4" />
+            Précédente
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-[#BFBFBF] text-[#214A33]"
+            onClick={() => setWeekStart(mondayOf(new Date()))}
+          >
+            <Home className="mr-2 h-4 w-4" />
+            Cette semaine
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-[#BFBFBF] text-[#214A33]"
+            onClick={() => setWeekStart((d) => addDays(d, 7))}
+          >
+            Suivante
+            <ChevronRight className="ml-2 h-4 w-4" />
+          </Button>
+        </div>
       </div>
+
       {errorMsg && (
         <div className="mb-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{errorMsg}</div>
       )}
+
       <Tabs defaultValue={defaultTab} className="w-full">
         <TabsList className="bg-[#F7F7F7]">
           <TabsTrigger value="global">Global</TabsTrigger>
