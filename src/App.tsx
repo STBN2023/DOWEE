@@ -20,6 +20,7 @@ import AdminClients from "./pages/AdminClients";
 import AdminReferences from "./pages/AdminReferences";
 import AdminTariffs from "./pages/AdminTariffs";
 import Today from "./pages/Today";
+import Daily from "./pages/Daily";
 
 const queryClient = new QueryClient();
 
@@ -40,6 +41,14 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <Today />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/day"
+                element={
+                  <ProtectedRoute>
+                    <Daily />
                   </ProtectedRoute>
                 }
               />

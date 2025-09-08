@@ -35,7 +35,8 @@ const BurgerMenu = () => {
           <div className="mb-2 px-2 text-xs font-semibold uppercase tracking-wide text-[#214A33]/60">Général</div>
           <nav className="flex flex-col">
             <NavItem to="/" icon={Home} label="Accueil" onClick={() => setOpen(false)} />
-            <NavItem to="/planning" icon={CalendarDays} label="Planning" onClick={() => setOpen(false)} />
+            <NavItem to="/planning" icon={CalendarDays} label="Planning (semaine)" onClick={() => setOpen(false)} />
+            <NavItem to="/day" icon={CalendarDays} label="Journée (édition)" onClick={() => setOpen(false)} />
             <NavItem to="/dashboards" icon={BarChart3} label="Tableaux de bord" onClick={() => setOpen(false)} />
           </nav>
 
