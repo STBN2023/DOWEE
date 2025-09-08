@@ -368,6 +368,7 @@ const AdminProjects = () => {
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Statut</th>
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Client</th>
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Devis HT</th>
+                  <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Coût (planifié)</th>
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Coût (actuel)</th>
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Salariés</th>
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Actions</th>
@@ -376,11 +377,11 @@ const AdminProjects = () => {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="p-4 text-center text-sm text-[#214A33]/60">Chargement…</td>
+                    <td colSpan={9} className="p-4 text-center text-sm text-[#214A33]/60">Chargement…</td>
                   </tr>
                 ) : projects.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-4 text-center text-sm text-[#214A33]/60">Aucun projet pour le moment.</td>
+                    <td colSpan={9} className="p-4 text-center text-sm text-[#214A33]/60">Aucun projet pour le moment.</td>
                   </tr>
                 ) : (
                   projects.map((p) => {
@@ -390,6 +391,7 @@ const AdminProjects = () => {
                     const client = clients.find((c) => c.id === p.client_id) || null;
 
                     const c = costs[p.id];
+                    const costPlanned = c?.cost_planned ?? null;
                     const costActual = c?.cost_actual ?? null;
 
                     return (
@@ -410,6 +412,7 @@ const AdminProjects = () => {
                         </td>
                         <td className="p-2 text-sm">{client ? `${client.code} — ${client.name}` : "—"}</td>
                         <td className="p-2 text-sm">{eur(p.quote_amount)}</td>
+                        <td className="p-2 text-sm">{eur(costPlanned)}</td>
                         <td className="p-2 text-sm">{eur(costActual)}</td>
                         <td className="p-2">
                           <div className="flex flex-wrap gap-1">
