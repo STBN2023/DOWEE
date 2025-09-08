@@ -42,9 +42,6 @@ const Index = () => {
                 <Button asChild className="bg-[#214A33] hover:bg-[#214A33]/90 text-white">
                   <Link to="/login">Se connecter</Link>
                 </Button>
-                <Button asChild variant="outline" className="border-[#F2994A] text-[#214A33] hover:bg-[#F2994A]/10">
-                  <Link to="/dashboards">Voir les tableaux de bord</Link>
-                </Button>
               </div>
             )}
           </div>
