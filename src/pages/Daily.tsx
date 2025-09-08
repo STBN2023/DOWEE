@@ -24,7 +24,8 @@ import {
   useSensor,
   pointerWithin,
 } from "@dnd-kit/core";
-import { ChevronLeft, ChevronRight, Home, CalendarDays } from "lucide-react";
+import { ChevronLeft, ChevronRight, Home, CalendarDays, CheckCircle2 } from "lucide-react";
+import { getDayStatus, confirmDay, type DayStatus } from "@/api/dayValidation";
 
 type Project = { id: string; code: string; name: string };
 type PlanItem = { id?: string; d: string; hour: number; projectId: string };
@@ -62,6 +63,9 @@ const Daily = () => {
   const [plans, setPlans] = React.useState<Record<number, PlanItem>>({}); // hour -> plan
   const [loading, setLoading] = React.useState<boolean>(true);
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
+
+  const [dayStatus, setDayStatus] = React.useState<DayStatus | null>(null);
+  const [validating, setValidating] = React.useState(false);
 
   const [selectedProjectId, setSelectedProjectId] = React.useState<string | null>(null);
 
@@ -104,9 +108,20 @@ const Daily = () => {
     }
   }, [authLoading, employee, date, iso]);
 
+  const loadStatus = React.useCallback(async () => {
+    if (authLoading || !employee) return;
+    try {
+      const st = await getDayStatus(iso);
+      setDayStatus(st);
+    } catch {
+      // ignore
+    }
+  }, [authLoading, employee, iso]);
+
   React.useEffect(() => {
     loadDay();
-  }, [loadDay]);
+    loadStatus();
+  }, [loadDay, loadStatus]);
 
   const assignOne = async (hour: number, projectId: string) => {
     // Optimistic
@@ -297,12 +312,41 @@ const Daily = () => {
     }
   };
 
+  const validateCurrent = async () => {
+    try {
+      setValidating(true);
+      await confirmDay(iso);
+      await loadStatus();
+      showSuccess("Journée validée.");
+    } catch (e: any) {
+      showError(e?.message || "Validation impossible.");
+    } finally {
+      setValidating(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-3xl px-3 py-3">
       <Card className="border-[#BFBFBF]">
         <CardHeader className="flex items-center justify-between py-3">
           <CardTitle className="text-base font-semibold text-[#214A33]">Journée — {dayLabel}</CardTitle>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {dayStatus?.validated ? (
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
+                <CheckCircle2 className="h-4 w-4" /> Validée
+              </span>
+            ) : (
+              <Button
+                size="sm"
+                className="bg-[#F2994A] text-white hover:bg-[#F2994A]/90"
+                onClick={validateCurrent}
+                disabled={validating || authLoading || !employee}
+                title="Copier le planning du jour vers mes heures réelles et marquer la journée validée"
+              >
+                {validating ? "Validation…" : "Valider cette journée"}
+              </Button>
+            )}
+
             <Button
               size="sm"
               variant="outline"
@@ -391,7 +435,7 @@ const Daily = () => {
               )}
             </div>
 
-            {/* Grille jour dans une zone à hauteur adaptative */}
+            {/* Grille jour */}
             <div className="overflow-auto rounded-md border border-[#BFBFBF] bg-[#F7F7F7] max-h-[calc(100vh-220px)]">
               <table className="w-full border-collapse">
                 <thead>
