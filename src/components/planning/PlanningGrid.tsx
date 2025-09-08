@@ -19,6 +19,21 @@ import {
 import { showSuccess, showError } from "@/utils/toast";
 import { getUserWeek, patchUserWeek, PlanDTO } from "@/api/userWeek";
 import { useAuth } from "@/context/AuthContext";
+import CellDroppable from "@/components/planning/CellDroppable";
+import PlanDraggable from "@/components/planning/PlanDraggable";
+
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverEvent,
+  DragStartEvent,
+  DragOverlay,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  pointerWithin,
+} from "@dnd-kit/core";
 
 type Project = { id: string; code: string; name: string };
 type PlanItem = { id?: string; d: string; hour: number; projectId: string };
@@ -61,19 +76,30 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
 
   const [dragSel, setDragSel] = React.useState<DragSel>(initialDrag);
-  const lastOverCellRef = React.useRef<string | null>(null);
   const movingPlanKeyRef = React.useRef<string | null>(null);
+
+  const [overlay, setOverlay] = React.useState<{ type: "project" | "plan" | null; code?: string; name?: string }>({ type: null });
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 8 } })
+  );
 
   const byProject: Record<string, Project> = React.useMemo(
     () => Object.fromEntries(projects.map((p) => [p.id, p])),
     [projects]
   );
 
-  // Chargement semaine, seulement quand le profil est prêt
+  const isoToIdx = React.useMemo(() => {
+    const map: Record<string, number> = {};
+    days.forEach((d, i) => (map[d.iso] = i));
+    return map;
+  }, [days]);
+
+  // Chargement semaine, quand le profil est prêt
   React.useEffect(() => {
     let mounted = true;
     if (authLoading || !employee) {
-      // Attente de l’init profil
       setLoading(true);
       return () => {
         mounted = false;
@@ -94,7 +120,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
         });
         setPlans(plansByKey);
 
-        // Projets (ne pas écraser si API renvoie 0)
+        // Projets
         const newProjects = data.projects.map((p) => ({ id: p.id, code: p.code, name: p.name }));
         setProjects((prev) => {
           if (newProjects.length > 0) return newProjects;
@@ -115,14 +141,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     };
   }, [weekStart, fallbackProjects, authLoading, employee]);
 
-  // Drag depuis pilule projet
-  const handleProjectDragStart = (projectId: string) => {
-    setDragSel({ active: true, projectId, dayIndex: -1, startHour: -1, currentHour: -1 });
-  };
-  const handleProjectDragEnd = () => {
-    setDragSel(initialDrag);
-  };
-
   const isHighlighted = (dayIdx: number, hour: number) => {
     if (!dragSel.active) return false;
     if (dragSel.dayIndex === -1 || dragSel.startHour === -1) return false;
@@ -134,7 +152,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
   const commitSelection = async (dayIdx: number) => {
     if (!dragSel.active || dragSel.dayIndex !== dayIdx) return;
 
-    // Ne pas lancer d’API tant que le profil n’est pas prêt
     if (authLoading || !employee) {
       showError("Profil en cours d’initialisation, veuillez réessayer dans un instant.");
       return;
@@ -185,7 +202,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
         return prev.length > 0 ? prev : fallbackProjects;
       });
     } catch {
-      // on garde l’optimistic state si la sync échoue
+      // garder l’état optimistic si la sync échoue
     }
 
     if (saved) {
@@ -195,77 +212,76 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     }
   };
 
-  const onCellDragEnter = (dayIdx: number, hour: number) => {
-    lastOverCellRef.current = keyOf(days[dayIdx].iso, hour);
-
-    if (!dragSel.active) return;
-    if (dragSel.dayIndex === -1) {
-      setDragSel((s) => ({ ...s, dayIndex: dayIdx, startHour: hour, currentHour: hour }));
-    } else if (dragSel.dayIndex === dayIdx) {
-      setDragSel((s) => ({ ...s, currentHour: hour }));
+  // DnD handlers
+  const onDragStart = (e: DragStartEvent) => {
+    const t = e.active.data?.current as any;
+    if (t?.type === "project") {
+      setDragSel({ active: true, projectId: t.projectId, dayIndex: -1, startHour: -1, currentHour: -1 });
+      setOverlay({ type: "project", code: t.code, name: t.name });
+    } else if (t?.type === "plan") {
+      const planKey = t.planKey as string;
+      movingPlanKeyRef.current = planKey;
+      setOverlay({ type: "plan", code: "", name: "" });
     }
   };
 
-  const onCellDragOver: React.DragEventHandler<HTMLTableCellElement> = (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = dragSel.active ? "copy" : "move";
-  };
-
-  const onCellDrop = (dayIdx: number) => {
-    if (dragSel.active) {
-      commitSelection(dayIdx);
-      setDragSel(initialDrag);
-    }
-  };
-
-  const onPlanDragStart = (k: string, e?: React.DragEvent<HTMLDivElement>) => {
-    if (e) {
-      e.dataTransfer.setData("text/plain", k);
-      e.dataTransfer.effectAllowed = "move";
-    }
-    movingPlanKeyRef.current = k;
-    lastOverCellRef.current = null;
-  };
-
-  const onPlanDragEnd = async () => {
-    const movingKey = movingPlanKeyRef.current;
-    movingPlanKeyRef.current = null;
-    if (!movingKey || lastOverCellRef.current) {
-      lastOverCellRef.current = null;
-      return;
-    }
-    const plan = plans[movingKey];
-    setPlans((prev) => {
-      const next = { ...prev };
-      delete next[movingKey];
-      return next;
-    });
-
-    try {
-      await patchUserWeek({
-        deletes: [
-          plan?.id
-            ? { id: plan.id }
-            : { d: plan.d, hour: plan.hour },
-        ],
+  const onDragOver = (e: DragOverEvent) => {
+    const active = e.active.data?.current as any;
+    const over = e.over?.data?.current as any;
+    if (active?.type === "project" && over?.type === "cell") {
+      const dayIdx = (over.dayIdx as number) ?? isoToIdx[over.iso as string] ?? -1;
+      const hour = over.hour as number;
+      setDragSel((s) => {
+        if (!s.active) return s;
+        if (s.dayIndex === -1) {
+          return { ...s, dayIndex: dayIdx, startHour: hour, currentHour: hour };
+        }
+        if (s.dayIndex === dayIdx) {
+          return { ...s, currentHour: hour };
+        }
+        return s;
       });
-      showSuccess("Créneau supprimé.");
-    } catch (e: any) {
-      showError(e?.message || "Suppression impossible.");
     }
   };
 
-  const clearWeek = async () => {
-    const dels = Object.values(plans).map((p) => (p.id ? { id: p.id } : { d: p.d, hour: p.hour }));
-    if (dels.length > 0) {
-      try {
-        await patchUserWeek({ deletes: dels });
-      } catch (e: any) {
-        showError(e?.message || "Effacement impossible.");
+  const onDragEnd = async (e: DragEndEvent) => {
+    const active = e.active.data?.current as any;
+    const over = e.over?.data?.current as any;
+
+    if (active?.type === "project") {
+      if (over?.type === "cell" && dragSel.active && dragSel.dayIndex !== -1) {
+        await commitSelection(dragSel.dayIndex);
       }
+      setDragSel(initialDrag);
+      setOverlay({ type: null });
+    } else if (active?.type === "plan") {
+      const movingKey = movingPlanKeyRef.current;
+      movingPlanKeyRef.current = null;
+
+      // Suppression si lâché hors de toute cellule
+      if (!over && movingKey) {
+        const plan = plans[movingKey];
+        setPlans((prev) => {
+          const next = { ...prev };
+          delete next[movingKey];
+          return next;
+        });
+
+        try {
+          await patchUserWeek({
+            deletes: [
+              plan?.id
+                ? { id: plan.id }
+                : { d: plan.d, hour: plan.hour },
+            ],
+          });
+          showSuccess("Créneau supprimé.");
+        } catch (err: any) {
+          showError(err?.message || "Suppression impossible.");
+        }
+      }
+      setOverlay({ type: null });
     }
-    setPlans({});
-    showSuccess("Semaine effacée.");
   };
 
   const weekLabel = React.useMemo(() => {
@@ -331,7 +347,22 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Annuler</AlertDialogCancel>
-                <AlertDialogAction onClick={clearWeek}>Effacer</AlertDialogAction>
+                <AlertDialogAction
+                  onClick={async () => {
+                    const dels = Object.values(plans).map((p) => (p.id ? { id: p.id } : { d: p.d, hour: p.hour }));
+                    if (dels.length > 0) {
+                      try {
+                        await patchUserWeek({ deletes: dels });
+                      } catch (e: any) {
+                        showError(e?.message || "Effacement impossible.");
+                      }
+                    }
+                    setPlans({});
+                    showSuccess("Semaine effacée.");
+                  }}
+                >
+                  Effacer
+                </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
@@ -350,91 +381,90 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
       )}
 
       {/* Pilules projets */}
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        {(projects.length > 0 ? projects : fallbackProjects).map((p) => (
-          <ProjectPill
-            key={p.id}
-            id={p.id}
-            code={p.code}
-            name={p.name}
-            onDragStart={handleProjectDragStart}
-            onDragEnd={handleProjectDragEnd}
-          />
-        ))}
-      </div>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={pointerWithin}
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDragEnd={onDragEnd}
+      >
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          {(projects.length > 0 ? projects : fallbackProjects).map((p) => (
+            <ProjectPill key={p.id} id={p.id} code={p.code} name={p.name} />
+          ))}
+        </div>
 
-      <div className="overflow-auto rounded-md border border-[#BFBFBF] bg-[#F7F7F7]">
-        <table className="w-full border-collapse">
-          <thead>
-            <tr>
-              <th className="sticky left-0 z-10 w-24 bg-[#F7F7F7] p-2 text-left text-sm font-semibold text-[#214A33]">
-                Heure
-              </th>
-              {days.map((d) => (
-                <th key={d.iso} className="min-w-[120px] p-2 text-left text-sm font-semibold text-[#214A33]">
-                  {d.label}
+        <div className="overflow-auto rounded-md border border-[#BFBFBF] bg-[#F7F7F7]">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr>
+                <th className="sticky left-0 z-10 w-24 bg-[#F7F7F7] p-2 text-left text-sm font-semibold text-[#214A33]">
+                  Heure
                 </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {hours.map((h) => (
-              <tr key={h}>
-                <td className="sticky left-0 z-10 w-24 bg-[#F7F7F7] p-2 text-sm text-[#214A33]/80">{formatHour(h)}</td>
-                {days.map((d, dayIdx) => {
-                  const k = keyOf(d.iso, h);
-                  const hasPlan = !!plans[k];
-                  const highlight = isHighlighted(dayIdx, h);
-
-                  return (
-                    <td
-                      key={k}
-                      className={cn(
-                        cellBase,
-                        highlight && "ring-2 ring-[#F2994A] bg-[#F2994A]/10"
-                      )}
-                      onDragEnter={() => onCellDragEnter(dayIdx, h)}
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        e.dataTransfer.dropEffect = dragSel.active ? "copy" : "move";
-                      }}
-                      onDrop={() => onCellDrop(dayIdx)}
-                    >
-                      {!hasPlan ? (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="pointer-events-none select-none text-xs text-[#214A33]/40">
-                            {loading || authLoading || !employee ? "Chargement…" : "Glissez un projet ici…"}
-                          </span>
-                        </div>
-                      ) : (
-                        <div
-                          draggable
-                          onDragStart={(e) => onPlanDragStart(k, e)}
-                          onDragEnd={onPlanDragEnd}
-                          title={`${byProject[plans[k].projectId]?.code} — ${byProject[plans[k].projectId]?.name}`}
-                          className="absolute inset-1 flex items-center gap-2 rounded-md border border-[#BFBFBF] bg-white px-2 text-xs text-[#214A33] shadow-sm"
-                        >
-                          <span className="h-2 w-2 rounded-full bg-[#214A33]" />
-                          <span className="font-medium">
-                            {byProject[plans[k].projectId]?.code}
-                          </span>
-                          <span className="text-[#214A33]/70 truncate">
-                            {byProject[plans[k].projectId]?.name}
-                          </span>
-                        </div>
-                      )}
-                    </td>
-                  );
-                })}
+                {days.map((d) => (
+                  <th key={d.iso} className="min-w-[120px] p-2 text-left text-sm font-semibold text-[#214A33]">
+                    {d.label}
+                  </th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {hours.map((h) => (
+                <tr key={h}>
+                  <td className="sticky left-0 z-10 w-24 bg-[#F7F7F7] p-2 text-sm text-[#214A33]/80">{formatHour(h)}</td>
+                  {days.map((d, dayIdx) => {
+                    const k = keyOf(d.iso, h);
+                    const hasPlan = !!plans[k];
+                    const highlight = isHighlighted(dayIdx, h);
 
-      <p className="mt-3 text-xs text-[#214A33]/60">
-        Astuce : gardez le curseur dans la même colonne pendant le glisser-déposer pour étirer la sélection. Pour supprimer un créneau, faites-le glisser en dehors de la grille puis relâchez.
-      </p>
+                    return (
+                      <CellDroppable
+                        key={k}
+                        id={`cell-${k}`}
+                        data={{ type: "cell", iso: d.iso, hour: h, dayIdx }}
+                        className={cn(cellBase, highlight && "ring-2 ring-[#F2994A] bg-[#F2994A]/10")}
+                      >
+                        {!hasPlan ? (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <span className="pointer-events-none select-none text-xs text-[#214A33]/40">
+                              {loading || authLoading || !employee ? "Chargement…" : "Glissez un projet ici…"}
+                            </span>
+                          </div>
+                        ) : (
+                          <PlanDraggable
+                            planKey={k}
+                            labelCode={byProject[plans[k].projectId]?.code}
+                            labelName={byProject[plans[k].projectId]?.name}
+                          />
+                        )}
+                      </CellDroppable>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <p className="mt-3 text-xs text-[#214A33]/60">
+          Astuce : gardez le curseur dans la même colonne pendant le glisser-déposer pour étirer la sélection. Pour supprimer un créneau, faites-le glisser en dehors de la grille puis relâchez.
+        </p>
+
+        <DragOverlay>
+          {overlay.type === "project" ? (
+            <div className="select-none inline-flex items-center gap-2 rounded-full border border-[#BFBFBF] bg-white px-3 py-1 text-sm text-[#214A33] shadow">
+              <span className="h-2 w-2 rounded-full bg-[#F2994A]" />
+              <span className="font-medium">{overlay.code}</span>
+              <span className="text-[#214A33]/70">{overlay.name}</span>
+            </div>
+          ) : overlay.type === "plan" ? (
+            <div className="inline-flex items-center gap-2 rounded-md border border-[#BFBFBF] bg-white px-2 py-1 text-xs text-[#214A33] shadow">
+              <span className="h-2 w-2 rounded-full bg-[#214A33]" />
+              <span className="font-medium">Créneau</span>
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
     </div>
   );
 };

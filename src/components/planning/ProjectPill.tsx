@@ -1,25 +1,24 @@
 import React from "react";
+import { useDraggable } from "@dnd-kit/core";
 
 type Props = {
   id: string;
   code: string;
   name: string;
-  onDragStart: (projectId: string) => void;
-  onDragEnd: () => void;
 };
 
-const ProjectPill: React.FC<Props> = ({ id, code, name, onDragStart, onDragEnd }) => {
+const ProjectPill: React.FC<Props> = ({ id, code, name }) => {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `proj-${id}`,
+    data: { type: "project", projectId: id, code, name },
+  });
+
   return (
     <div
-      draggable
-      onDragStart={(e) => {
-        // Améliore la compatibilité Chrome/Firefox
-        e.dataTransfer.setData("text/plain", id);
-        e.dataTransfer.effectAllowed = "copyMove";
-        onDragStart(id);
-      }}
-      onDragEnd={onDragEnd}
-      className="select-none inline-flex items-center gap-2 rounded-full border border-[#BFBFBF] bg-white px-3 py-1 text-sm text-[#214A33] shadow-sm hover:shadow transition"
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      className={`select-none inline-flex items-center gap-2 rounded-full border border-[#BFBFBF] bg-white px-3 py-1 text-sm text-[#214A33] shadow-sm hover:shadow transition ${isDragging ? "opacity-60" : ""}`}
       title={`${code} — ${name}`}
     >
       <span className="h-2 w-2 rounded-full bg-[#F2994A]" />
