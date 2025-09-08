@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Pencil, Plus, Users, Trash2 } from "lucide-react";
+import { Pencil, Plus, Users, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
 import {
@@ -164,6 +164,9 @@ const AdminProjects = () => {
     budget_crea: "",
     budget_dev: "",
   });
+
+  // Toggle pour l'explication du score
+  const [showScoreHelp, setShowScoreHelp] = React.useState<boolean>(false);
 
   const refresh = async () => {
     setLoading(true);
@@ -399,16 +402,43 @@ const AdminProjects = () => {
         </CardHeader>
 
         <CardContent>
-          {/* Explication Score */}
+          {/* Explication Score + Toggle */}
           <div className="mb-3 rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-3 text-[12px] text-[#214A33]">
-            <div className="font-medium">Comment est calculé le Score ?</div>
-            <ul className="mt-1 list-disc pl-5 space-y-0.5">
-              <li>Score = (0,25×S_client + 0,35×S_marge + 0,20×S_urgence + 0,10×S_récurrence + 0,10×S_strat) × (client ★ ? 1,15 : 1), borné à [0,100].</li>
-              <li>S_client: Super rentable=80, Normal=50, Pas rentable=20 (d’après le segment du client).</li>
-              <li>S_marge: à partir de la marge % (≥40% → 100 ; 20–39% → 60–98 ; 1–19% → 22–58 ; ≤0% → 0).</li>
-              <li>S_urgence: ratio B = (jours restants / effort en jours) → B≤0:100 · 0&lt;B&lt;1:90 · 1≤B&lt;3:60 · B≥3:20.</li>
-              <li>Couleurs: ≥80 vert · 60–79 ambre · 40–59 orange · &lt;40 rouge.</li>
-            </ul>
+            <div className="flex items-center justify-between">
+              <div className="font-medium">Comment est calculé le Score ?</div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-[#BFBFBF] text-[#214A33]"
+                onClick={() => setShowScoreHelp((v) => !v)}
+              >
+                {showScoreHelp ? (
+                  <>
+                    <ChevronUp className="mr-2 h-4 w-4" />
+                    Masquer
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="mr-2 h-4 w-4" />
+                    Afficher
+                  </>
+                )}
+              </Button>
+            </div>
+            {showScoreHelp && (
+              <ul className="mt-2 list-disc pl-5 space-y-0.5">
+                <li>
+                  Score = (0,25×S_client + 0,35×S_marge + 0,20×S_urgence + 0,10×S_récurrence + 0,10×S_strat) × (client ★ ? 1,15 : 1),
+                  borné à [0,100].
+                </li>
+                <li>S_client: Super rentable=80, Normal=50, Pas rentable=20 (d’après le segment du client).</li>
+                <li>S_marge: à partir de la marge % (≥40% → 100 ; 20–39% → 60–98 ; 1–19% → 22–58 ; ≤0% → 0).</li>
+                <li>
+                  S_urgence: ratio B = (jours restants / effort en jours) → B≤0:100 · 0&lt;B&lt;1:90 · 1≤B&lt;3:60 · B≥3:20.
+                </li>
+                <li>Couleurs: ≥80 vert · 60–79 ambre · 40–59 orange · &lt;40 rouge.</li>
+              </ul>
+            )}
           </div>
 
           <div className="overflow-x-auto rounded-md border border-[#BFBFBF]">
