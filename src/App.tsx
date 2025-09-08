@@ -21,6 +21,7 @@ import AdminReferences from "./pages/AdminReferences";
 import AdminTariffs from "./pages/AdminTariffs";
 import Today from "./pages/Today";
 import Daily from "./pages/Daily";
+import ReportsChanges from "./pages/ReportsChanges";
 
 const queryClient = new QueryClient();
 
@@ -65,6 +66,14 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <Dashboards />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/reports/changes"
+                element={
+                  <ProtectedRoute>
+                    <ReportsChanges />
                   </ProtectedRoute>
                 }
               />

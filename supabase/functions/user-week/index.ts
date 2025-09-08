@@ -193,9 +193,38 @@ serve(async (req) => {
     const upserts = payload.upserts ?? [];
     const deletes = payload.deletes ?? [];
 
+    // Helper to insert a log row
+    async function insertLog(row: {
+      d: string;
+      hour: number;
+      prev_project_id: string | null;
+      new_project_id: string | null;
+      prev_minutes: number | null;
+      new_minutes: number | null;
+      action: "upsert" | "delete";
+    }) {
+      await supabase.from("planning_change_logs").insert({
+        employee_id: userId,
+        d: row.d,
+        hour: row.hour,
+        prev_project_id: row.prev_project_id,
+        new_project_id: row.new_project_id,
+        prev_minutes: row.prev_minutes,
+        new_minutes: row.new_minutes,
+        action: row.action,
+      });
+    }
+
     // Deletes
     for (const del of deletes) {
       if (del.id) {
+        const { data: before } = await supabase
+          .from("plan_items")
+          .select("id, d, hour, project_id, planned_minutes")
+          .eq("id", del.id)
+          .eq("employee_id", userId)
+          .maybeSingle();
+
         const { error } = await supabase
           .from("plan_items")
           .delete()
@@ -207,7 +236,27 @@ serve(async (req) => {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
+
+        if (before) {
+          await insertLog({
+            d: (before as any).d,
+            hour: (before as any).hour,
+            prev_project_id: (before as any).project_id ?? null,
+            new_project_id: null,
+            prev_minutes: (before as any).planned_minutes ?? null,
+            new_minutes: null,
+            action: "delete",
+          });
+        }
       } else if (del.d && typeof del.hour === "number") {
+        const { data: before } = await supabase
+          .from("plan_items")
+          .select("id, d, hour, project_id, planned_minutes")
+          .eq("employee_id", userId)
+          .eq("d", del.d)
+          .eq("hour", del.hour)
+          .maybeSingle();
+
         const { error } = await supabase
           .from("plan_items")
           .delete()
@@ -220,14 +269,34 @@ serve(async (req) => {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
+
+        if (before) {
+          await insertLog({
+            d: (before as any).d,
+            hour: (before as any).hour,
+            prev_project_id: (before as any).project_id ?? null,
+            new_project_id: null,
+            prev_minutes: (before as any).planned_minutes ?? null,
+            new_minutes: null,
+            action: "delete",
+          });
+        }
       }
     }
 
-    // Upserts: delete duplicates then insert 60 min lines
+    // Upserts: delete duplicates then insert 60 min lines, and log change
     for (const up of upserts) {
       const planned_minutes = up.planned_minutes ?? 60;
       const note = up.note ?? null;
-      // remove any existing row at (employee, d, hour)
+
+      const { data: prev } = await supabase
+        .from("plan_items")
+        .select("id, d, hour, project_id, planned_minutes")
+        .eq("employee_id", userId)
+        .eq("d", up.d)
+        .eq("hour", up.hour)
+        .maybeSingle();
+
       const del = await supabase
         .from("plan_items")
         .delete()
@@ -258,6 +327,16 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+
+      await insertLog({
+        d: up.d,
+        hour: up.hour,
+        prev_project_id: (prev as any)?.project_id ?? null,
+        new_project_id: up.project_id,
+        prev_minutes: (prev as any)?.planned_minutes ?? null,
+        new_minutes: planned_minutes,
+        action: "upsert",
+      });
     }
 
     return new Response(JSON.stringify({ ok: true }), {
