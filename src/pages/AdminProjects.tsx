@@ -48,6 +48,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { getProjectCosts, type ProjectCostsMap } from "@/api/projectCosts";
+import { getProjectScores, type ProjectScore } from "@/api/projectScoring";
 
 type Assignments = Record<string, string[]>; // project_id -> employee_id[]
 
@@ -66,6 +67,14 @@ function eur(n: number | null | undefined) {
   }
 }
 
+function scoreBadge(score?: number) {
+  if (score == null) return "bg-gray-100 text-gray-600 border border-gray-200";
+  if (score >= 80) return "bg-emerald-50 text-emerald-700 border border-emerald-200";
+  if (score >= 60) return "bg-amber-50 text-amber-700 border border-amber-200";
+  if (score >= 40) return "bg-orange-50 text-orange-700 border border-orange-200";
+  return "bg-red-50 text-red-700 border border-red-200";
+}
+
 const AdminProjects = () => {
   const [employees, setEmployees] = React.useState<Employee[]>([]);
   const [projects, setProjects] = React.useState<Project[]>([]);
@@ -73,6 +82,7 @@ const AdminProjects = () => {
   const [clients, setClients] = React.useState<Client[]>([]);
   const [tariffs, setTariffs] = React.useState<Tariff[]>([]);
   const [costs, setCosts] = React.useState<ProjectCostsMap>({});
+  const [scores, setScores] = React.useState<Record<string, number>>({}); // project_id -> score
 
   const [loading, setLoading] = React.useState<boolean>(true);
 
@@ -125,10 +135,13 @@ const AdminProjects = () => {
     setTariffs(data.tariffs);
 
     try {
-      const c = await getProjectCosts();
+      const [c, sc] = await Promise.all([getProjectCosts(), getProjectScores()]);
       setCosts(c);
+      const map: Record<string, number> = {};
+      sc.forEach((s) => { map[s.project_id] = s.score; });
+      setScores(map);
     } catch (e) {
-      console.warn("getProjectCosts error", e);
+      console.warn("getProjectCosts/getProjectScores error", e);
     }
 
     setLoading(false);
@@ -321,20 +334,6 @@ const AdminProjects = () => {
                       ))}
                     </SelectContent>
                   </Select>
-                  {form.tariff_id && (
-                    <div className="rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-2 text-xs text-[#214A33]">
-                      {(() => {
-                        const t = selectedTariff(form.tariff_id);
-                        return t ? (
-                          <div className="flex flex-wrap gap-3">
-                            <span><span className="font-medium">Conception:</span> {eur(t.rate_conception)}</span>
-                            <span><span className="font-medium">Créa:</span> {eur(t.rate_crea)}</span>
-                            <span><span className="font-medium">Dev:</span> {eur(t.rate_dev)}</span>
-                          </div>
-                        ) : null;
-                      })()}
-                    </div>
-                  )}
                 </div>
 
                 <div className="grid gap-2">
@@ -366,6 +365,7 @@ const AdminProjects = () => {
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Code</th>
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Nom</th>
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Statut</th>
+                  <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Score</th>
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Client</th>
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Devis HT</th>
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Coût (planifié)</th>
@@ -377,11 +377,11 @@ const AdminProjects = () => {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="p-4 text-center text-sm text-[#214A33]/60">Chargement…</td>
+                    <td colSpan={10} className="p-4 text-center text-sm text-[#214A33]/60">Chargement…</td>
                   </tr>
                 ) : projects.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="p-4 text-center text-sm text-[#214A33]/60">Aucun projet pour le moment.</td>
+                    <td colSpan={10} className="p-4 text-center text-sm text-[#214A33]/60">Aucun projet pour le moment.</td>
                   </tr>
                 ) : (
                   projects.map((p) => {
@@ -393,6 +393,8 @@ const AdminProjects = () => {
                     const c = costs[p.id];
                     const costPlanned = c?.cost_planned ?? null;
                     const costActual = c?.cost_actual ?? null;
+
+                    const sc = scores[p.id];
 
                     return (
                       <tr key={p.id} className="border-t border-[#BFBFBF]">
@@ -410,6 +412,13 @@ const AdminProjects = () => {
                             {p.status === "active" ? "Actif" : p.status === "onhold" ? "En pause" : "Archivé"}
                           </span>
                         </td>
+
+                        <td className="p-2 text-sm">
+                          <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-semibold", scoreBadge(sc))}>
+                            {isFinite(Number(sc)) ? Math.round(sc).toString().padStart(2, "0") : "—"}
+                          </span>
+                        </td>
+
                         <td className="p-2 text-sm">{client ? `${client.code} — ${client.name}` : "—"}</td>
                         <td className="p-2 text-sm">{eur(p.quote_amount)}</td>
                         <td className="p-2 text-sm">{eur(costPlanned)}</td>
@@ -428,6 +437,7 @@ const AdminProjects = () => {
                           </div>
                         </td>
                         <td className="p-2 flex gap-2">
+                          {/* Actions (inchangées) */}
                           <Dialog open={openEditFor?.id === p.id} onOpenChange={(o) => (o ? openEditDialog(p) : setOpenEditFor(null))}>
                             <DialogTrigger asChild>
                               <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]">
@@ -484,20 +494,6 @@ const AdminProjects = () => {
                                       ))}
                                     </SelectContent>
                                   </Select>
-                                  {editForm.tariff_id && (
-                                    <div className="rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-2 text-xs text-[#214A33]">
-                                      {(() => {
-                                        const t = selectedTariff(editForm.tariff_id);
-                                        return t ? (
-                                          <div className="flex flex-wrap gap-3">
-                                            <span><span className="font-medium">Conception:</span> {eur(t.rate_conception)}</span>
-                                            <span><span className="font-medium">Créa:</span> {eur(t.rate_crea)}</span>
-                                            <span><span className="font-medium">Dev:</span> {eur(t.rate_dev)}</span>
-                                          </div>
-                                        ) : null;
-                                      })()}
-                                    </div>
-                                  )}
                                 </div>
                                 <div className="grid gap-2">
                                   <Label>Montant total du devis (HT)</Label>
