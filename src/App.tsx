@@ -24,6 +24,7 @@ import Daily from "./pages/Daily";
 import ReportsChanges from "./pages/ReportsChanges";
 import ProfitabilityClients from "./pages/ProfitabilityClients";
 import ProfitabilityProjects from "./pages/ProfitabilityProjects";
+import ExitValidationGuard from "./components/ExitValidationGuard";
 
 const queryClient = new QueryClient();
 
@@ -35,6 +36,7 @@ const App = () => (
       <AuthProvider>
         <RoleProvider>
           <BrowserRouter>
+            <ExitValidationGuard />
             <Header />
             <Routes>
               <Route path="/" element={<Index />} />
