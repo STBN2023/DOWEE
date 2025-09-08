@@ -43,7 +43,7 @@ function isoWeek(d: Date): number {
 function normalizeTeamSlug(input?: string | null): "conception" | "créa" | "dev" | string | null {
   if (!input) return null;
   const base = input.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  if (base === "commercial" || base === "conception") return "conception";
+  if (base === "commercial" || base === "conception" || base === "direction") return "conception";
   if (base === "crea" || base === "creation") return "créa";
   if (base === "dev" || base === "developpement" || base === "developement") return "dev";
   return input;
@@ -133,7 +133,7 @@ serve(async (req) => {
     const teamEmpIds = new Set<string>();
     for (const e of employees ?? []) {
       const norm = normalizeTeamSlug((e as any).team ?? null);
-      if (norm && selectedTeam && norm === selectedTeam) teamEmpIds.add((e as any).id);
+      if (norm && selectedTeam && (norm === selectedTeam)) teamEmpIds.add((e as any).id);
     }
     allowedEmployeeIds = teamEmpIds;
     const projIds = new Set<string>();

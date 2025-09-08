@@ -132,7 +132,8 @@ serve(async (req) => {
     const base = raw.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     if (base === "crea" || base === "creation") return "créa";
     if (base === "dev" || base === "developpement" || base === "developement") return "dev";
-    if (base === "commercial" || base === "conception") return "conception";
+    // Conception regroupe aussi 'commercial' et 'direction'
+    if (base === "commercial" || base === "conception" || base === "direction") return "conception";
     return null;
   }
 
