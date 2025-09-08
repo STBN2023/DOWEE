@@ -100,9 +100,8 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
   React.useEffect(() => {
     let mounted = true;
 
-    // Si le profil n'est pas prêt, on n'affiche pas "Chargement..." dans les cellules,
-    // mais on ne tente pas de charger la semaine (placeholder non-bloquant).
     if (authLoading || !employee) {
+      // Ne pas afficher "Chargement…" dans les cellules vides
       setLoading(false);
       return () => {
         mounted = false;
@@ -252,8 +251,12 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     const over = e.over?.data?.current as any;
 
     if (active?.type === "project") {
-      if (over?.type === "cell" && dragSel.active && dragSel.dayIndex !== -1) {
-        await commitSelection(dragSel.dayIndex);
+      // Valider la sélection même si on relâche hors d'une cellule détectée,
+      // tant qu'une colonne (jour) a été engagée.
+      if (dragSel.active && dragSel.dayIndex !== -1) {
+        if (over?.type === "cell" || !over) {
+          await commitSelection(dragSel.dayIndex);
+        }
       }
       setDragSel(initialDrag);
       setOverlay({ type: null });
@@ -312,7 +315,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
           showSuccess("Créneau déplacé.");
         } catch (err: any) {
           showError(err?.message || "Déplacement impossible.");
-          // Optionnel: on pourrait recharger pour annuler l'optimistic si besoin
         }
 
         setOverlay({ type: null });
@@ -488,7 +490,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
                         {!hasPlan ? (
                           <div className="absolute inset-0 flex items-center justify-center">
                             <span className="pointer-events-none select-none text-xs text-[#214A33]/40">
-                              {loading ? "Chargement…" : "Glissez un projet ici…"}
+                              Glissez un projet ici…
                             </span>
                           </div>
                         ) : (
