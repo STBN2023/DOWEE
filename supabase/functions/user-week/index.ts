@@ -77,9 +77,10 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-  const userId = userData.user.id;
+  const user = userData.user;
+  const userId = user.id;
 
-  // Orphan check (server-side): employees row must exist
+  // Orphan check (server-side): employees row must exist — auto-create if missing
   const { data: empRow, error: empErr } = await admin
     .from("employees")
     .select("id")
@@ -92,11 +93,29 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
+
   if (!empRow) {
-    return new Response(JSON.stringify({ error: "Forbidden: orphan session" }), {
-      status: 403,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    // Auto-create minimal profile
+    const display_name =
+      (user.user_metadata?.display_name as string | undefined)?.trim() ||
+      user.email ||
+      "Utilisateur";
+    const first_name = (user.user_metadata?.first_name as string | undefined) || null;
+    const last_name = (user.user_metadata?.last_name as string | undefined) || null;
+
+    const { error: createErr } = await admin
+      .from("employees")
+      .upsert(
+        { id: userId, display_name, first_name, last_name },
+        { onConflict: "id" }
+      );
+
+    if (createErr) {
+      return new Response(JSON.stringify({ error: `Profile creation failed: ${createErr.message}` }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
   }
 
   if (action === "get") {
