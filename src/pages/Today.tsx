@@ -127,7 +127,7 @@ const Today = () => {
               C’est OK
             </Button>
             <Button asChild className="bg-[#214A33] text-white hover:bg-[#214A33]/90">
-              <Link to="/planning">Modifier mon planning</Link>
+              <Link to="/day">Modifier mon planning</Link>
             </Button>
           </div>
         </CardContent>
