@@ -74,9 +74,9 @@ const Dashboards = () => {
       <Tabs defaultValue={defaultTab} className="w-full">
         <TabsList className="bg-[#F7F7F7]">
           <TabsTrigger value="global">Global</TabsTrigger>
+          <TabsTrigger value="client">Client</TabsTrigger>
           <TabsTrigger value="team">Équipe</TabsTrigger>
           <TabsTrigger value="me">Moi</TabsTrigger>
-          <TabsTrigger value="client">Client</TabsTrigger>
         </TabsList>
 
         <TabsContent value="global" className="mt-4">
@@ -96,8 +96,11 @@ const Dashboards = () => {
             <StatCard title="Coût réel" value={eur(tc?.global.cost_actual)} />
           </div>
 
-          {/* Vue annuelle agrégée */}
           <GlobalPortfolio />
+        </TabsContent>
+
+        <TabsContent value="client" className="mt-4">
+          <ClientView />
         </TabsContent>
 
         <TabsContent value="team" className="mt-4">
@@ -106,8 +109,6 @@ const Dashboards = () => {
             <StatCard title="Créa (actifs)" value={`${teamStats.crea}`} />
             <StatCard title="Dev (actifs)" value={`${teamStats.dev}`} />
           </div>
-
-          {/* Vue annuelle par équipe */}
           <TeamPortfolio />
         </TabsContent>
 
@@ -120,13 +121,7 @@ const Dashboards = () => {
             <StatCard title="Mon coût planifié (semaine)" value={eur(tc?.me.cost_planned)} />
             <StatCard title="Mon coût réel (semaine)" value={eur(tc?.me.cost_actual)} />
           </div>
-
-          {/* Vue annuelle personnelle */}
           <MePortfolio />
-        </TabsContent>
-
-        <TabsContent value="client" className="mt-4">
-          <ClientView />
         </TabsContent>
       </Tabs>
     </div>

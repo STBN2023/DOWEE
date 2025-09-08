@@ -55,9 +55,10 @@ function sectionSlug(team: string | null | undefined): "conception" | "crea" | "
   return key === "rate_crea" ? "crea" : key === "rate_dev" ? "dev" : "conception";
 }
 function displayName(e: EmployeeRow): string {
-  if (e.display_name && e.display_name.trim()) return e.display_name;
   const n = [e.first_name ?? "", e.last_name ?? ""].join(" ").trim();
-  return n || e.id;
+  if (n) return n;
+  if (e.display_name && e.display_name.trim()) return e.display_name;
+  return e.id;
 }
 
 serve(async (req) => {
@@ -112,7 +113,7 @@ serve(async (req) => {
   const empMap = new Map<string, EmployeeRow>();
   (employees ?? []).forEach((e) => empMap.set((e as any).id, e as any));
 
-  // Prefer actuals for realized, fallback to plans if none
+  // Prefer actuals, fallback to plans
   const { data: actuals, error: actErr } = await admin
     .from("actual_items")
     .select("employee_id, d, minutes")
@@ -124,7 +125,6 @@ serve(async (req) => {
 
   let rows: ActualRow[] = (actuals ?? []) as any[];
   if ((rows ?? []).length === 0) {
-    // fallback to plans
     const { data: plans, error: planErr } = await admin
       .from("plan_items")
       .select("employee_id, d, planned_minutes")
@@ -135,7 +135,6 @@ serve(async (req) => {
     rows = (plans ?? []).map((p: any) => ({ employee_id: p.employee_id, d: p.d, minutes: p.planned_minutes ?? 0 }));
   }
 
-  // Aggregations
   const members = new Map<string, { id: string; name: string; team: string | null; hours: number }>();
   const totalsBySection: Record<"conception" | "crea" | "dev", { hours: number; cost: number }> = {
     conception: { hours: 0, cost: 0 },
@@ -150,21 +149,17 @@ serve(async (req) => {
     const minutes = r.minutes ?? 0;
     const hours = minutes / 60;
 
-    // per member
     if (emp) {
       const key = emp.id;
       if (!members.has(key)) members.set(key, { id: key, name: displayName(emp), team: emp.team, hours: 0 });
       members.get(key)!.hours += hours;
     }
 
-    // per section
     totalsBySection[sec].hours += hours;
 
-    // cost
     const rate = tariff ? (tariff as any)[rateKey(emp?.team ?? null)] as number : 0;
     totalsBySection[sec].cost += hours * (rate || 0);
 
-    // weeks
     const [yy, mm, dd] = r.d.split("-").map((x) => parseInt(x, 10));
     const dObj = new Date(Date.UTC(yy, mm - 1, dd));
     const w = isoWeek(dObj);
