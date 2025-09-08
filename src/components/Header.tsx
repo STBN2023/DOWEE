@@ -24,9 +24,16 @@ const Header = () => {
         <div className="flex h-14 items-center justify-between">
           <div className="flex items-center gap-3">
             <BurgerMenu />
-            <Link to="/" className="ml-1 text-lg font-semibold tracking-tight text-[#214A33]">
-              DoWee
-            </Link>
+            <div className="flex items-center">
+              <Link to="/" className="ml-1 text-lg font-semibold tracking-tight text-[#214A33]">
+                DoWee
+              </Link>
+              <img
+                src="/favicon.ico"
+                alt="Logo DoWee"
+                className="ml-2 h-5 w-5"
+              />
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <span className="text-sm text-[#214A33]/80">Vue</span>
