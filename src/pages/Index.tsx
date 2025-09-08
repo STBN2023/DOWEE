@@ -8,15 +8,15 @@ const Index = () => {
 
   return (
     <div className="min-h-[calc(100vh-56px)] bg-[#F7F7F7]">
-      <div className="mx-auto max-w-6xl px-4 py-10">
-        <div className="rounded-xl border border-[#BFBFBF] bg-white p-8">
+      <div className="mx-auto max-w-3xl px-4 py-8">
+        <div className="rounded-lg border border-[#BFBFBF] bg-white p-6 md:p-8">
           <div className="flex flex-col items-center gap-4">
             <img
               src="/logo_dowee.png"
               alt="DoWee"
-              className="mx-auto h-auto w-full max-w-[360px] sm:max-w-[480px] md:max-w-[640px] lg:max-w-[720px] select-none"
+              className="mx-auto w-full max-w-[320px] sm:max-w-[380px] md:max-w-[420px] select-none"
             />
-            <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <div className="mt-5 flex flex-wrap justify-center gap-3">
               <Button asChild className="bg-[#214A33] hover:bg-[#214A33]/90 text-white">
                 <Link to={session ? "/planning" : "/login"}>{session ? "Ouvrir le planning" : "Se connecter"}</Link>
               </Button>
