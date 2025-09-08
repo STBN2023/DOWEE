@@ -7,6 +7,9 @@ import { getMetricsOverview } from "@/api/metrics";
 import { useAuth } from "@/context/AuthContext";
 import { getTimeCostOverview, type TimeCostOverview } from "@/api/timeCost";
 import ClientView from "@/components/dashboards/ClientView";
+import GlobalPortfolio from "@/components/dashboards/GlobalPortfolio";
+import TeamPortfolio from "@/components/dashboards/TeamPortfolio";
+import MePortfolio from "@/components/dashboards/MePortfolio";
 
 const Dashboards = () => {
   const { role } = useRole();
@@ -92,6 +95,9 @@ const Dashboards = () => {
             <StatCard title="Coût planifié" value={eur(tc?.global.cost_planned)} />
             <StatCard title="Coût réel" value={eur(tc?.global.cost_actual)} />
           </div>
+
+          {/* Vue annuelle agrégée */}
+          <GlobalPortfolio />
         </TabsContent>
 
         <TabsContent value="team" className="mt-4">
@@ -100,31 +106,9 @@ const Dashboards = () => {
             <StatCard title="Créa (actifs)" value={`${teamStats.crea}`} />
             <StatCard title="Dev (actifs)" value={`${teamStats.dev}`} />
           </div>
-          <h2 className="mt-6 mb-2 text-lg font-semibold text-[#214A33]">Temps & Coûts par équipe (semaine)</h2>
-          <div className="grid gap-4 md:grid-cols-3">
-            {["commercial", "créa", "dev"].map((t) => {
-              const row = tc?.byTeam.find((x) => x.team === t);
-              return (
-                <Card key={t} className="border-[#BFBFBF]">
-                  <CardHeader>
-                    <CardTitle className="text-sm text-[#214A33]/80 capitalize">{t}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-sm text-[#214A33]">
-                      <div className="mb-1">
-                        <span className="font-medium">Heures:</span>{" "}
-                        {row ? `${row.hours_planned.toFixed(1)} h plan / ${row.hours_actual.toFixed(1)} h réelles` : "—"}
-                      </div>
-                      <div>
-                        <span className="font-medium">Coût:</span>{" "}
-                        {row ? `${eur(row.cost_planned)} plan / ${eur(row.cost_actual)} réel` : "—"}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
+
+          {/* Vue annuelle par équipe */}
+          <TeamPortfolio />
         </TabsContent>
 
         <TabsContent value="me" className="mt-4">
@@ -136,6 +120,9 @@ const Dashboards = () => {
             <StatCard title="Mon coût planifié (semaine)" value={eur(tc?.me.cost_planned)} />
             <StatCard title="Mon coût réel (semaine)" value={eur(tc?.me.cost_actual)} />
           </div>
+
+          {/* Vue annuelle personnelle */}
+          <MePortfolio />
         </TabsContent>
 
         <TabsContent value="client" className="mt-4">
