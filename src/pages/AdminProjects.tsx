@@ -47,6 +47,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { getProjectCosts, type ProjectCostsMap } from "@/api/projectCosts";
 
 type Assignments = Record<string, string[]>; // project_id -> employee_id[]
 
@@ -71,6 +72,7 @@ const AdminProjects = () => {
   const [assignments, setAssignments] = React.useState<Assignments>({});
   const [clients, setClients] = React.useState<Client[]>([]);
   const [tariffs, setTariffs] = React.useState<Tariff[]>([]);
+  const [costs, setCosts] = React.useState<ProjectCostsMap>({});
 
   const [loading, setLoading] = React.useState<boolean>(true);
 
@@ -115,6 +117,16 @@ const AdminProjects = () => {
     setAssignments(data.assignments || {});
     setClients(data.clients);
     setTariffs(data.tariffs);
+
+    // Charger les coûts après la liste (les coûts couvrent tous les projets)
+    try {
+      const c = await getProjectCosts();
+      setCosts(c);
+    } catch (e) {
+      // silencieux: si erreur, la colonne affichera "—"
+      console.warn("getProjectCosts error", e);
+    }
+
     setLoading(false);
   };
 
@@ -356,6 +368,7 @@ const AdminProjects = () => {
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Statut</th>
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Client</th>
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Devis HT</th>
+                  <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Coût (actuel)</th>
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Salariés</th>
                   <th className="p-2 text-left text-sm font-semibold text-[#214A33]">Actions</th>
                 </tr>
@@ -363,11 +376,11 @@ const AdminProjects = () => {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="p-4 text-center text-sm text-[#214A33]/60">Chargement…</td>
+                    <td colSpan={8} className="p-4 text-center text-sm text-[#214A33]/60">Chargement…</td>
                   </tr>
                 ) : projects.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-4 text-center text-sm text-[#214A33]/60">Aucun projet pour le moment.</td>
+                    <td colSpan={8} className="p-4 text-center text-sm text-[#214A33]/60">Aucun projet pour le moment.</td>
                   </tr>
                 ) : (
                   projects.map((p) => {
@@ -375,6 +388,10 @@ const AdminProjects = () => {
                       (eid) => employees.find((e) => e.id === eid)
                     ).filter(Boolean) as Employee[];
                     const client = clients.find((c) => c.id === p.client_id) || null;
+
+                    const c = costs[p.id];
+                    const costActual = c?.cost_actual ?? null;
+
                     return (
                       <tr key={p.id} className="border-t border-[#BFBFBF]">
                         <td className="p-2 text-sm">{p.code}</td>
@@ -393,6 +410,7 @@ const AdminProjects = () => {
                         </td>
                         <td className="p-2 text-sm">{client ? `${client.code} — ${client.name}` : "—"}</td>
                         <td className="p-2 text-sm">{eur(p.quote_amount)}</td>
+                        <td className="p-2 text-sm">{eur(costActual)}</td>
                         <td className="p-2">
                           <div className="flex flex-wrap gap-1">
                             {assigned.length === 0 ? (
@@ -407,6 +425,7 @@ const AdminProjects = () => {
                           </div>
                         </td>
                         <td className="p-2 flex gap-2">
+                          {/* Actions existantes (Modifier, Affecter, Supprimer) */}
                           <Dialog open={openEditFor?.id === p.id} onOpenChange={(o) => (o ? openEditDialog(p) : setOpenEditFor(null))}>
                             <DialogTrigger asChild>
                               <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]">
