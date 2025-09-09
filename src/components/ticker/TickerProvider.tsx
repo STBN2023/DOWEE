@@ -42,16 +42,12 @@ export const TickerProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const refresh = React.useCallback(async () => {
-    if (authLoading || !session || !employee) {
-      setItems([]);
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     try {
       const promises: Array<Promise<TickerItem[]>> = [];
 
-      if (settings.modules.alerts) {
+      // Alertes: uniquement si connecté
+      if (!authLoading && session && employee && settings.modules.alerts) {
         promises.push(
           getAlerts("global", 40)
             .then((r) =>
@@ -65,6 +61,7 @@ export const TickerProvider = ({ children }: { children: React.ReactNode }) => {
         );
       }
 
+      // Météo (WeatherAPI): affichée même sans session
       if (settings.modules.weather) {
         if (settings.useGeo) {
           if (typeof settings.lat === "number" && typeof settings.lon === "number") {
@@ -92,7 +89,7 @@ export const TickerProvider = ({ children }: { children: React.ReactNode }) => {
         }
       }
 
-      // Message personnalisé
+      // Message personnalisé (toujours)
       const msg = (settings.customMessage || "").trim();
       if (msg.length > 0) {
         promises.push(Promise.resolve([{ id: "custom-message", short: msg, severity: "info" }]));
@@ -134,11 +131,11 @@ export const TickerProvider = ({ children }: { children: React.ReactNode }) => {
     refresh();
   }, [refresh]);
 
+  // Rafraîchissement périodique (si connecté ou non)
   React.useEffect(() => {
-    if (authLoading || !session || !employee) return;
     const id = setInterval(refresh, 5 * 60 * 1000);
     return () => clearInterval(id);
-  }, [authLoading, session, employee, refresh]);
+  }, [refresh]);
 
   const value = React.useMemo<TickerContextValue>(() => ({ items, refresh, loading }), [items, loading, refresh]);
 
