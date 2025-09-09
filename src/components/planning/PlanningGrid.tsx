@@ -22,6 +22,8 @@ import { useAuth } from "@/context/AuthContext";
 import CellDroppable from "@/components/planning/CellDroppable";
 import PlanDraggable from "@/components/planning/PlanDraggable";
 import { getProjectScores, type ProjectScore } from "@/api/projectScoring";
+import { Switch } from "@/components/ui/switch";
+import { supabase } from "@/integrations/supabase/client";
 
 import {
   DndContext,
@@ -70,6 +72,27 @@ function colorFromScore(score?: number): "green" | "amber" | "orange" | "red" | 
   return "red";
 }
 
+type GcalEvent = {
+  title: string;
+  start: Date;
+  end: Date;
+  allDay: boolean;
+};
+
+function startOfDayLocal(d: Date) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+function endOfDayLocal(d: Date) {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x;
+}
+function overlaps(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) {
+  return Math.max(aStart.getTime(), bStart.getTime()) < Math.min(aEnd.getTime(), bEnd.getTime());
+}
+
 const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackProjects = [] }) => {
   const { loading: authLoading, employee } = useAuth();
 
@@ -108,6 +131,169 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     return map;
   }, [days]);
 
+  // ---- Google Calendar (Option A) state
+  const [gEnabled, setGEnabled] = React.useState<boolean>(() => localStorage.getItem("dowee.gcal.enabled") === "1");
+  const [gToken, setGToken] = React.useState<string | null>(null);
+  const [gLoading, setGLoading] = React.useState<boolean>(false);
+  const [gError, setGError] = React.useState<string | null>(null);
+  const [gLastSync, setGLastSync] = React.useState<Date | null>(null);
+
+  // Map cellules "d|hour" -> nb d'événements
+  const [gCellEvents, setGCellEvents] = React.useState<Record<string, number>>({});
+  // All-day par jour iso -> nb
+  const [gAllDayByIso, setGAllDayByIso] = React.useState<Record<string, number>>({});
+
+  const isGConnected = !!gToken;
+
+  const saveEnabled = (v: boolean) => {
+    setGEnabled(v);
+    localStorage.setItem("dowee.gcal.enabled", v ? "1" : "0");
+  };
+
+  const obtainGoogleToken = React.useCallback(async () => {
+    // Récupère un éventuel token fournisseur dans la session Supabase
+    const { data } = await supabase.auth.getSession();
+    const token = (data?.session as any)?.provider_token || null;
+    setGToken(token || null);
+    return token || null;
+  }, []);
+
+  const connectGoogle = async () => {
+    try {
+      // 1) Essaye de lier l’identité Google à l’utilisateur courant (popup)
+      const authAny = supabase.auth as any;
+      if (typeof authAny.linkIdentity === "function") {
+        await authAny.linkIdentity({
+          provider: "google",
+          options: {
+            scopes: "https://www.googleapis.com/auth/calendar.readonly",
+            redirectTo: window.location.origin,
+          },
+        });
+      } else {
+        // 2) Fallback: flux OAuth complet (redirection)
+        await supabase.auth.signInWithOAuth({
+          provider: "google",
+          options: {
+            scopes: "https://www.googleapis.com/auth/calendar.readonly",
+            redirectTo: window.location.origin,
+          },
+        });
+      }
+
+      // Après liaison/connexion, retenter de lire le token
+      setTimeout(() => {
+        obtainGoogleToken().then((t) => {
+          if (!t) showError("Connexion Google effectuée, mais aucun jeton d’accès n’a été fourni.");
+          else showSuccess("Connecté à Google Agenda.");
+        });
+      }, 500);
+    } catch (e: any) {
+      showError(e?.message || "Connexion Google impossible.");
+    }
+  };
+
+  const fetchGcalEvents = React.useCallback(async () => {
+    if (!gEnabled) return;
+    if (!gToken) {
+      const t = await obtainGoogleToken();
+      if (!t) {
+        setGError("Non connecté à Google Agenda.");
+        return;
+      }
+    }
+    const token = gToken || (await obtainGoogleToken());
+    if (!token) return;
+
+    if (days.length === 0) return;
+
+    const timeMin = new Date(days[0].date);
+    timeMin.setHours(0, 0, 0, 0);
+    const timeMax = new Date(days[6].date);
+    timeMax.setHours(23, 59, 59, 999);
+
+    const url = new URL("https://www.googleapis.com/calendar/v3/calendars/primary/events");
+    url.searchParams.set("timeMin", timeMin.toISOString());
+    url.searchParams.set("timeMax", timeMax.toISOString());
+    url.searchParams.set("singleEvents", "true");
+    url.searchParams.set("orderBy", "startTime");
+    url.searchParams.set("maxResults", "250");
+    url.searchParams.set("showDeleted", "false");
+
+    setGLoading(true);
+    setGError(null);
+    try {
+      const res = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        throw new Error(`Google API: ${res.status}`);
+      }
+      const data = await res.json();
+      const items: any[] = data?.items ?? [];
+
+      const events: GcalEvent[] = items.map((it) => {
+        const title = it.summary || "Événement";
+        if (it.start?.date && it.end?.date) {
+          // All-day: date (sans heure)
+          const start = startOfDayLocal(new Date(it.start.date + "T00:00:00"));
+          // Google all-day end est exclusif: retirer 1 ms pour l’inclusion du dernier jour
+          const end = new Date(new Date(it.end.date + "T00:00:00").getTime() - 1);
+          return { title, start, end, allDay: true };
+        } else {
+          const start = new Date(it.start?.dateTime ?? it.start);
+          const end = new Date(it.end?.dateTime ?? it.end);
+          return { title, start, end, allDay: false };
+        }
+      });
+
+      // Indexation pour la grille
+      const cellMap: Record<string, number> = {};
+      const allDayMap: Record<string, number> = {};
+
+      for (const d of days) {
+        // All-day counter initialisé
+        allDayMap[d.iso] = 0;
+      }
+
+      for (const ev of events) {
+        if (ev.allDay) {
+          // Incrementer chaque jour couvert
+          for (const d of days) {
+            const dayStart = startOfDayLocal(d.date);
+            const dayEnd = endOfDayLocal(d.date);
+            if (overlaps(ev.start, ev.end, dayStart, dayEnd)) {
+              allDayMap[d.iso] = (allDayMap[d.iso] ?? 0) + 1;
+            }
+          }
+        } else {
+          // Horaire: projeter sur créneaux horaires
+          for (const d of days) {
+            const base = startOfDayLocal(d.date);
+            for (const h of hours) {
+              const slotStart = new Date(base);
+              slotStart.setHours(h, 0, 0, 0);
+              const slotEnd = new Date(base);
+              slotEnd.setHours(h + 1, 0, 0, 0);
+              if (overlaps(ev.start, ev.end, slotStart, slotEnd)) {
+                const k = keyOf(d.iso, h);
+                cellMap[k] = (cellMap[k] ?? 0) + 1;
+              }
+            }
+          }
+        }
+      }
+
+      setGCellEvents(cellMap);
+      setGAllDayByIso(allDayMap);
+      setGLastSync(new Date());
+    } catch (e: any) {
+      setGError(e?.message || "Erreur Google Agenda.");
+    } finally {
+      setGLoading(false);
+    }
+  }, [gEnabled, gToken, days, hours, obtainGoogleToken]);
+
   // Chargement semaine
   React.useEffect(() => {
     let mounted = true;
@@ -144,7 +330,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     return () => { mounted = false; };
   }, [weekStart, fallbackProjects, authLoading, employee]);
 
-  // Charger les scores (pour tous les projets actifs, puis on ne conserve que ceux affichés)
+  // Charger les scores (pour tous les projets actifs)
   React.useEffect(() => {
     let active = true;
     const loadScores = async () => {
@@ -157,12 +343,19 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
         });
         setScoreMap(map);
       } catch {
-        // silencieux: pas bloquant
+        // silencieux
       }
     };
     loadScores();
     return () => { active = false; };
   }, []);
+
+  // Charger les événements Google quand l’affichage est activé + navigation semaine
+  React.useEffect(() => {
+    if (!gEnabled) return;
+    fetchGcalEvents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gEnabled, weekStart]);
 
   const isHighlighted = (dayIdx: number, hour: number) => {
     if (!dragSel.active) return false;
@@ -385,6 +578,11 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     setWeekStart((d) => new Date(d));
   };
 
+  const reloadGcal = async () => {
+    await fetchGcalEvents();
+    if (!gError) showSuccess("Google Agenda rechargé.");
+  };
+
   return (
     <div className="w-full">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -413,6 +611,37 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
             Suivante
             <ChevronRight className="ml-2 h-4 w-4" />
           </Button>
+        </div>
+
+        {/* Groupe Google Agenda */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 rounded-md border border-[#BFBFBF] bg-white px-2 py-1">
+            <span className="text-xs text-[#214A33]/80">Afficher Google Agenda</span>
+            <Switch checked={gEnabled} onCheckedChange={(v) => saveEnabled(!!v)} />
+          </div>
+          {isGConnected ? (
+            <>
+              <Button
+                variant="outline"
+                className="border-[#BFBFBF] text-[#214A33]"
+                onClick={reloadGcal}
+                disabled={gLoading}
+              >
+                {gLoading ? "Chargement…" : "Recharger"}
+              </Button>
+              <div className="text-[11px] text-[#214A33]/60 min-w-[140px] text-right">
+                {gLastSync ? `Sync: ${gLastSync.toLocaleTimeString()}` : gLoading ? "Chargement…" : "Connecté"}
+              </div>
+            </>
+          ) : (
+            <Button
+              variant="outline"
+              className="border-[#BFBFBF] text-[#214A33]"
+              onClick={connectGoogle}
+            >
+              Connecter Google Agenda
+            </Button>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -470,6 +699,12 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
         </div>
       )}
 
+      {gEnabled && gError && (
+        <div className="mb-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+          {gError}
+        </div>
+      )}
+
       <DndContext
         sensors={sensors}
         collisionDetection={pointerWithin}
@@ -492,7 +727,17 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
                 </th>
                 {days.map((d) => (
                   <th key={d.iso} className="min-w-[120px] p-2 text-left text-sm font-semibold text-[#214A33]">
-                    {d.label}
+                    <div className="flex items-center justify-between">
+                      <span>{d.label}</span>
+                      {gEnabled && (gAllDayByIso[d.iso] ?? 0) > 0 && (
+                        <span
+                          title={`${gAllDayByIso[d.iso]} événement(s) toute la journée`}
+                          className="ml-2 rounded-full border border-[#BFBFBF] bg-white px-2 py-0.5 text-[11px] text-[#214A33]"
+                        >
+                          All-day: {gAllDayByIso[d.iso]}
+                        </span>
+                      )}
+                    </div>
                   </th>
                 ))}
               </tr>
@@ -509,12 +754,20 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
                     const score = projId ? scoreMap[projId] : undefined;
                     const color = colorFromScore(score);
 
+                    const gHas = gEnabled && (gCellEvents[k] ?? 0) > 0;
+                    const conflict = gHas && hasPlan;
+
                     return (
                       <CellDroppable
                         key={k}
                         id={`cell-${k}`}
                         data={{ type: "cell", iso: d.iso, hour: h, dayIdx }}
-                        className={cn(cellBase, highlight && "ring-2 ring-[#F2994A] bg-[#F2994A]/10")}
+                        className={cn(
+                          cellBase,
+                          highlight && "ring-2 ring-[#F2994A] bg-[#F2994A]/10",
+                          !highlight && gHas && !hasPlan && "bg-[#BFBFBF]/20",
+                          !highlight && conflict && "ring-2 ring-red-400"
+                        )}
                       >
                         {!hasPlan ? (
                           <div className="absolute inset-0 flex items-center justify-center">
@@ -529,6 +782,24 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
                             labelName={byProject[plans[k].projectId]?.name}
                             color={color}
                           />
+                        )}
+
+                        {/* Indicateur discret d'événement Google si pas de conflit (ou ajouter un badge de compte) */}
+                        {gHas && !hasPlan && (
+                          <div
+                            className="pointer-events-none absolute right-1 top-1 rounded-full border border-[#BFBFBF] bg-white/80 px-1.5 py-0.5 text-[10px] text-[#214A33]"
+                            title={`${gCellEvents[k]} événement(s) Google sur ce créneau`}
+                          >
+                            Gcal: {gCellEvents[k]}
+                          </div>
+                        )}
+                        {conflict && (
+                          <div
+                            className="pointer-events-none absolute right-1 top-1 rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] text-white"
+                            title="Conflit: événement Google sur ce créneau"
+                          >
+                            Conflit
+                          </div>
                         )}
                       </CellDroppable>
                     );
