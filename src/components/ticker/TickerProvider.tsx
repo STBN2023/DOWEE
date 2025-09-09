@@ -1,9 +1,11 @@
 import React from "react";
-import { getAlerts, type AlertItem } from "@/api/alerts";
+import { getAlerts } from "@/api/alerts";
 import { useAuth } from "@/context/AuthContext";
+import { useTickerSettings } from "@/context/TickerSettingsContext";
+import { fetchWeatherItems, fetchTechNewsItems, localTipsItems, type TickerItem } from "@/api/tickerExtras";
 
 type TickerContextValue = {
-  items: AlertItem[];
+  items: TickerItem[];
   refresh: () => Promise<void>;
   loading: boolean;
 };
@@ -12,12 +14,12 @@ const TickerContext = React.createContext<TickerContextValue | undefined>(undefi
 
 export const TickerProvider = ({ children }: { children: React.ReactNode }) => {
   const { loading: authLoading, session, employee } = useAuth();
+  const { settings } = useTickerSettings();
 
-  const [items, setItems] = React.useState<AlertItem[]>([]);
+  const [items, setItems] = React.useState<TickerItem[]>([]);
   const [loading, setLoading] = React.useState<boolean>(true);
 
   const refresh = React.useCallback(async () => {
-    // N’appelle rien tant que l’auth n’est pas prête
     if (authLoading || !session || !employee) {
       setItems([]);
       setLoading(false);
@@ -25,21 +27,59 @@ export const TickerProvider = ({ children }: { children: React.ReactNode }) => {
     }
     setLoading(true);
     try {
-      // Toujours en portée globale (tous les projets de l’entreprise)
-      const data = await getAlerts("global", 20);
-      setItems(Array.isArray(data.items) ? data.items : []);
+      const promises: Array<Promise<TickerItem[]>> = [];
+
+      if (settings.modules.alerts) {
+        // plus d'éléments pour remplir le bandeau
+        promises.push(
+          getAlerts("global", 40).then((r) =>
+            (r.items ?? []).map((it) => ({
+              id: String(it.id),
+              short: String(it.short),
+              severity: (it.severity as any) || "info",
+            }))
+          ).catch(() => [])
+        );
+      }
+
+      if (settings.modules.weather) {
+        promises.push(fetchWeatherItems(settings.weatherCity).catch(() => []));
+      }
+
+      if (settings.modules.news) {
+        promises.push(fetchTechNewsItems(8).catch(() => []));
+      }
+
+      if (settings.modules.tips) {
+        promises.push(Promise.resolve(localTipsItems(6)));
+      }
+
+      const results = await Promise.all(promises);
+      // fusion + déduplication par id
+      const flat = results.flat().filter(Boolean);
+      const seen = new Set<string>();
+      const merged: TickerItem[] = [];
+      for (const it of flat) {
+        const id = it.id || Math.random().toString(36).slice(2);
+        if (seen.has(id)) continue;
+        seen.add(id);
+        merged.push({ ...it, id });
+      }
+
+      // Limite souple (pour rester léger), mais assez élevée pour le défilement
+      setItems(merged.slice(0, 80));
     } catch {
       setItems([]);
     } finally {
       setLoading(false);
     }
-  }, [authLoading, session, employee]);
+  }, [authLoading, session, employee, settings.modules.alerts, settings.modules.news, settings.modules.tips, settings.modules.weather, settings.weatherCity]);
 
   React.useEffect(() => {
     refresh();
   }, [refresh]);
 
-  // Rafraîchissement périodique uniquement si l’utilisateur est connecté
+  // Rafraîchissement périodique (5 min)
   React.useEffect(() => {
     if (authLoading || !session || !employee) return;
     const id = setInterval(refresh, 5 * 60 * 1000);

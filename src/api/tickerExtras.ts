@@ -1,0 +1,77 @@
+export type TickerItem = { id: string; short: string; severity?: "critical" | "warning" | "info" };
+
+// Astuces courtes locales
+const TIPS: string[] = [
+  "Astuce: Double-cliquez un créneau pour le supprimer.",
+  "Astuce: Glissez un projet d’une case occupée pour le remplacer.",
+  "Astuce: Cliquez une heure après avoir sélectionné un projet pour l’assigner.",
+  "Astuce: Validez votre journée depuis la page Aujourd’hui.",
+  "Astuce: Utilisez la roue dentée pour paramétrer le bandeau.",
+];
+
+// Utilitaire: tronquer un texte
+function trunc(s: string, n = 100) {
+  if (!s) return s;
+  return s.length > n ? s.slice(0, n - 1) + "…" : s;
+}
+
+// Météo via Open-Meteo (pas de clé), ville -> lat/lon via geocoding
+export async function fetchWeatherItems(city: string): Promise<TickerItem[]> {
+  const name = (city || "Paris").trim();
+  const geo = await fetch(
+    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1&language=fr&format=json`
+  ).then((r) => r.json()).catch(() => null as any);
+
+  const loc = geo?.results?.[0];
+  const lat = loc?.latitude ?? 48.8566;
+  const lon = loc?.longitude ?? 2.3522;
+  const cityLabel = (loc?.name && loc?.country_code) ? `${loc.name} (${loc.country_code})` : name;
+
+  const wx = await fetch(
+    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min&timezone=auto&language=fr`
+  ).then((r) => r.json()).catch(() => null as any);
+
+  const t = Math.round(wx?.current?.temperature_2m ?? 0);
+  const tMax = Math.round(wx?.daily?.temperature_2m_max?.[0] ?? t);
+  const tMin = Math.round(wx?.daily?.temperature_2m_min?.[0] ?? t);
+  // Mappage très concis des weather_code (optionnel)
+  const code = Number(wx?.current?.weather_code ?? -1);
+  const wDesc =
+    code === 0 ? "Ciel clair"
+    : [1,2,3].includes(code) ? "Variable"
+    : [45,48].includes(code) ? "Brouillard"
+    : [51,53,55,56,57].includes(code) ? "Bruine"
+    : [61,63,65,66,67].includes(code) ? "Pluie"
+    : [71,73,75,77].includes(code) ? "Neige"
+    : [80,81,82].includes(code) ? "Averses"
+    : [95,96,99].includes(code) ? "Orages"
+    : "Météo";
+
+  const out: TickerItem[] = [
+    { id: `wx-now-${cityLabel}`, short: `Météo ${cityLabel}: ${t}°C, ${wDesc}`, severity: "info" },
+    { id: `wx-range-${cityLabel}`, short: `Météo ${cityLabel}: Max ${tMax}° / Min ${tMin}°`, severity: "info" },
+  ];
+  return out;
+}
+
+// Actus tech (HN front page) — remplaçable par AFP plus tard
+export async function fetchTechNewsItems(limit = 5): Promise<TickerItem[]> {
+  const data = await fetch("https://hn.algolia.com/api/v1/search?tags=front_page")
+    .then((r) => r.json())
+    .catch(() => ({ hits: [] as any[] }));
+
+  const hits: any[] = Array.isArray(data?.hits) ? data.hits : [];
+  return hits.slice(0, limit).map((h, i) => ({
+    id: `news-${h.objectID || i}`,
+    short: trunc(`Actus: ${h.title || "—"}`, 90),
+    severity: "info",
+  }));
+}
+
+export function localTipsItems(count = 5): TickerItem[] {
+  const arr = [...TIPS];
+  // rotation simple
+  const now = new Date().getTime();
+  arr.sort((a, b) => ((a.length + now) % 7) - ((b.length + now) % 7));
+  return arr.slice(0, count).map((txt, i) => ({ id: `tip-${i}`, short: txt, severity: "info" }));
+}

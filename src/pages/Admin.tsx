@@ -2,7 +2,7 @@ import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { Users, Building2, FolderKanban, Shapes, Coins, Banknote, Brain } from "lucide-react";
+import { Users, Building2, FolderKanban, Shapes, Coins, Banknote, Brain, Settings } from "lucide-react";
 
 const Tile = ({ to, icon: Icon, title, desc, cta }: { to: string; icon: any; title: string; desc: string; cta: string }) => (
   <Card className="border-[#BFBFBF]">
@@ -74,6 +74,13 @@ const Admin = () => {
           title="LLM (OpenAI)"
           desc="Configurer la clé API OpenAI pour le bandeau d’alertes."
           cta="Configurer OpenAI"
+        />
+        <Tile
+          to="/settings/ticker"
+          icon={Settings}
+          title="Bandeau — Paramètres"
+          desc="Activer des modules (météo, actus…) et configurer la ville."
+          cta="Ouvrir"
         />
       </div>
     </div>

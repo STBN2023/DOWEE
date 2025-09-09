@@ -41,6 +41,7 @@ const BurgerMenu = () => {
             <NavItem to="/reports/changes" icon={ListChecks} label="Reporting modifs" onClick={() => setOpen(false)} />
             <NavItem to="/profitability/clients" icon={Wallet} label="Rentabilité clients" onClick={() => setOpen(false)} />
             <NavItem to="/profitability/projects" icon={Receipt} label="Rentabilité projets" onClick={() => setOpen(false)} />
+            <NavItem to="/settings/ticker" icon={Settings} label="Bandeau (paramètres)" onClick={() => setOpen(false)} />
           </nav>
 
           <div className="mb-2 mt-4 px-2 text-xs font-semibold uppercase tracking-wide text-[#214A33]/60">Administration</div>
