@@ -23,45 +23,50 @@ function isoDate(d: Date): string {
   return `${y}-${m}-${dd}`;
 }
 
-type Tariff = {
-  id: string;
-  label: string;
-  rate_conception: number;
-  rate_crea: number;
-  rate_dev: number;
-};
-type ProjectRow = {
-  id: string;
-  status: string;
-  tariff_id: string | null;
-};
 type EmployeeRow = { id: string; team: string | null };
 type PlanRow = { project_id: string; employee_id: string; planned_minutes: number; d: string };
 type ActualRow = { project_id: string; employee_id: string; minutes: number; d: string };
 
-function mapTeamToRateKey(team: string | null | undefined): "rate_conception" | "rate_crea" | "rate_dev" {
-  if (!team) return "rate_conception";
+// Internal cost rates (per day) and hourly conversion
+const COST_PER_DAY = { conception: 800, crea: 500, dev: 800 };
+const HOURS_PER_DAY = 8;
+const COST_PER_HOUR = {
+  conception: COST_PER_DAY.conception / HOURS_PER_DAY,
+  crea: COST_PER_DAY.crea / HOURS_PER_DAY,
+  dev: COST_PER_DAY.dev / HOURS_PER_DAY,
+};
+
+function mapTeamToSection(team: string | null | undefined): "conception" | "créa" | "dev" {
+  if (!team) return "conception";
   const base = team.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  if (base === "crea" || base === "creation") return "rate_crea";
-  if (base === "dev" || base === "developpement" || base === "developement") return "rate_dev";
-  // conception (ou commercial legacy) → conception par défaut
-  return "rate_conception";
+  if (base === "crea" || base === "creation") return "créa";
+  if (base === "dev" || base === "developpement" || base === "developement") return "dev";
+  return "conception";
 }
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   const body = (await req.json().catch(() => ({}))) as Partial<Payload>;
   if (body.action !== "overview") {
-    return new Response(JSON.stringify({ error: "Invalid action" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: "Invalid action" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -94,71 +99,42 @@ serve(async (req) => {
 
   // Load data
   const [
-    { data: projects, error: projErr },
-    { data: tariffs, error: tarErr },
     { data: employees, error: emplErr },
     { data: plans, error: planErr },
     { data: actuals, error: actErr },
   ] = await Promise.all([
-    admin.from("projects").select("id, status, tariff_id").neq("status", "archived"),
-    admin.from("ref_tariffs").select("id, label, rate_conception, rate_crea, rate_dev"),
     admin.from("employees").select("id, team"),
     admin.from("plan_items").select("project_id, employee_id, planned_minutes, d").gte("d", startIso).lte("d", endIso),
     admin.from("actual_items").select("project_id, employee_id, minutes, d").gte("d", startIso).lte("d", endIso),
   ]);
 
-  if (projErr || tarErr || emplErr || planErr || actErr) {
-    const msg = projErr?.message || tarErr?.message || emplErr?.message || planErr?.message || actErr?.message || "Unknown error";
+  if (emplErr || planErr || actErr) {
+    const msg = emplErr?.message || planErr?.message || actErr?.message || "Unknown error";
     return new Response(JSON.stringify({ error: msg }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
-
-  const tariffMap = new Map<string, Tariff>();
-  (tariffs ?? []).forEach((t) => tariffMap.set((t as any).id, t as Tariff));
 
   const teamMap = new Map<string, string | null>();
   (employees ?? []).forEach((e) => teamMap.set((e as any).id, (e as EmployeeRow).team ?? null));
 
-  const projectTariff = new Map<string, Tariff | null>();
-  (projects ?? []).forEach((p) => {
-    const t = (p as ProjectRow).tariff_id ? tariffMap.get((p as ProjectRow).tariff_id as string) ?? null : null;
-    projectTariff.set((p as ProjectRow).id, t ?? null);
-  });
-
-  // Helpers
-  const teams = ["conception", "créa", "dev"] as const;
   type Agg = { hours_planned: number; hours_actual: number; cost_planned: number; cost_actual: number };
   const global: Agg = { hours_planned: 0, hours_actual: 0, cost_planned: 0, cost_actual: 0 };
   const byTeam = new Map<string, Agg>();
-  teams.forEach((t) => byTeam.set(t, { hours_planned: 0, hours_actual: 0, cost_planned: 0, cost_actual: 0 }));
+  (["conception", "créa", "dev"] as const).forEach((t) => byTeam.set(t, { hours_planned: 0, hours_actual: 0, cost_planned: 0, cost_actual: 0 }));
   const me: Agg = { hours_planned: 0, hours_actual: 0, cost_planned: 0, cost_actual: 0 };
 
   // Plans
   for (const row of (plans ?? []) as PlanRow[]) {
-    const t = projectTariff.get(row.project_id);
-    const team = teamMap.get(row.employee_id) ?? null;
-    const rateKey = mapTeamToRateKey(team);
-    const rate = t ? (t as any)[rateKey] as number : 0;
+    const section = mapTeamToSection(teamMap.get(row.employee_id) ?? null);
     const hours = (row.planned_minutes ?? 0) / 60;
-    const cost = hours * (rate || 0);
+    const rate = section === "conception" ? COST_PER_HOUR.conception : section === "créa" ? COST_PER_HOUR.crea : COST_PER_HOUR.dev;
+    const cost = hours * rate;
 
     global.hours_planned += hours;
     global.cost_planned += cost;
 
-    const normTeam = team ? team.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") : "";
-    const mappedTeam =
-      normTeam === "crea" || normTeam === "creation"
-        ? "créa"
-        : normTeam === "dev" || normTeam === "developpement" || normTeam === "developement"
-        ? "dev"
-        : normTeam
-        ? "conception"
-        : null;
-
-    if (mappedTeam && byTeam.has(mappedTeam)) {
-      const agg = byTeam.get(mappedTeam)!;
-      agg.hours_planned += hours;
-      agg.cost_planned += cost;
-    }
+    const agg = byTeam.get(section)!;
+    agg.hours_planned += hours;
+    agg.cost_planned += cost;
 
     if (row.employee_id === userId) {
       me.hours_planned += hours;
@@ -168,31 +144,17 @@ serve(async (req) => {
 
   // Actuals
   for (const row of (actuals ?? []) as ActualRow[]) {
-    const t = projectTariff.get(row.project_id);
-    const team = teamMap.get(row.employee_id) ?? null;
-    const rateKey = mapTeamToRateKey(team);
-    const rate = t ? (t as any)[rateKey] as number : 0;
+    const section = mapTeamToSection(teamMap.get(row.employee_id) ?? null);
     const hours = (row.minutes ?? 0) / 60;
-    const cost = hours * (rate || 0);
+    const rate = section === "conception" ? COST_PER_HOUR.conception : section === "créa" ? COST_PER_HOUR.crea : COST_PER_HOUR.dev;
+    const cost = hours * rate;
 
     global.hours_actual += hours;
     global.cost_actual += cost;
 
-    const normTeam = team ? team.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") : "";
-    const mappedTeam =
-      normTeam === "crea" || normTeam === "creation"
-        ? "créa"
-        : normTeam === "dev" || normTeam === "developpement" || normTeam === "developement"
-        ? "dev"
-        : normTeam
-        ? "conception"
-        : null;
-
-    if (mappedTeam && byTeam.has(mappedTeam)) {
-      const agg = byTeam.get(mappedTeam)!;
-      agg.hours_actual += hours;
-      agg.cost_actual += cost;
-    }
+    const agg = byTeam.get(section)!;
+    agg.hours_actual += hours;
+    agg.cost_actual += cost;
 
     if (row.employee_id === userId) {
       me.hours_actual += hours;
@@ -201,9 +163,7 @@ serve(async (req) => {
   }
 
   // Round cost to 2 decimals
-  function round2(n: number) {
-    return Math.round(n * 100) / 100;
-  }
+  function round2(n: number) { return Math.round(n * 100) / 100; }
   global.cost_planned = round2(global.cost_planned);
   global.cost_actual = round2(global.cost_actual);
   byTeam.forEach((agg) => {
@@ -216,7 +176,7 @@ serve(async (req) => {
   const response = {
     range: { start: startIso, end: endIso },
     global,
-    byTeam: teams.map((t) => ({ team: t, ...byTeam.get(t)! })),
+    byTeam: (["conception", "créa", "dev"] as const).map((t) => ({ team: t, ...byTeam.get(t)! })),
     me,
   };
 

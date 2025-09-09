@@ -33,6 +33,15 @@ type PE = { project_id: string; employee_id: string };
 type ActualRow = { project_id: string; employee_id: string; d: string; minutes: number };
 type PlanRow = { project_id: string; employee_id: string; d: string; planned_minutes: number };
 
+// Company internal cost (per day) and conversion to hourly
+const COST_PER_DAY = { conception: 800, crea: 500, dev: 800 };
+const HOURS_PER_DAY = 8;
+const COST_PER_HOUR = {
+  conception: COST_PER_DAY.conception / HOURS_PER_DAY,
+  crea: COST_PER_DAY.crea / HOURS_PER_DAY,
+  dev: COST_PER_DAY.dev / HOURS_PER_DAY,
+};
+
 function isoWeek(d: Date): number {
   const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
   const dayNum = date.getUTCDay() || 7;
@@ -93,11 +102,6 @@ serve(async (req) => {
   if (!userData?.user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   const userId = userData.user.id;
 
-  const { data: empRow, error: empErr } = await admin.from("employees").select("id").eq("id", userId).maybeSingle();
-  if (empErr) return new Response(JSON.stringify({ error: empErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  if (!empRow) return new Response(JSON.stringify({ error: "Forbidden: orphan session" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-
-  // Load core data
   const [
     { data: projects, error: projErr },
     { data: tariffs, error: tarErr },
@@ -113,9 +117,6 @@ serve(async (req) => {
     const msg = projErr?.message || tarErr?.message || emplErr?.message || peErr?.message || "Unknown error";
     return new Response(JSON.stringify({ error: msg }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
-
-  const tariffsMap = new Map<string, Tariff>();
-  (tariffs ?? []).forEach((t: any) => tariffsMap.set(t.id, t as Tariff));
 
   const empMap = new Map<string, EmployeeRow>();
   (employees ?? []).forEach((e: any) => empMap.set(e.id, e as EmployeeRow));
@@ -157,7 +158,7 @@ serve(async (req) => {
 
   // Load time rows (actuals first, else plans), filtered by year, projects and optionally employees
   const filterProjectIds = [...includedProjectIds];
-  let rows: Array<{ employee_id: string; d: string; minutes: number }> = [];
+  let rows: Array<{ project_id: string; employee_id: string; d: string; minutes: number }> = [];
 
   if (filterProjectIds.length > 0) {
     const [{ data: actuals, error: actErr }] = await Promise.all([
@@ -171,7 +172,7 @@ serve(async (req) => {
     if (actErr) return new Response(JSON.stringify({ error: actErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     if ((actuals ?? []).length > 0) {
-      rows = (actuals ?? []).map((r: any) => ({ employee_id: r.employee_id as string, d: r.d as string, minutes: (r.minutes as number) ?? 0 }));
+      rows = (actuals ?? []).map((r: any) => ({ project_id: r.project_id, employee_id: r.employee_id, d: r.d, minutes: r.minutes ?? 0 }));
     } else {
       const { data: plans, error: planErr } = await admin
         .from("plan_items")
@@ -180,16 +181,14 @@ serve(async (req) => {
         .gte("d", yStart)
         .lte("d", yEnd);
       if (planErr) return new Response(JSON.stringify({ error: planErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      rows = (plans ?? []).map((p: any) => ({ employee_id: p.employee_id as string, d: p.d as string, minutes: (p.planned_minutes as number) ?? 0 }));
+      rows = (plans ?? []).map((p: any) => ({ project_id: p.project_id, employee_id: p.employee_id, d: p.d, minutes: p.planned_minutes ?? 0 }));
     }
   }
 
-  // Apply employee filter if needed
   if (allowedEmployeeIds) {
     rows = rows.filter((r) => allowedEmployeeIds!.has(r.employee_id));
   }
 
-  // Aggregations
   const totalsBySection: Record<"conception" | "crea" | "dev", { hours: number; cost: number }> = {
     conception: { hours: 0, cost: 0 },
     crea: { hours: 0, cost: 0 },
@@ -198,49 +197,17 @@ serve(async (req) => {
   const members = new Map<string, { id: string; name: string; team: string | null; hours: number }>();
   const weeks = new Map<number, { week: number; month: number; hours: number }>();
 
-  // We need project->tariff for cost; create map
-  const projTariff = new Map<string, Tariff | null>();
-  activeProjects.forEach((p) => {
-    projTariff.set(p.id, p.tariff_id ? (tariffsMap.get(p.tariff_id) ?? null) : null);
-  });
-
-  // Re-fetch detailed rows with project_id for accurate costing
-  let rowsDetailed: Array<{ project_id: string; employee_id: string; d: string; minutes: number }> = [];
-  if (filterProjectIds.length > 0) {
-    const { data: actuals2 } = await admin
-      .from("actual_items")
-      .select("project_id, employee_id, d, minutes")
-      .in("project_id", filterProjectIds)
-      .gte("d", yStart)
-      .lte("d", yEnd);
-    if ((actuals2 ?? []).length > 0) {
-      rowsDetailed = (actuals2 ?? []).map((r: any) => ({ project_id: r.project_id, employee_id: r.employee_id, d: r.d, minutes: r.minutes ?? 0 }));
-    } else {
-      const { data: plans2 } = await admin
-        .from("plan_items")
-        .select("project_id, employee_id, d, planned_minutes")
-        .in("project_id", filterProjectIds)
-        .gte("d", yStart)
-        .lte("d", yEnd);
-      rowsDetailed = (plans2 ?? []).map((p: any) => ({ project_id: p.project_id, employee_id: p.employee_id, d: p.d, minutes: p.planned_minutes ?? 0 }));
-    }
-  }
-  if (allowedEmployeeIds) {
-    rowsDetailed = rowsDetailed.filter((r) => allowedEmployeeIds!.has(r.employee_id));
-  }
-
-  for (const r of rowsDetailed) {
+  for (const r of rows) {
     const emp = empMap.get(r.employee_id);
     const sec = sectionSlug(emp?.team ?? null);
     const hours = (r.minutes ?? 0) / 60;
 
-    // cost with project tariff and employee section rate
-    const t = projTariff.get(r.project_id);
-    const rate = t ? (t as any)[rateKey(emp?.team ?? null)] as number : 0;
-    const cost = hours * (rate || 0);
-
+    // hours
     totalsBySection[sec].hours += hours;
-    totalsBySection[sec].cost += cost;
+
+    // internal cost
+    const rate = COST_PER_HOUR[sec];
+    totalsBySection[sec].cost += hours * rate;
 
     // member
     if (emp) {

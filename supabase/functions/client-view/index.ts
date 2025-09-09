@@ -31,6 +31,15 @@ type ClientRow = { id: string; code: string; name: string };
 type EmployeeRow = { id: string; display_name: string | null; first_name: string | null; last_name: string | null; team: string | null };
 type ActualRow = { employee_id: string; d: string; minutes: number };
 
+// Company internal cost rates per day and conversion to hourly
+const COST_PER_DAY = { conception: 800, crea: 500, dev: 800 };
+const HOURS_PER_DAY = 8;
+const COST_PER_HOUR = {
+  conception: COST_PER_DAY.conception / HOURS_PER_DAY,
+  crea: COST_PER_DAY.crea / HOURS_PER_DAY,
+  dev: COST_PER_DAY.dev / HOURS_PER_DAY,
+};
+
 function isoWeek(d: Date): number {
   const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
   const dayNum = date.getUTCDay() || 7;
@@ -93,7 +102,7 @@ serve(async (req) => {
   if (empErr) return new Response(JSON.stringify({ error: empErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   if (!empRow) return new Response(JSON.stringify({ error: "Forbidden: orphan session" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-  // Load project + client + tariff
+  // Load project + client + tariff (tariff only for display; cost uses internal rates)
   const [{ data: project, error: projErr }, { data: client, error: cliErr }] = await Promise.all([
     admin.from("projects").select("id, code, name, client_id, tariff_id, quote_amount, budget_conception, budget_crea, budget_dev").eq("id", body.project_id).maybeSingle(),
     admin.from("clients").select("id, code, name").eq("id", (await admin.from("projects").select("client_id").eq("id", body.project_id).maybeSingle()).data?.client_id ?? "00000000-0000-0000-0000-000000000000").maybeSingle(),
@@ -111,7 +120,7 @@ serve(async (req) => {
   const { data: employees, error: empListErr } = await admin.from("employees").select("id, display_name, first_name, last_name, team");
   if (empListErr) return new Response(JSON.stringify({ error: empListErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   const empMap = new Map<string, EmployeeRow>();
-  (employees ?? []).forEach((e) => empMap.set((e as any).id, e as any));
+  (employees ?? []).forEach((e) => empMap.set(e.id, e as any));
 
   // Prefer actuals for realized, fallback to plans if none
   const { data: actuals, error: actErr } = await admin
@@ -136,7 +145,7 @@ serve(async (req) => {
     rows = (plans ?? []).map((p: any) => ({ employee_id: p.employee_id, d: p.d, minutes: p.planned_minutes ?? 0 }));
   }
 
-  // Aggregations
+  // Aggregations with internal company cost
   const members = new Map<string, { id: string; name: string; team: string | null; hours: number }>();
   const totalsBySection: Record<"conception" | "crea" | "dev", { hours: number; cost: number }> = {
     conception: { hours: 0, cost: 0 },
@@ -158,12 +167,10 @@ serve(async (req) => {
       members.get(key)!.hours += hours;
     }
 
-    // per section
+    // per section with internal cost
     totalsBySection[sec].hours += hours;
-
-    // cost
-    const rate = tariff ? (tariff as any)[rateKey(emp?.team ?? null)] as number : 0;
-    totalsBySection[sec].cost += hours * (rate || 0);
+    const rate = COST_PER_HOUR[sec];
+    totalsBySection[sec].cost += hours * rate;
 
     // weeks
     const [yy, mm, dd] = r.d.split("-").map((x) => parseInt(x, 10));

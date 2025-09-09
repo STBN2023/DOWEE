@@ -9,14 +9,6 @@ const corsHeaders = {
 
 type Payload = { action: "overview" };
 
-type Tariff = {
-  id: string;
-  label: string;
-  rate_conception: number;
-  rate_crea: number;
-  rate_dev: number;
-};
-
 type ProjectRow = {
   id: string;
   status: string;
@@ -40,17 +32,32 @@ type ActualRow = {
   minutes: number;
 };
 
-function mapTeamToRateKey(team: string | null | undefined): "rate_conception" | "rate_crea" | "rate_dev" {
-  if (!team) return "rate_conception";
+// Company internal cost rates (per day)
+const COST_PER_DAY = {
+  conception: 800,
+  crea: 500,
+  dev: 800,
+};
+// Hours per day used to convert daily rates into hourly rates
+const HOURS_PER_DAY = 8;
+const COST_PER_HOUR = {
+  conception: COST_PER_DAY.conception / HOURS_PER_DAY,
+  crea: COST_PER_DAY.crea / HOURS_PER_DAY,
+  dev: COST_PER_DAY.dev / HOURS_PER_DAY,
+};
+
+function sectionFromTeam(team: string | null | undefined): "conception" | "crea" | "dev" {
+  if (!team) return "conception";
   const base = team.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  if (base === "crea" || base === "creation") return "rate_crea";
-  if (base === "dev" || base === "developpement" || base === "developement") return "rate_dev";
-  // commercial, direction, autres → conception par défaut
-  return "rate_conception";
+  if (base === "crea" || base === "creation") return "crea";
+  if (base === "dev" || base === "developpement" || base === "developement") return "dev";
+  return "conception";
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
 
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
@@ -67,6 +74,18 @@ serve(async (req) => {
     });
   }
 
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+  const userClient = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: authHeader } },
+  });
+
+  const admin = createClient(supabaseUrl, serviceRole, {
+    global: { headers: { Authorization: `Bearer ${serviceRole}` } },
+  });
+
   const body = (await req.json().catch(() => ({}))) as Partial<Payload>;
   if (body.action !== "overview") {
     return new Response(JSON.stringify({ error: "Invalid action" }), {
@@ -74,20 +93,6 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-  const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-  // RLS-aware client for current user
-  const userClient = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: authHeader } },
-  });
-
-  // Service client for cross-tenant aggregates
-  const admin = createClient(supabaseUrl, serviceRole, {
-    global: { headers: { Authorization: `Bearer ${serviceRole}` } },
-  });
 
   // Auth + orphan check
   const { data: userData } = await userClient.auth.getUser();
@@ -113,81 +118,51 @@ serve(async (req) => {
     });
   }
 
-  // Load core data in parallel
+  // Load datasets
   const [
     { data: projects, error: projErr },
-    { data: tariffs, error: tarErr },
     { data: employees, error: emplErr },
     { data: plans, error: planErr },
     { data: actuals, error: actErr },
   ] = await Promise.all([
     admin.from("projects").select("id, status, tariff_id"),
-    admin.from("ref_tariffs").select("id, label, rate_conception, rate_crea, rate_dev"),
     admin.from("employees").select("id, team"),
     admin.from("plan_items").select("project_id, employee_id, planned_minutes"),
     admin.from("actual_items").select("project_id, employee_id, minutes"),
   ]);
 
-  if (projErr || tarErr || emplErr || planErr || actErr) {
-    const msg = projErr?.message || tarErr?.message || emplErr?.message || planErr?.message || actErr?.message || "Unknown error";
+  if (projErr || emplErr || planErr || actErr) {
+    const msg = projErr?.message || emplErr?.message || planErr?.message || actErr?.message || "Unknown error";
     return new Response(JSON.stringify({ error: msg }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
-  const tariffMap = new Map<string, Tariff>();
-  (tariffs ?? []).forEach((t) => tariffMap.set(t.id, t as Tariff));
-
   const teamMap = new Map<string, string | null>();
-  (employees ?? []).forEach((e) => teamMap.set(e.id, (e as EmployeeRow).team ?? null));
+  (employees ?? []).forEach((e) => teamMap.set((e as EmployeeRow).id, (e as EmployeeRow).team ?? null));
 
   const result: Record<string, { cost_planned: number; cost_actual: number }> = {};
-  const projectsArr = (projects ?? []) as ProjectRow[];
-
-  // Pre-init projects with 0 cost
-  for (const p of projectsArr) {
+  for (const p of (projects ?? []) as ProjectRow[]) {
     result[p.id] = { cost_planned: 0, cost_actual: 0 };
   }
 
-  // Sum planned
   for (const row of (plans ?? []) as PlanRow[]) {
-    const proj = projectsArr.find((p) => p.id === row.project_id);
-    if (!proj) continue;
-    const tariff = proj.tariff_id ? tariffMap.get(proj.tariff_id) : null;
-    if (!tariff) continue;
-
-    const team = teamMap.get(row.employee_id) ?? null;
-    const rateKey = mapTeamToRateKey(team);
-    const rate = (tariff as any)[rateKey] as number | undefined;
-    if (!rate || isNaN(rate)) continue;
-
-    const minutes = row.planned_minutes ?? 0;
-    const cost = (minutes / 60) * rate;
-    result[row.project_id].cost_planned += cost;
+    const sec = sectionFromTeam(teamMap.get(row.employee_id) ?? null);
+    const rate = sec === "crea" ? COST_PER_HOUR.crea : sec === "dev" ? COST_PER_HOUR.dev : COST_PER_HOUR.conception;
+    const hours = (row.planned_minutes ?? 0) / 60;
+    result[row.project_id].cost_planned += hours * rate;
   }
-
-  // Sum actual
   for (const row of (actuals ?? []) as ActualRow[]) {
-    const proj = projectsArr.find((p) => p.id === row.project_id);
-    if (!proj) continue;
-    const tariff = proj.tariff_id ? tariffMap.get(proj.tariff_id) : null;
-    if (!tariff) continue;
-
-    const team = teamMap.get(row.employee_id) ?? null;
-    const rateKey = mapTeamToRateKey(team);
-    const rate = (tariff as any)[rateKey] as number | undefined;
-    if (!rate || isNaN(rate)) continue;
-
-    const minutes = row.minutes ?? 0;
-    const cost = (minutes / 60) * rate;
-    result[row.project_id].cost_actual += cost;
+    const sec = sectionFromTeam(teamMap.get(row.employee_id) ?? null);
+    const rate = sec === "crea" ? COST_PER_HOUR.crea : sec === "dev" ? COST_PER_HOUR.dev : COST_PER_HOUR.conception;
+    const hours = (row.minutes ?? 0) / 60;
+    result[row.project_id].cost_actual += hours * rate;
   }
 
-  // Round to 2 decimals
-  for (const pid of Object.keys(result)) {
-    result[pid].cost_planned = Math.round(result[pid].cost_planned * 100) / 100;
-    result[pid].cost_actual = Math.round(result[pid].cost_actual * 100) / 100;
+  for (const k of Object.keys(result)) {
+    result[k].cost_planned = Math.round(result[k].cost_planned * 100) / 100;
+    result[k].cost_actual = Math.round(result[k].cost_actual * 100) / 100;
   }
 
   return new Response(JSON.stringify({ costs: result }), {

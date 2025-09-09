@@ -22,16 +22,18 @@ type ProjectRow = {
   tariff_id: string | null;
 };
 type ClientRow = { id: string; code: string; name: string };
-type Tariff = {
-  id: string;
-  label: string;
-  rate_conception: number;
-  rate_crea: number;
-  rate_dev: number;
-};
 type EmployeeRow = { id: string; team: string | null };
 type ActualRow = { project_id: string; employee_id: string; minutes: number };
 type PlanRow = { project_id: string; employee_id: string; planned_minutes: number };
+
+// Company internal cost
+const COST_PER_DAY = { conception: 800, crea: 500, dev: 800 };
+const HOURS_PER_DAY = 8;
+const COST_PER_HOUR = {
+  conception: COST_PER_DAY.conception / HOURS_PER_DAY,
+  crea: COST_PER_DAY.crea / HOURS_PER_DAY,
+  dev: COST_PER_DAY.dev / HOURS_PER_DAY,
+};
 
 function normalizeTeamSlug(input?: string | null): "conception" | "créa" | "dev" | null {
   if (!input) return null;
@@ -41,13 +43,6 @@ function normalizeTeamSlug(input?: string | null): "conception" | "créa" | "dev
   if (base === "commercial" || base === "conception" || base === "direction") return "conception";
   return "conception";
 }
-function rateKey(team: string | null | undefined): "rate_conception" | "rate_crea" | "rate_dev" {
-  const norm = normalizeTeamSlug(team);
-  if (norm === "créa") return "rate_crea";
-  if (norm === "dev") return "rate_dev";
-  return "rate_conception";
-}
-function round2(n: number) { return Math.round(n * 100) / 100; }
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -82,17 +77,15 @@ serve(async (req) => {
   const [
     { data: clients, error: clientsErr },
     { data: projects, error: projErr },
-    { data: tariffs, error: tarErr },
     { data: employees, error: emplErr },
   ] = await Promise.all([
     admin.from("clients").select("id, code, name"),
     admin.from("projects").select("id, code, name, client_id, status, quote_amount, budget_conception, budget_crea, budget_dev, tariff_id").neq("status", "archived"),
-    admin.from("ref_tariffs").select("id, label, rate_conception, rate_crea, rate_dev"),
     admin.from("employees").select("id, team"),
   ]);
 
-  if (clientsErr || projErr || tarErr || emplErr) {
-    const msg = clientsErr?.message || projErr?.message || tarErr?.message || emplErr?.message || "Unknown error";
+  if (clientsErr || projErr || emplErr) {
+    const msg = clientsErr?.message || projErr?.message || emplErr?.message || "Unknown error";
     return new Response(JSON.stringify({ error: msg }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
@@ -126,36 +119,24 @@ serve(async (req) => {
     plans = planRows ?? [];
   }
 
-  // Maps
   const clientsMap = new Map<string, ClientRow>();
   (clients ?? []).forEach((c) => clientsMap.set((c as any).id, c as any));
-  const tariffMap = new Map<string, Tariff>();
-  (tariffs ?? []).forEach((t) => tariffMap.set((t as any).id, t as Tariff));
+
   const teamMap = new Map<string, string | null>();
   (employees ?? []).forEach((e) => teamMap.set((e as EmployeeRow).id, (e as EmployeeRow).team ?? null));
 
-  // Cost per project
+  // Cost per project using internal cost per hour
   const costByProject = new Map<string, number>();
   for (const row of (actuals ?? []) as ActualRow[]) {
-    const proj = activeProjects.find((p) => p.id === row.project_id);
-    if (!proj) continue;
-    const t = proj.tariff_id ? tariffMap.get(proj.tariff_id) ?? null : null;
-    if (!t) continue;
-    const rk = rateKey(teamMap.get(row.employee_id) ?? null);
-    const rate = (t as any)[rk] as number | undefined;
-    if (!rate || isNaN(rate)) continue;
+    const sec = normalizeTeamSlug(teamMap.get(row.employee_id) ?? null) ?? "conception";
+    const rate = sec === "créa" ? COST_PER_HOUR.crea : sec === "dev" ? COST_PER_HOUR.dev : COST_PER_HOUR.conception;
     const hours = (row.minutes ?? 0) / 60;
     costByProject.set(row.project_id, (costByProject.get(row.project_id) ?? 0) + hours * rate);
   }
   for (const row of plans as PlanRow[]) {
-    const proj = activeProjects.find((p) => p.id === row.project_id);
-    if (!proj) continue;
-    if (projectsWithActuals.has(row.project_id)) continue; // only fallback for projects with 0 actuals
-    const t = proj.tariff_id ? tariffMap.get(proj.tariff_id) ?? null : null;
-    if (!t) continue;
-    const rk = rateKey(teamMap.get(row.employee_id) ?? null);
-    const rate = (t as any)[rk] as number | undefined;
-    if (!rate || isNaN(rate)) continue;
+    if (projectsWithActuals.has(row.project_id)) continue;
+    const sec = normalizeTeamSlug(teamMap.get(row.employee_id) ?? null) ?? "conception";
+    const rate = sec === "créa" ? COST_PER_HOUR.crea : sec === "dev" ? COST_PER_HOUR.dev : COST_PER_HOUR.conception;
     const hours = (row.planned_minutes ?? 0) / 60;
     costByProject.set(row.project_id, (costByProject.get(row.project_id) ?? 0) + hours * rate);
   }
@@ -164,8 +145,8 @@ serve(async (req) => {
   for (const p of activeProjects) {
     const sold = (p.quote_amount ?? 0) || ((p.budget_conception ?? 0) + (p.budget_crea ?? 0) + (p.budget_dev ?? 0));
     const cost = costByProject.get(p.id) ?? 0;
-    const margin = round2(sold - cost);
-    const margin_pct = sold > 0 ? round2((margin / sold) * 100) : null;
+    const margin = Math.round((sold - cost) * 100) / 100;
+    const margin_pct = sold > 0 ? Math.round(((margin / sold) * 100) * 100) / 100 : null;
     const cli = p.client_id ? clientsMap.get(p.client_id) ?? null : null;
 
     out.push({
@@ -173,8 +154,8 @@ serve(async (req) => {
       code: p.code,
       name: p.name,
       client: cli ? { id: cli.id, code: cli.code, name: cli.name } : null,
-      sold_ht: round2(sold),
-      cost_realized: round2(cost),
+      sold_ht: Math.round((sold) * 100) / 100,
+      cost_realized: Math.round((cost) * 100) / 100,
       margin,
       margin_pct,
     });
