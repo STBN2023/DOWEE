@@ -27,6 +27,8 @@ import ProfitabilityProjects from "./pages/ProfitabilityProjects";
 import ExitValidationGuard from "./components/ExitValidationGuard";
 import AdminInternalCosts from "./pages/AdminInternalCosts";
 import AdminLLM from "./pages/AdminLLM";
+import { TickerProvider } from "./components/ticker/TickerProvider";
+import TickerBar from "./components/ticker/TickerBar";
 
 const queryClient = new QueryClient();
 
@@ -37,143 +39,146 @@ const App = () => (
       <Sonner />
       <AuthProvider>
         <RoleProvider>
-          <BrowserRouter>
-            <ExitValidationGuard />
-            <Header />
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/login" element={<Login />} />
-              <Route
-                path="/today"
-                element={
-                  <ProtectedRoute>
-                    <Today />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/day"
-                element={
-                  <ProtectedRoute>
-                    <Daily />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/planning"
-                element={
-                  <ProtectedRoute>
-                    <PlanningPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/dashboards"
-                element={
-                  <ProtectedRoute>
-                    <Dashboards />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/reports/changes"
-                element={
-                  <ProtectedRoute>
-                    <ReportsChanges />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/profitability/clients"
-                element={
-                  <ProtectedRoute>
-                    <ProfitabilityClients />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/profitability/projects"
-                element={
-                  <ProtectedRoute>
-                    <ProfitabilityProjects />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin"
-                element={
-                  <ProtectedRoute>
-                    <Admin />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/employees"
-                element={
-                  <ProtectedRoute>
-                    <AdminEmployees />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/clients"
-                element={
-                  <ProtectedRoute>
-                    <AdminClients />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/projects"
-                element={
-                  <ProtectedRoute>
-                    <AdminProjects />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/tariffs"
-                element={
-                  <ProtectedRoute>
-                    <AdminTariffs />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/internal-costs"
-                element={
-                  <ProtectedRoute>
-                    <AdminInternalCosts />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/references"
-                element={
-                  <ProtectedRoute>
-                    <AdminReferences />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/llm"
-                element={
-                  <ProtectedRoute>
-                    <AdminLLM />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/debug"
-                element={
-                  <ProtectedRoute>
-                    <Debug />
-                  </ProtectedRoute>
-                }
-              />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
+          <TickerProvider>
+            <BrowserRouter>
+              <ExitValidationGuard />
+              <Header />
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/login" element={<Login />} />
+                <Route
+                  path="/today"
+                  element={
+                    <ProtectedRoute>
+                      <Today />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/day"
+                  element={
+                    <ProtectedRoute>
+                      <Daily />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/planning"
+                  element={
+                    <ProtectedRoute>
+                      <PlanningPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/dashboards"
+                  element={
+                    <ProtectedRoute>
+                      <Dashboards />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/reports/changes"
+                  element={
+                    <ProtectedRoute>
+                      <ReportsChanges />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/profitability/clients"
+                  element={
+                    <ProtectedRoute>
+                      <ProfitabilityClients />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/profitability/projects"
+                  element={
+                    <ProtectedRoute>
+                      <ProfitabilityProjects />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin"
+                  element={
+                    <ProtectedRoute>
+                      <Admin />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/employees"
+                  element={
+                    <ProtectedRoute>
+                      <AdminEmployees />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/clients"
+                  element={
+                    <ProtectedRoute>
+                      <AdminClients />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/projects"
+                  element={
+                    <ProtectedRoute>
+                      <AdminProjects />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/tariffs"
+                  element={
+                    <ProtectedRoute>
+                      <AdminTariffs />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/internal-costs"
+                  element={
+                    <ProtectedRoute>
+                      <AdminInternalCosts />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/references"
+                  element={
+                    <ProtectedRoute>
+                      <AdminReferences />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/llm"
+                  element={
+                    <ProtectedRoute>
+                      <AdminLLM />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/debug"
+                  element={
+                    <ProtectedRoute>
+                      <Debug />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+              <TickerBar />
+            </BrowserRouter>
+          </TickerProvider>
         </RoleProvider>
       </AuthProvider>
     </TooltipProvider>
