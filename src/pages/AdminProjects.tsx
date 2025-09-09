@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Pencil, Plus, Users, Trash2, ChevronDown, ChevronUp, Archive } from "lucide-react";
+import { Pencil, Plus, Users, Trash2, ChevronDown, ChevronUp, Archive, Play } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
 import {
@@ -131,8 +131,8 @@ const AdminProjects = () => {
     client_id: string;
     tariff_id: string | null;
     quote_amount: string;
-    due_date: string; // YYYY-MM-DD
-    effort_days: string; // as text, convert to number
+    due_date: string;
+    effort_days: string;
   }>({
     name: "",
     status: "active",
@@ -338,11 +338,21 @@ const AdminProjects = () => {
     if (!finalizeFor) return;
     try {
       const res = await finalizeProject(finalizeFor.id, { delete_future_plans: true });
-      showSuccess(`Projet finalisé. ${res.deleted_future ? `${res.deleted_future} créneau(x) futur(s) supprimé(s).` : ""}`);
+      showSuccess(`Projet mis en pause. ${res.deleted_future ? `${res.deleted_future} créneau(x) futur(s) supprimé(s).` : ""}`);
       setFinalizeFor(null);
       await refresh();
     } catch (e: any) {
       showError(e?.message || "Finalisation impossible.");
+    }
+  };
+
+  const reopen = async (p: Project) => {
+    try {
+      await updateProject(p.id, { status: "active" });
+      showSuccess("Projet rouvert.");
+      await refresh();
+    } catch (e: any) {
+      showError(e?.message || "Réouverture impossible.");
     }
   };
 
@@ -607,7 +617,8 @@ const AdminProjects = () => {
                               </DialogContent>
                             </Dialog>
 
-                            {p.status !== "archived" && (
+                            {/* Finaliser (actif -> pause) */}
+                            {p.status === "active" && (
                               <AlertDialog open={finalizeFor?.id === p.id} onOpenChange={(o) => (o ? setFinalizeFor(p) : setFinalizeFor(null))}>
                                 <AlertDialogTrigger asChild>
                                   <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]">
@@ -619,7 +630,7 @@ const AdminProjects = () => {
                                   <AlertDialogHeader>
                                     <AlertDialogTitle>Finaliser ce projet ?</AlertDialogTitle>
                                     <AlertDialogDescription>
-                                      Cela archive le projet (statut “archived”) et supprime les créneaux planifiés à venir. L’historique passé est conservé.
+                                      Cela met le projet en pause (statut “on hold”) et supprime les créneaux planifiés à venir. L’historique passé est conservé.
                                     </AlertDialogDescription>
                                   </AlertDialogHeader>
                                   <AlertDialogFooter>
@@ -628,6 +639,14 @@ const AdminProjects = () => {
                                   </AlertDialogFooter>
                                 </AlertDialogContent>
                               </AlertDialog>
+                            )}
+
+                            {/* Rouvrir (pause -> actif) */}
+                            {p.status === "onhold" && (
+                              <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={() => reopen(p)}>
+                                <Play className="mr-2 h-4 w-4" />
+                                Rouvrir
+                              </Button>
                             )}
 
                             <AlertDialog>
@@ -707,7 +726,6 @@ const AdminProjects = () => {
         </CardContent>
       </Card>
 
-      {/* Confirm Finalize (global) */}
       <AlertDialog open={!!finalizeFor} onOpenChange={(o) => !o && setFinalizeFor(null)}>
         {/* Trigger handled per-row; this is kept to satisfy controlled modal typing */}
       </AlertDialog>

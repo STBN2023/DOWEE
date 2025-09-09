@@ -69,7 +69,6 @@ serve(async (req) => {
   const body = (await req.json().catch(() => ({}))) as Partial<Payload>;
   const action = body?.action;
 
-  // Resolve current user
   const { data: userData, error: userErr } = await supabase.auth.getUser();
   if (userErr || !userData?.user) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -80,7 +79,6 @@ serve(async (req) => {
   const user = userData.user;
   const userId = user.id;
 
-  // Orphan check (server-side): employees row must exist — auto-create if missing
   const { data: empRow, error: empErr } = await admin
     .from("employees")
     .select("id")
@@ -95,7 +93,6 @@ serve(async (req) => {
   }
 
   if (!empRow) {
-    // Auto-create minimal profile
     const display_name =
       (user.user_metadata?.display_name as string | undefined)?.trim() ||
       user.email ||
@@ -127,7 +124,6 @@ serve(async (req) => {
     const startIso = isoDate(start);
     const endIso = isoDate(end);
 
-    // Plans of the week
     const { data: plans, error: plansError } = await supabase
       .from("plan_items")
       .select("id, d, hour, project_id, planned_minutes, note")
@@ -144,7 +140,6 @@ serve(async (req) => {
       });
     }
 
-    // Assigned projects (non-archived)
     const { data: pe, error: peError } = await supabase
       .from("project_employees")
       .select("project_id")
@@ -165,7 +160,7 @@ serve(async (req) => {
         .from("projects")
         .select("id, code, name, status")
         .in("id", projectIds)
-        .neq("status", "archived");
+        .eq("status", "active");
 
       if (projError) {
         return new Response(JSON.stringify({ error: projError.message }), {
@@ -193,7 +188,6 @@ serve(async (req) => {
     const upserts = payload.upserts ?? [];
     const deletes = payload.deletes ?? [];
 
-    // Helper to insert a log row
     async function insertLog(row: {
       d: string;
       hour: number;
@@ -215,7 +209,6 @@ serve(async (req) => {
       });
     }
 
-    // Deletes
     for (const del of deletes) {
       if (del.id) {
         const { data: before } = await supabase
@@ -284,7 +277,6 @@ serve(async (req) => {
       }
     }
 
-    // Upserts: delete duplicates then insert 60 min lines, and log change
     for (const up of upserts) {
       const planned_minutes = up.planned_minutes ?? 60;
       const note = up.note ?? null;

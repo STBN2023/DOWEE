@@ -154,7 +154,6 @@ serve(async (req) => {
     const due_date = typeof body.project.due_date === "string" ? body.project.due_date : null;
     const effort_days = typeof body.project.effort_days === "number" ? body.project.effort_days : null;
 
-    // Récupérer le code client
     const { data: client, error: clientErr } = await admin.from("clients").select("code").eq("id", client_id).maybeSingle();
     if (clientErr || !client) {
       return new Response(JSON.stringify({ error: clientErr?.message || "Client inexistant" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -162,7 +161,6 @@ serve(async (req) => {
     const clientCode = String(client.code).toUpperCase().replace(/[^A-Z0-9\-]/g, "");
     const year = new Date().getFullYear();
 
-    // Trouver le prochain numéro pour ce client et cette année
     const prefix = `${clientCode}-${year}-`;
     const { data: sameYear, error: listErr } = await admin
       .from("projects")
@@ -183,7 +181,6 @@ serve(async (req) => {
     const nextNum = maxNum + 1;
     const code = `${prefix}${pad3(nextNum)}`;
 
-    // Créer le projet
     const { data: newProj, error: insErr } = await admin
       .from("projects")
       .insert({
@@ -279,8 +276,8 @@ serve(async (req) => {
     const deleteFuture = body.delete_future_plans !== false; // par défaut true
     const todayIso = todayIsoLocal();
 
-    // 1) Archiver le projet
-    const { error: upErr } = await admin.from("projects").update({ status: "archived" }).eq("id", project_id);
+    // 1) Mettre en pause (on hold) le projet
+    const { error: upErr } = await admin.from("projects").update({ status: "onhold" }).eq("id", project_id);
     if (upErr) return new Response(JSON.stringify({ error: upErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     // 2) Supprimer les créneaux futurs (on conserve l'historique)
