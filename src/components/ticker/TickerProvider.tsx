@@ -3,11 +3,8 @@ import { getAlerts } from "@/api/alerts";
 import { useAuth } from "@/context/AuthContext";
 import { useTickerSettings } from "@/context/TickerSettingsContext";
 import {
-  fetchWeatherItems,
-  fetchWeatherByCoords,
   fetchWeatherItemsWeatherAPI,
   fetchWeatherByCoordsWeatherAPI,
-  localTipsItems,
   type TickerItem,
 } from "@/api/tickerExtras";
 
@@ -33,9 +30,7 @@ export const TickerProvider = ({ children }: { children: React.ReactNode }) => {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           clearTimeout(timer);
-          const lat = pos.coords.latitude;
-          const lon = pos.coords.longitude;
-          resolve({ lat, lon });
+          resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude });
         },
         () => {
           clearTimeout(timer);
@@ -71,17 +66,10 @@ export const TickerProvider = ({ children }: { children: React.ReactNode }) => {
       }
 
       if (settings.modules.weather) {
-        const provider = settings.weatherProvider as "open-meteo" | "weatherapi";
         if (settings.useGeo) {
           if (typeof settings.lat === "number" && typeof settings.lon === "number") {
             promises.push(
-              (provider === "weatherapi"
-                ? fetchWeatherByCoordsWeatherAPI(settings.lat, settings.lon)
-                : fetchWeatherByCoords(settings.lat, settings.lon)
-              ).catch(async () => {
-                // Fallback Open-Meteo si WeatherAPI indisponible
-                return await fetchWeatherByCoords(settings.lat, settings.lon).catch(() => []);
-              })
+              fetchWeatherByCoordsWeatherAPI(settings.lat, settings.lon).catch(() => [])
             );
           } else {
             const p = askBrowserPosition()
@@ -89,42 +77,25 @@ export const TickerProvider = ({ children }: { children: React.ReactNode }) => {
                 if (coords) {
                   setGeo({ lat: coords.lat, lon: coords.lon });
                   try {
-                    if (provider === "weatherapi") {
-                      return await fetchWeatherByCoordsWeatherAPI(coords.lat, coords.lon);
-                    }
-                    return await fetchWeatherByCoords(coords.lat, coords.lon);
+                    return await fetchWeatherByCoordsWeatherAPI(coords.lat, coords.lon);
                   } catch {
-                    return await fetchWeatherByCoords(coords.lat, coords.lon).catch(() => []);
+                    return [];
                   }
                 }
-                // Pas de géoloc → fallback ville
-                if (provider === "weatherapi") {
-                  try {
-                    return await fetchWeatherItemsWeatherAPI(settings.weatherCity);
-                  } catch {
-                    return await fetchWeatherItems(settings.weatherCity);
-                  }
-                }
-                return await fetchWeatherItems(settings.weatherCity);
+                return await fetchWeatherItemsWeatherAPI(settings.weatherCity).catch(() => []);
               })
               .catch(() => []);
             promises.push(p);
           }
         } else {
-          promises.push(
-            (provider === "weatherapi"
-              ? fetchWeatherItemsWeatherAPI(settings.weatherCity)
-              : fetchWeatherItems(settings.weatherCity)
-            ).catch(async () => {
-              // Fallback Open-Meteo si WeatherAPI indisponible
-              return await fetchWeatherItems(settings.weatherCity).catch(() => []);
-            })
-          );
+          promises.push(fetchWeatherItemsWeatherAPI(settings.weatherCity).catch(() => []));
         }
       }
 
-      if (settings.modules.tips) {
-        promises.push(Promise.resolve(localTipsItems(6)));
+      // Message personnalisé
+      const msg = (settings.customMessage || "").trim();
+      if (msg.length > 0) {
+        promises.push(Promise.resolve([{ id: "custom-message", short: msg, severity: "info" }]));
       }
 
       const results = await Promise.all(promises);
@@ -149,13 +120,12 @@ export const TickerProvider = ({ children }: { children: React.ReactNode }) => {
     session,
     employee,
     settings.modules.alerts,
-    settings.modules.tips,
     settings.modules.weather,
     settings.useGeo,
     settings.lat,
     settings.lon,
     settings.weatherCity,
-    settings.weatherProvider,
+    settings.customMessage,
     askBrowserPosition,
     setGeo,
   ]);

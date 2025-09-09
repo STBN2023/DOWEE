@@ -3,9 +3,7 @@ import React from "react";
 export type TickerModules = {
   alerts: boolean;
   weather: boolean;
-  tips: boolean;
 };
-export type WeatherProvider = "open-meteo" | "weatherapi";
 
 export type TickerSettings = {
   modules: TickerModules;
@@ -13,7 +11,7 @@ export type TickerSettings = {
   useGeo: boolean;
   lat: number | null;
   lon: number | null;
-  weatherProvider: WeatherProvider;
+  customMessage: string; // message libre diffusé dans le bandeau
 };
 
 type Ctx = {
@@ -21,7 +19,7 @@ type Ctx = {
   setModules: (mods: Partial<TickerModules>) => void;
   setWeatherCity: (city: string) => void;
   setGeo: (patch: Partial<{ useGeo: boolean; lat: number | null; lon: number | null }>) => void;
-  setWeatherProvider: (p: WeatherProvider) => void;
+  setCustomMessage: (msg: string) => void;
 };
 
 const LS_KEY = "dowee.ticker.settings";
@@ -30,13 +28,12 @@ const defaultSettings: TickerSettings = {
   modules: {
     alerts: true,
     weather: true,
-    tips: true,
   },
   weatherCity: "Paris",
   useGeo: false,
   lat: null,
   lon: null,
-  weatherProvider: "open-meteo",
+  customMessage: "",
 };
 
 function loadSettings(): TickerSettings {
@@ -48,13 +45,12 @@ function loadSettings(): TickerSettings {
       modules: {
         alerts: p?.modules?.alerts ?? true,
         weather: p?.modules?.weather ?? true,
-        tips: p?.modules?.tips ?? true,
       },
       weatherCity: typeof p?.weatherCity === "string" && p.weatherCity.trim() ? p.weatherCity.trim() : "Paris",
       useGeo: !!p?.useGeo,
       lat: typeof p?.lat === "number" ? p.lat : null,
       lon: typeof p?.lon === "number" ? p.lon : null,
-      weatherProvider: (p?.weatherProvider === "weatherapi" || p?.weatherProvider === "open-meteo") ? p.weatherProvider : "open-meteo",
+      customMessage: typeof p?.customMessage === "string" ? p.customMessage : "",
     };
   } catch {
     return defaultSettings;
@@ -94,15 +90,18 @@ export const TickerSettingsProvider = ({ children }: { children: React.ReactNode
     });
   };
 
-  const setWeatherProvider = (p: WeatherProvider) => {
+  const setCustomMessage = (msg: string) => {
     setSettings((prev) => {
-      const next = { ...prev, weatherProvider: p };
+      const next = { ...prev, customMessage: msg };
       saveSettings(next);
       return next;
     });
   };
 
-  const value = React.useMemo<Ctx>(() => ({ settings, setModules, setWeatherCity, setGeo, setWeatherProvider }), [settings]);
+  const value = React.useMemo<Ctx>(
+    () => ({ settings, setModules, setWeatherCity, setGeo, setCustomMessage }),
+    [settings]
+  );
 
   return <TickerSettingsContext.Provider value={value}>{children}</TickerSettingsContext.Provider>;
 };

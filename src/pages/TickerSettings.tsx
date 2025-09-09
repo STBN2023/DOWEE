@@ -7,13 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useTickerSettings } from "@/context/TickerSettingsContext";
 import { useTicker } from "@/components/ticker/TickerProvider";
 import { Info, Navigation } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 
 const Row = ({ children }: { children: React.ReactNode }) => (
   <div className="flex items-center justify-between rounded-md border border-[#BFBFBF] bg-white px-3 py-2">
@@ -22,16 +16,22 @@ const Row = ({ children }: { children: React.ReactNode }) => (
 );
 
 const TickerSettingsPage: React.FC = () => {
-  const { settings, setModules, setWeatherCity, setGeo, setWeatherProvider } = useTickerSettings();
+  const { settings, setModules, setWeatherCity, setGeo, setCustomMessage } = useTickerSettings();
   const { refresh } = useTicker();
 
   const [city, setCity] = React.useState(settings.weatherCity);
   const [detecting, setDetecting] = React.useState(false);
   const [geoInfo, setGeoInfo] = React.useState<string | null>(null);
+  const [message, setMessage] = React.useState(settings.customMessage);
 
   const saveCity = () => {
     const v = city.trim();
     setWeatherCity(v || "Paris");
+  };
+
+  const saveMessage = async () => {
+    setCustomMessage(message);
+    await refresh();
   };
 
   const detectPosition = async () => {
@@ -80,30 +80,12 @@ const TickerSettingsPage: React.FC = () => {
             <div className="flex items-start gap-2">
               <Info className="mt-0.5 h-4 w-4 text-[#F2994A]" />
               <div>
-                Activez des modules pour enrichir le bandeau. Vous pouvez combiner Alertes internes, Météo (ville ou géolocalisation) et Astuces.
+                Configurez la météo (WeatherAPI) et définissez un message personnalisé diffusé en continu.
               </div>
             </div>
           </div>
 
-          {/* Choix du fournisseur météo */}
-          <Row>
-            <div className="flex flex-col gap-1">
-              <Label className="text-[#214A33]">Fournisseur météo</Label>
-              <span className="text-[11px] text-[#214A33]/60">
-                WeatherAPI nécessite une clé côté serveur (fallback automatique vers Open‑Meteo si absente).
-              </span>
-            </div>
-            <Select value={settings.weatherProvider} onValueChange={(v) => setWeatherProvider(v as any)}>
-              <SelectTrigger className="w-[200px] bg-white border-[#BFBFBF] text-[#214A33]">
-                <SelectValue placeholder="Choisir le fournisseur" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="open-meteo">Open‑Meteo (libre)</SelectItem>
-                <SelectItem value="weatherapi">WeatherAPI (clé requise)</SelectItem>
-              </SelectContent>
-            </Select>
-          </Row>
-
+          {/* Alertes */}
           <Row>
             <div className="flex items-center gap-3">
               <Label className="text-[#214A33]">Alertes internes</Label>
@@ -112,15 +94,20 @@ const TickerSettingsPage: React.FC = () => {
             <Switch checked={settings.modules.alerts} onCheckedChange={(v) => setModules({ alerts: !!v })} />
           </Row>
 
+          {/* Météo WeatherAPI */}
           <Row>
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-3">
-                <Label className="text-[#214A33]">Météo</Label>
+            <div className="flex w-full flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Label className="text-[#214A33]">Météo (WeatherAPI)</Label>
+                </div>
+                <Switch checked={settings.modules.weather} onCheckedChange={(v) => setModules({ weather: !!v })} />
               </div>
+
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-[#214A33]/60">Ville</span>
-                  <Input value={city} onChange={(e) => setCity(e.target.value)} className="h-8 w-[180px]" placeholder="Paris" />
+                  <Input value={city} onChange={(e) => setCity(e.target.value)} className="h-8 w-[200px]" placeholder="Paris" />
                   <Button variant="outline" className="h-8 border-[#BFBFBF] text-[#214A33]" onClick={saveCity}>Enregistrer</Button>
                 </div>
                 <div className="flex items-center gap-2">
@@ -147,26 +134,38 @@ const TickerSettingsPage: React.FC = () => {
                 )}
                 {geoInfo && <div className="text-xs text-[#214A33]/70">{geoInfo}</div>}
               </div>
+              <div className="text-[11px] text-[#214A33]/60">
+                Note: la clé WeatherAPI est gérée côté serveur (Supabase functions). Si indisponible, la météo peut ne pas s’afficher.
+              </div>
             </div>
-            <Switch checked={settings.modules.weather} onCheckedChange={(v) => setModules({ weather: !!v })} />
           </Row>
 
-          <Row>
-            <div className="flex items-center gap-3">
-              <Label className="text-[#214A33]">Astuces</Label>
-              <span className="text-xs text-[#214A33]/60">petits conseils d’utilisation</span>
+          {/* Message personnalisé */}
+          <div className="rounded-md border border-[#BFBFBF] bg-white p-3">
+            <Label className="mb-2 block text-[#214A33]">Message personnalisé</Label>
+            <Textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Saisissez ici le message à diffuser dans le bandeau…"
+              className="min-h-[90px]"
+            />
+            <div className="mt-2 flex gap-2">
+              <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={() => setMessage("")}>
+                Effacer
+              </Button>
+              <Button className="bg-[#214A33] text-white hover:bg-[#214A33]/90" onClick={saveMessage}>
+                Enregistrer le message
+              </Button>
             </div>
-            <Switch checked={settings.modules.tips} onCheckedChange={(v) => setModules({ tips: !!v })} />
-          </Row>
+            <div className="mt-1 text-[11px] text-[#214A33]/60">
+              Le message s’ajoute aux alertes internes et à la météo lorsque ces modules sont activés.
+            </div>
+          </div>
 
           <div className="pt-2">
             <Button className="bg-[#214A33] text-white hover:bg-[#214A33]/90" onClick={refresh}>
               Rafraîchir le bandeau
             </Button>
-          </div>
-
-          <div className="text-xs text-[#214A33]/60">
-            Note: la géolocalisation nécessite votre accord. En cas de refus, la météo utilise la ville configurée.
           </div>
         </CardContent>
       </Card>
