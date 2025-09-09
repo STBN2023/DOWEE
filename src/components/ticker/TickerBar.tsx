@@ -28,7 +28,7 @@ const TickerBar: React.FC = () => {
       <div className="relative overflow-hidden">
         <div
           className={cn(
-            "whitespace-nowrap py-2 px-3 text-sm text-[#214A33]",
+            "whitespace-nowrap py-2 px-0 text-sm text-[#214A33] translate-x-0",
             !prefersReduced && "animate-[ticker_30s_linear_infinite] hover:[animation-play-state:paused]"
           )}
         >
@@ -45,7 +45,7 @@ const TickerBar: React.FC = () => {
         {`
         @keyframes ticker {
           0% { transform: translateX(0%); }
-          100% { transform: translateX(-50%); }
+          100% { transform: translateX(-100%); }
         }
         `}
       </style>
