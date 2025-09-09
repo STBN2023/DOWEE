@@ -5,6 +5,7 @@ export type TickerModules = {
   weather: boolean;
   tips: boolean;
 };
+export type WeatherProvider = "open-meteo" | "weatherapi";
 
 export type TickerSettings = {
   modules: TickerModules;
@@ -12,6 +13,7 @@ export type TickerSettings = {
   useGeo: boolean;
   lat: number | null;
   lon: number | null;
+  weatherProvider: WeatherProvider;
 };
 
 type Ctx = {
@@ -19,6 +21,7 @@ type Ctx = {
   setModules: (mods: Partial<TickerModules>) => void;
   setWeatherCity: (city: string) => void;
   setGeo: (patch: Partial<{ useGeo: boolean; lat: number | null; lon: number | null }>) => void;
+  setWeatherProvider: (p: WeatherProvider) => void;
 };
 
 const LS_KEY = "dowee.ticker.settings";
@@ -33,6 +36,7 @@ const defaultSettings: TickerSettings = {
   useGeo: false,
   lat: null,
   lon: null,
+  weatherProvider: "open-meteo",
 };
 
 function loadSettings(): TickerSettings {
@@ -50,6 +54,7 @@ function loadSettings(): TickerSettings {
       useGeo: !!p?.useGeo,
       lat: typeof p?.lat === "number" ? p.lat : null,
       lon: typeof p?.lon === "number" ? p.lon : null,
+      weatherProvider: (p?.weatherProvider === "weatherapi" || p?.weatherProvider === "open-meteo") ? p.weatherProvider : "open-meteo",
     };
   } catch {
     return defaultSettings;
@@ -89,7 +94,15 @@ export const TickerSettingsProvider = ({ children }: { children: React.ReactNode
     });
   };
 
-  const value = React.useMemo<Ctx>(() => ({ settings, setModules, setWeatherCity, setGeo }), [settings]);
+  const setWeatherProvider = (p: WeatherProvider) => {
+    setSettings((prev) => {
+      const next = { ...prev, weatherProvider: p };
+      saveSettings(next);
+      return next;
+    });
+  };
+
+  const value = React.useMemo<Ctx>(() => ({ settings, setModules, setWeatherCity, setGeo, setWeatherProvider }), [settings]);
 
   return <TickerSettingsContext.Provider value={value}>{children}</TickerSettingsContext.Provider>;
 };

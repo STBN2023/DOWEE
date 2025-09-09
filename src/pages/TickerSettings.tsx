@@ -7,6 +7,13 @@ import { Button } from "@/components/ui/button";
 import { useTickerSettings } from "@/context/TickerSettingsContext";
 import { useTicker } from "@/components/ticker/TickerProvider";
 import { Info, Navigation } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const Row = ({ children }: { children: React.ReactNode }) => (
   <div className="flex items-center justify-between rounded-md border border-[#BFBFBF] bg-white px-3 py-2">
@@ -15,7 +22,7 @@ const Row = ({ children }: { children: React.ReactNode }) => (
 );
 
 const TickerSettingsPage: React.FC = () => {
-  const { settings, setModules, setWeatherCity, setGeo } = useTickerSettings();
+  const { settings, setModules, setWeatherCity, setGeo, setWeatherProvider } = useTickerSettings();
   const { refresh } = useTicker();
 
   const [city, setCity] = React.useState(settings.weatherCity);
@@ -42,10 +49,8 @@ const TickerSettingsPage: React.FC = () => {
             clearTimeout(timer);
             const lat = pos.coords.latitude;
             const lon = pos.coords.longitude;
-            // Active automatiquement l’usage de la position + enregistre lat/lon
             setGeo({ useGeo: true, lat, lon });
             setGeoInfo(`Position enregistrée: ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
-            // Rafraîchir immédiatement le bandeau
             await refresh();
             resolve();
           },
@@ -58,7 +63,7 @@ const TickerSettingsPage: React.FC = () => {
         );
       });
     } catch {
-      // déjà géré
+      // géré ci-dessus
     } finally {
       setDetecting(false);
     }
@@ -79,6 +84,25 @@ const TickerSettingsPage: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {/* Choix du fournisseur météo */}
+          <Row>
+            <div className="flex flex-col gap-1">
+              <Label className="text-[#214A33]">Fournisseur météo</Label>
+              <span className="text-[11px] text-[#214A33]/60">
+                WeatherAPI nécessite une clé côté serveur (fallback automatique vers Open‑Meteo si absente).
+              </span>
+            </div>
+            <Select value={settings.weatherProvider} onValueChange={(v) => setWeatherProvider(v as any)}>
+              <SelectTrigger className="w-[200px] bg-white border-[#BFBFBF] text-[#214A33]">
+                <SelectValue placeholder="Choisir le fournisseur" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="open-meteo">Open‑Meteo (libre)</SelectItem>
+                <SelectItem value="weatherapi">WeatherAPI (clé requise)</SelectItem>
+              </SelectContent>
+            </Select>
+          </Row>
 
           <Row>
             <div className="flex items-center gap-3">

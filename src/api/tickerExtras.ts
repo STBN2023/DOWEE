@@ -21,7 +21,7 @@ function wxDescFromCode(code: number) {
   return "Météo";
 }
 
-// Météo via ville
+// -------- Open-Meteo (par défaut, sans clé) --------
 export async function fetchWeatherItems(city: string): Promise<TickerItem[]> {
   const name = (city || "Paris").trim();
   const geo = await fetch(
@@ -36,7 +36,6 @@ export async function fetchWeatherItems(city: string): Promise<TickerItem[]> {
   return fetchWeatherByCoords(lat, lon, cityLabel);
 }
 
-// Météo via coordonnées; reverse geocode pour un nom humain lisible
 export async function fetchWeatherByCoords(lat: number, lon: number, label?: string): Promise<TickerItem[]> {
   let cityLabel = label;
   if (!cityLabel) {
@@ -44,8 +43,6 @@ export async function fetchWeatherByCoords(lat: number, lon: number, label?: str
       `https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}&longitude=${lon}&language=fr&format=json&count=1`
     ).then((r) => r.json()).catch(() => null as any);
     const loc = rev?.results?.[0];
-
-    // Essayer plusieurs champs, puis fallback coordonnées si tout échoue
     const name =
       (loc?.name && String(loc.name)) ||
       (loc?.admin1 && String(loc.admin1)) ||
@@ -69,6 +66,27 @@ export async function fetchWeatherByCoords(lat: number, lon: number, label?: str
 
   return [
     { id: `wx-${cityLabel}`, short: `Météo ${cityLabel}: ${t}°C • Max ${tMax}° / Min ${tMin}° • ${wDesc}`, severity: "info" },
+  ];
+}
+
+// -------- WeatherAPI (via Edge Function, clé requise) --------
+import { supabase } from "@/integrations/supabase/client";
+
+export async function fetchWeatherItemsWeatherAPI(city: string): Promise<TickerItem[]> {
+  const res = await supabase.functions.invoke("weatherapi", { body: { action: "byCity", city } });
+  if (res.error) throw res.error;
+  const data = res.data as { label: string; temp_c: number; tmin_c: number; tmax_c: number; condition: string };
+  return [
+    { id: `wx-${data.label}`, short: `Météo ${data.label}: ${data.temp_c}°C • Max ${data.tmax_c}° / Min ${data.tmin_c}° • ${data.condition}`, severity: "info" },
+  ];
+}
+
+export async function fetchWeatherByCoordsWeatherAPI(lat: number, lon: number): Promise<TickerItem[]> {
+  const res = await supabase.functions.invoke("weatherapi", { body: { action: "byCoords", lat, lon } });
+  if (res.error) throw res.error;
+  const data = res.data as { label: string; temp_c: number; tmin_c: number; tmax_c: number; condition: string };
+  return [
+    { id: `wx-${data.label}`, short: `Météo ${data.label}: ${data.temp_c}°C • Max ${data.tmax_c}° / Min ${data.tmin_c}° • ${data.condition}`, severity: "info" },
   ];
 }
 

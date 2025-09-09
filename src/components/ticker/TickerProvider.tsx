@@ -2,7 +2,14 @@ import React from "react";
 import { getAlerts } from "@/api/alerts";
 import { useAuth } from "@/context/AuthContext";
 import { useTickerSettings } from "@/context/TickerSettingsContext";
-import { fetchWeatherItems, fetchWeatherByCoords, localTipsItems, type TickerItem } from "@/api/tickerExtras";
+import {
+  fetchWeatherItems,
+  fetchWeatherByCoords,
+  fetchWeatherItemsWeatherAPI,
+  fetchWeatherByCoordsWeatherAPI,
+  localTipsItems,
+  type TickerItem,
+} from "@/api/tickerExtras";
 
 type TickerContextValue = {
   items: TickerItem[];
@@ -22,7 +29,7 @@ export const TickerProvider = ({ children }: { children: React.ReactNode }) => {
   const askBrowserPosition = React.useCallback((): Promise<{ lat: number; lon: number } | null> => {
     return new Promise((resolve) => {
       if (!("geolocation" in navigator)) return resolve(null);
-      const timer = setTimeout(() => resolve(null), 8000); // timeout doux
+      const timer = setTimeout(() => resolve(null), 8000);
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           clearTimeout(timer);
@@ -64,17 +71,39 @@ export const TickerProvider = ({ children }: { children: React.ReactNode }) => {
       }
 
       if (settings.modules.weather) {
+        const provider = settings.weatherProvider as "open-meteo" | "weatherapi";
         if (settings.useGeo) {
           if (typeof settings.lat === "number" && typeof settings.lon === "number") {
-            promises.push(fetchWeatherByCoords(settings.lat, settings.lon).catch(() => []));
+            promises.push(
+              (provider === "weatherapi"
+                ? fetchWeatherByCoordsWeatherAPI(settings.lat, settings.lon)
+                : fetchWeatherByCoords(settings.lat, settings.lon)
+              ).catch(async () => {
+                // Fallback Open-Meteo si WeatherAPI indisponible
+                return await fetchWeatherByCoords(settings.lat, settings.lon).catch(() => []);
+              })
+            );
           } else {
-            // Demander la position si absente, puis fallback ville
             const p = askBrowserPosition()
               .then(async (coords) => {
                 if (coords) {
-                  // persiste pour les prochains rafraîchissements
                   setGeo({ lat: coords.lat, lon: coords.lon });
-                  return await fetchWeatherByCoords(coords.lat, coords.lon);
+                  try {
+                    if (provider === "weatherapi") {
+                      return await fetchWeatherByCoordsWeatherAPI(coords.lat, coords.lon);
+                    }
+                    return await fetchWeatherByCoords(coords.lat, coords.lon);
+                  } catch {
+                    return await fetchWeatherByCoords(coords.lat, coords.lon).catch(() => []);
+                  }
+                }
+                // Pas de géoloc → fallback ville
+                if (provider === "weatherapi") {
+                  try {
+                    return await fetchWeatherItemsWeatherAPI(settings.weatherCity);
+                  } catch {
+                    return await fetchWeatherItems(settings.weatherCity);
+                  }
                 }
                 return await fetchWeatherItems(settings.weatherCity);
               })
@@ -82,7 +111,15 @@ export const TickerProvider = ({ children }: { children: React.ReactNode }) => {
             promises.push(p);
           }
         } else {
-          promises.push(fetchWeatherItems(settings.weatherCity).catch(() => []));
+          promises.push(
+            (provider === "weatherapi"
+              ? fetchWeatherItemsWeatherAPI(settings.weatherCity)
+              : fetchWeatherItems(settings.weatherCity)
+            ).catch(async () => {
+              // Fallback Open-Meteo si WeatherAPI indisponible
+              return await fetchWeatherItems(settings.weatherCity).catch(() => []);
+            })
+          );
         }
       }
 
@@ -107,7 +144,21 @@ export const TickerProvider = ({ children }: { children: React.ReactNode }) => {
     } finally {
       setLoading(false);
     }
-  }, [authLoading, session, employee, settings.modules.alerts, settings.modules.tips, settings.modules.weather, settings.useGeo, settings.lat, settings.lon, settings.weatherCity, askBrowserPosition, setGeo]);
+  }, [
+    authLoading,
+    session,
+    employee,
+    settings.modules.alerts,
+    settings.modules.tips,
+    settings.modules.weather,
+    settings.useGeo,
+    settings.lat,
+    settings.lon,
+    settings.weatherCity,
+    settings.weatherProvider,
+    askBrowserPosition,
+    setGeo,
+  ]);
 
   React.useEffect(() => {
     refresh();
