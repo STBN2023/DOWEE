@@ -26,6 +26,7 @@ import ProfitabilityClients from "./pages/ProfitabilityClients";
 import ProfitabilityProjects from "./pages/ProfitabilityProjects";
 import ExitValidationGuard from "./components/ExitValidationGuard";
 import AdminInternalCosts from "./pages/AdminInternalCosts";
+import AdminLLM from "./pages/AdminLLM";
 
 const queryClient = new QueryClient();
 
@@ -151,6 +152,14 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <AdminReferences />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/llm"
+                element={
+                  <ProtectedRoute>
+                    <AdminLLM />
                   </ProtectedRoute>
                 }
               />
