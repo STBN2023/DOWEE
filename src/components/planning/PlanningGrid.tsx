@@ -21,6 +21,7 @@ import { getUserWeek, patchUserWeek, PlanDTO } from "@/api/userWeek";
 import { useAuth } from "@/context/AuthContext";
 import CellDroppable from "@/components/planning/CellDroppable";
 import PlanDraggable from "@/components/planning/PlanDraggable";
+import { getProjectScores, type ProjectScore } from "@/api/projectScoring";
 
 import {
   DndContext,
@@ -61,6 +62,14 @@ const initialDrag: DragSel = { active: false };
 const cellBase =
   "relative min-w-[120px] h-[56px] align-middle border border-[#BFBFBF]/60 bg-white";
 
+function colorFromScore(score?: number): "green" | "amber" | "orange" | "red" | "gray" {
+  if (typeof score !== "number") return "gray";
+  if (score >= 80) return "green";
+  if (score >= 60) return "amber";
+  if (score >= 40) return "orange";
+  return "red";
+}
+
 const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackProjects = [] }) => {
   const { loading: authLoading, employee } = useAuth();
 
@@ -91,22 +100,21 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     [projects]
   );
 
+  const [scoreMap, setScoreMap] = React.useState<Record<string, number>>({});
+
   const isoToIdx = React.useMemo(() => {
     const map: Record<string, number> = {};
     days.forEach((d, i) => (map[d.iso] = i));
     return map;
   }, [days]);
 
-  // Chargement semaine, quand le profil est prêt
+  // Chargement semaine
   React.useEffect(() => {
     let mounted = true;
 
     if (authLoading || !employee) {
-      // Ne pas afficher "Chargement…" dans les cellules vides
       setLoading(false);
-      return () => {
-        mounted = false;
-      };
+      return () => { mounted = false; };
     }
 
     const fetchWeek = async () => {
@@ -116,20 +124,14 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
         const data = await getUserWeek(weekStart);
         if (!mounted) return;
 
-        // Plans
         const plansByKey: Record<string, PlanItem> = {};
         data.plans.forEach((p: PlanDTO) => {
           plansByKey[keyOf(p.d, p.hour)] = { id: p.id, d: p.d, hour: p.hour, projectId: p.project_id };
         });
         setPlans(plansByKey);
 
-        // Projets
         const newProjects = data.projects.map((p) => ({ id: p.id, code: p.code, name: p.name }));
-        setProjects((prev) => {
-          if (newProjects.length > 0) return newProjects;
-          return prev.length > 0 ? prev : fallbackProjects;
-        });
-
+        setProjects((prev) => (newProjects.length > 0 ? newProjects : (prev.length > 0 ? prev : fallbackProjects)));
         setLoading(false);
       } catch (e: any) {
         if (!mounted) return;
@@ -139,10 +141,28 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
       }
     };
     fetchWeek();
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, [weekStart, fallbackProjects, authLoading, employee]);
+
+  // Charger les scores (pour tous les projets actifs, puis on ne conserve que ceux affichés)
+  React.useEffect(() => {
+    let active = true;
+    const loadScores = async () => {
+      try {
+        const list = await getProjectScores();
+        if (!active) return;
+        const map: Record<string, number> = {};
+        list.forEach((s: ProjectScore) => {
+          map[s.project_id] = s.score;
+        });
+        setScoreMap(map);
+      } catch {
+        // silencieux: pas bloquant
+      }
+    };
+    loadScores();
+    return () => { active = false; };
+  }, []);
 
   const isHighlighted = (dayIdx: number, hour: number) => {
     if (!dragSel.active) return false;
@@ -164,9 +184,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     const end = Math.max(dragSel.startHour, dragSel.currentHour);
     const d = days[dayIdx].iso;
 
-    // Déterminer les heures concernées selon la stratégie:
-    // - si la sélection a commencé sur un créneau occupé => autoriser le remplacement (toutes les heures de la plage)
-    // - sinon => n’ajouter que les heures vides (ne pas écraser)
     const allHours = Array.from({ length: end - start + 1 }, (_, i) => start + i);
     const targetHours = dragSel.startWasOccupied
       ? allHours
@@ -177,7 +194,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
       return;
     }
 
-    // Optimistic UI uniquement sur les heures cible
     setPlans((prev) => {
       const next = { ...prev };
       for (const h of targetHours) {
@@ -202,7 +218,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
       showError(e?.message || "Erreur lors de l’enregistrement.");
     }
 
-    // Re-sync
     try {
       const refreshed = await getUserWeek(weekStart);
       const synced: Record<string, PlanItem> = {};
@@ -212,12 +227,9 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
       setPlans(synced);
 
       const newProjects = refreshed.projects.map((p) => ({ id: p.id, code: p.code, name: p.name }));
-      setProjects((prev) => {
-        if (newProjects.length > 0) return newProjects;
-        return prev.length > 0 ? prev : fallbackProjects;
-      });
+      setProjects((prev) => (newProjects.length > 0 ? newProjects : (prev.length > 0 ? prev : fallbackProjects)));
     } catch {
-      // garder l’état optimistic si la sync échoue
+      // maintenir l'état optimistic si la sync échoue
     }
 
     if (saved) {
@@ -258,7 +270,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
       setDragSel((s) => {
         if (!s.active) return s;
         if (s.dayIndex === -1) {
-          // déterminer si le premier survol était une case déjà occupée
           const occupied = !!plans[keyOf(d, hour)];
           return { ...s, dayIndex: dayIdx, startHour: hour, currentHour: hour, startWasOccupied: occupied };
         }
@@ -275,8 +286,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     const over = e.over?.data?.current as any;
 
     if (active?.type === "project") {
-      // Valider la sélection même si on relâche hors d'une cellule détectée,
-      // tant qu'une colonne (jour) a été engagée.
       if (dragSel.active && dragSel.dayIndex !== -1) {
         if (over?.type === "cell" || !over) {
           await commitSelection(dragSel.dayIndex);
@@ -288,7 +297,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
       const movingKey = movingPlanKeyRef.current;
       movingPlanKeyRef.current = null;
 
-      // Déplacement sur une autre cellule
       if (over?.type === "cell" && movingKey) {
         const origin = plans[movingKey];
         if (!origin) {
@@ -299,13 +307,11 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
         const targetH = over.hour as number;
         const targetKey = keyOf(targetD, targetH);
 
-        // no-op si même cellule
         if (targetKey === movingKey) {
           setOverlay({ type: null });
           return;
         }
 
-        // Optimistic: déplacer localement
         setPlans((prev) => {
           const next = { ...prev };
           delete next[movingKey];
@@ -313,7 +319,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
           return next;
         });
 
-        // Serveur: delete origin + upsert target
         try {
           await patchUserWeek({
             deletes: [
@@ -324,7 +329,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
             ],
           });
 
-          // Re-sync pour récupérer le nouvel id
           try {
             const refreshed = await getUserWeek(weekStart);
             const synced: Record<string, PlanItem> = {};
@@ -333,7 +337,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
             });
             setPlans(synced);
           } catch {
-            // garder l’état optimistic si la sync échoue
+            // garder l’état optimistic
           }
 
           showSuccess("Créneau déplacé.");
@@ -345,7 +349,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
         return;
       }
 
-      // Suppression si lâché hors de toute cellule
       if (!over && movingKey) {
         const plan = plans[movingKey];
         setPlans((prev) => {
@@ -467,7 +470,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
         </div>
       )}
 
-      {/* Pilules projets */}
       <DndContext
         sensors={sensors}
         collisionDetection={pointerWithin}
@@ -503,6 +505,9 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
                     const k = keyOf(d.iso, h);
                     const hasPlan = !!plans[k];
                     const highlight = isHighlighted(dayIdx, h);
+                    const projId = hasPlan ? plans[k].projectId : undefined;
+                    const score = projId ? scoreMap[projId] : undefined;
+                    const color = colorFromScore(score);
 
                     return (
                       <CellDroppable
@@ -522,6 +527,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
                             planKey={k}
                             labelCode={byProject[plans[k].projectId]?.code}
                             labelName={byProject[plans[k].projectId]?.name}
+                            color={color}
                           />
                         )}
                       </CellDroppable>

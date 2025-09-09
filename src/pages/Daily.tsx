@@ -26,6 +26,7 @@ import {
 } from "@dnd-kit/core";
 import { ChevronLeft, ChevronRight, Home, CalendarDays, CheckCircle2 } from "lucide-react";
 import { getDayStatus, confirmDay, type DayStatus } from "@/api/dayValidation";
+import { getProjectScores, type ProjectScore } from "@/api/projectScoring";
 
 type Project = { id: string; code: string; name: string };
 type PlanItem = { id?: string; d: string; hour: number; projectId: string };
@@ -48,6 +49,14 @@ type DragSel =
   | { active: false };
 
 const initialDrag: DragSel = { active: false };
+
+function colorFromScore(score?: number): "green" | "amber" | "orange" | "red" | "gray" {
+  if (typeof score !== "number") return "gray";
+  if (score >= 80) return "green";
+  if (score >= 60) return "amber";
+  if (score >= 40) return "orange";
+  return "red";
+}
 
 const Daily = () => {
   const { loading: authLoading, employee } = useAuth();
@@ -88,6 +97,19 @@ const Daily = () => {
     [projects]
   ) as Record<string, Project>;
 
+  const [scoreMap, setScoreMap] = React.useState<Record<string, number>>({});
+
+  const loadScores = React.useCallback(async () => {
+    try {
+      const list = await getProjectScores();
+      const map: Record<string, number> = {};
+      list.forEach((s: ProjectScore) => { map[s.project_id] = s.score; });
+      setScoreMap(map);
+    } catch {
+      // silencieux
+    }
+  }, []);
+
   const loadDay = React.useCallback(async () => {
     if (authLoading || !employee) return;
     setLoading(true);
@@ -121,10 +143,10 @@ const Daily = () => {
   React.useEffect(() => {
     loadDay();
     loadStatus();
-  }, [loadDay, loadStatus]);
+    loadScores();
+  }, [loadDay, loadStatus, loadScores]);
 
   const assignOne = async (hour: number, projectId: string) => {
-    // Optimistic
     setPlans((prev) => ({ ...prev, [hour]: { d: iso, hour, projectId } }));
     try {
       await patchUserWeek({ upserts: [{ d: iso, hour, project_id: projectId, planned_minutes: 60 }] });
@@ -144,7 +166,6 @@ const Daily = () => {
   const deleteOne = async (hour: number) => {
     const current = plans[hour];
     if (!current) return;
-    // Optimistic
     setPlans((prev) => {
       const next = { ...prev };
       delete next[hour];
@@ -173,7 +194,6 @@ const Daily = () => {
       return;
     }
 
-    // Optimistic
     setPlans((prev) => {
       const next = { ...prev };
       for (const h of targetHours) {
@@ -258,7 +278,6 @@ const Daily = () => {
           return;
         }
 
-        // Optimistic move
         setPlans((prev) => {
           const next = { ...prev };
           delete next[originHour];
@@ -282,7 +301,6 @@ const Daily = () => {
         return;
       }
 
-      // drag out to delete
       if (!over && movingKey) {
         const [_, hStr] = movingKey.replace(/^plan-/, "").split("|");
         const originHour = Number(hStr);
@@ -448,6 +466,9 @@ const Daily = () => {
                   {hours.map((h) => {
                     const has = !!plans[h];
                     const proj = has ? byProject[plans[h].projectId] : undefined;
+                    const score = has ? scoreMap[plans[h].projectId] : undefined;
+                    const color = colorFromScore(score);
+
                     return (
                       <tr key={h}>
                         <td className="w-24 bg-[#F7F7F7] p-2 text-xs text-[#214A33]/80">{String(h).padStart(2, "0")}:00</td>
@@ -476,6 +497,7 @@ const Daily = () => {
                                 labelCode={proj?.code}
                                 labelName={proj?.name}
                                 className="cursor-grab"
+                                color={color}
                               />
                             )}
                           </div>
