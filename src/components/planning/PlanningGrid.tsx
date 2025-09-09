@@ -151,43 +151,28 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
   };
 
   const obtainGoogleToken = React.useCallback(async () => {
-    // Récupère un éventuel token fournisseur dans la session Supabase
     const { data } = await supabase.auth.getSession();
     const token = (data?.session as any)?.provider_token || null;
     setGToken(token || null);
     return token || null;
   }, []);
 
+  // CHANGEMENT: on force la redirection pour afficher l’écran Google sans popup
   const connectGoogle = async () => {
     try {
-      // 1) Essaye de lier l’identité Google à l’utilisateur courant (popup)
-      const authAny = supabase.auth as any;
-      if (typeof authAny.linkIdentity === "function") {
-        await authAny.linkIdentity({
-          provider: "google",
-          options: {
-            scopes: "https://www.googleapis.com/auth/calendar.readonly",
-            redirectTo: window.location.origin,
+      await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          scopes: "https://www.googleapis.com/auth/calendar.readonly",
+          redirectTo: window.location.origin,
+          queryParams: {
+            // Améliore la fiabilité d’obtention du token (non obligatoire pour le POC)
+            access_type: "offline",
+            prompt: "consent",
           },
-        });
-      } else {
-        // 2) Fallback: flux OAuth complet (redirection)
-        await supabase.auth.signInWithOAuth({
-          provider: "google",
-          options: {
-            scopes: "https://www.googleapis.com/auth/calendar.readonly",
-            redirectTo: window.location.origin,
-          },
-        });
-      }
-
-      // Après liaison/connexion, retenter de lire le token
-      setTimeout(() => {
-        obtainGoogleToken().then((t) => {
-          if (!t) showError("Connexion Google effectuée, mais aucun jeton d’accès n’a été fourni.");
-          else showSuccess("Connecté à Google Agenda.");
-        });
-      }, 500);
+        },
+      });
+      // La redirection intervient immédiatement; ce code ne s’exécute pas forcément ensuite.
     } catch (e: any) {
       showError(e?.message || "Connexion Google impossible.");
     }
@@ -235,9 +220,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
       const events: GcalEvent[] = items.map((it) => {
         const title = it.summary || "Événement";
         if (it.start?.date && it.end?.date) {
-          // All-day: date (sans heure)
           const start = startOfDayLocal(new Date(it.start.date + "T00:00:00"));
-          // Google all-day end est exclusif: retirer 1 ms pour l’inclusion du dernier jour
           const end = new Date(new Date(it.end.date + "T00:00:00").getTime() - 1);
           return { title, start, end, allDay: true };
         } else {
@@ -247,18 +230,12 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
         }
       });
 
-      // Indexation pour la grille
       const cellMap: Record<string, number> = {};
       const allDayMap: Record<string, number> = {};
-
-      for (const d of days) {
-        // All-day counter initialisé
-        allDayMap[d.iso] = 0;
-      }
+      for (const d of days) allDayMap[d.iso] = 0;
 
       for (const ev of events) {
         if (ev.allDay) {
-          // Incrementer chaque jour couvert
           for (const d of days) {
             const dayStart = startOfDayLocal(d.date);
             const dayEnd = endOfDayLocal(d.date);
@@ -267,7 +244,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
             }
           }
         } else {
-          // Horaire: projeter sur créneaux horaires
           for (const d of days) {
             const base = startOfDayLocal(d.date);
             for (const h of hours) {
@@ -330,7 +306,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     return () => { mounted = false; };
   }, [weekStart, fallbackProjects, authLoading, employee]);
 
-  // Charger les scores (pour tous les projets actifs)
+  // Charger les scores
   React.useEffect(() => {
     let active = true;
     const loadScores = async () => {
@@ -342,15 +318,13 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
           map[s.project_id] = s.score;
         });
         setScoreMap(map);
-      } catch {
-        // silencieux
-      }
+      } catch {}
     };
     loadScores();
     return () => { active = false; };
   }, []);
 
-  // Charger les événements Google quand l’affichage est activé + navigation semaine
+  // Charger GCal à l’activation et aux changements de semaine
   React.useEffect(() => {
     if (!gEnabled) return;
     fetchGcalEvents();
@@ -421,9 +395,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
 
       const newProjects = refreshed.projects.map((p) => ({ id: p.id, code: p.code, name: p.name }));
       setProjects((prev) => (newProjects.length > 0 ? newProjects : (prev.length > 0 ? prev : fallbackProjects)));
-    } catch {
-      // maintenir l'état optimistic si la sync échoue
-    }
+    } catch {}
 
     if (saved) {
       const count = targetHours.length;
@@ -529,9 +501,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
               synced[keyOf(p.d, p.hour)] = { id: p.id, d: p.d, hour: p.hour, projectId: p.project_id };
             });
             setPlans(synced);
-          } catch {
-            // garder l’état optimistic
-          }
+          } catch {}
 
           showSuccess("Créneau déplacé.");
         } catch (err: any) {
@@ -784,7 +754,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
                           />
                         )}
 
-                        {/* Indicateur discret d'événement Google si pas de conflit (ou ajouter un badge de compte) */}
                         {gHas && !hasPlan && (
                           <div
                             className="pointer-events-none absolute right-1 top-1 rounded-full border border-[#BFBFBF] bg-white/80 px-1.5 py-0.5 text-[10px] text-[#214A33]"
