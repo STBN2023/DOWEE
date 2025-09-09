@@ -36,7 +36,7 @@ const TickerSettingsPage: React.FC = () => {
             <div className="flex items-start gap-2">
               <Info className="mt-0.5 h-4 w-4 text-[#F2994A]" />
               <div>
-                Activez des modules pour enrichir le bandeau. Vous pouvez combiner Alertes internes, Météo, Actus tech et Astuces.
+                Activez des modules pour enrichir le bandeau. Vous pouvez combiner Alertes internes, Météo et Astuces.
                 Les choix sont enregistrés localement pour votre navigateur.
               </div>
             </div>
@@ -64,14 +64,6 @@ const TickerSettingsPage: React.FC = () => {
 
           <Row>
             <div className="flex items-center gap-3">
-              <Label className="text-[#214A33]">Actus tech</Label>
-              <span className="text-xs text-[#214A33]/60">flux public (HN). Peut être remplacé par AFP plus tard.</span>
-            </div>
-            <Switch checked={settings.modules.news} onCheckedChange={(v) => setModules({ news: !!v })} />
-          </Row>
-
-          <Row>
-            <div className="flex items-center gap-3">
               <Label className="text-[#214A33]">Astuces</Label>
               <span className="text-xs text-[#214A33]/60">petits conseils d’utilisation</span>
             </div>
@@ -85,7 +77,7 @@ const TickerSettingsPage: React.FC = () => {
           </div>
 
           <div className="text-xs text-[#214A33]/60">
-            Suggestions modules: messages internes (annonces), rappel événements (Google Agenda), KPI hebdo, statut services (uptime), citations du jour. Dites-moi quoi ajouter.
+            Autres idées possibles: annonces internes, rappel événements (Google Agenda), KPI hebdo, statut services (uptime), citation du jour.
           </div>
         </CardContent>
       </Card>

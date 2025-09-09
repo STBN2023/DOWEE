@@ -170,7 +170,7 @@ const App = () => (
                     }
                   />
                   <Route
-                    path="/settings/ticker"
+                    path="/admin/ticker"
                     element={
                       <ProtectedRoute>
                         <TickerSettingsPage />

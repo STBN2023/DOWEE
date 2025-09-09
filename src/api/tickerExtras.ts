@@ -9,12 +9,6 @@ const TIPS: string[] = [
   "Astuce: Utilisez la roue dentée pour paramétrer le bandeau.",
 ];
 
-// Utilitaire: tronquer un texte
-function trunc(s: string, n = 100) {
-  if (!s) return s;
-  return s.length > n ? s.slice(0, n - 1) + "…" : s;
-}
-
 // Météo via Open-Meteo (pas de clé), ville -> lat/lon via geocoding
 export async function fetchWeatherItems(city: string): Promise<TickerItem[]> {
   const name = (city || "Paris").trim();
@@ -34,7 +28,7 @@ export async function fetchWeatherItems(city: string): Promise<TickerItem[]> {
   const t = Math.round(wx?.current?.temperature_2m ?? 0);
   const tMax = Math.round(wx?.daily?.temperature_2m_max?.[0] ?? t);
   const tMin = Math.round(wx?.daily?.temperature_2m_min?.[0] ?? t);
-  // Mappage très concis des weather_code (optionnel)
+
   const code = Number(wx?.current?.weather_code ?? -1);
   const wDesc =
     code === 0 ? "Ciel clair"
@@ -47,30 +41,14 @@ export async function fetchWeatherItems(city: string): Promise<TickerItem[]> {
     : [95,96,99].includes(code) ? "Orages"
     : "Météo";
 
-  const out: TickerItem[] = [
-    { id: `wx-now-${cityLabel}`, short: `Météo ${cityLabel}: ${t}°C, ${wDesc}`, severity: "info" },
-    { id: `wx-range-${cityLabel}`, short: `Météo ${cityLabel}: Max ${tMax}° / Min ${tMin}°`, severity: "info" },
+  // Un seul item concis (évite les doublons visibles)
+  return [
+    { id: `wx-${cityLabel}`, short: `Météo ${cityLabel}: ${t}°C • Max ${tMax}° / Min ${tMin}° • ${wDesc}`, severity: "info" },
   ];
-  return out;
-}
-
-// Actus tech (HN front page) — remplaçable par AFP plus tard
-export async function fetchTechNewsItems(limit = 5): Promise<TickerItem[]> {
-  const data = await fetch("https://hn.algolia.com/api/v1/search?tags=front_page")
-    .then((r) => r.json())
-    .catch(() => ({ hits: [] as any[] }));
-
-  const hits: any[] = Array.isArray(data?.hits) ? data.hits : [];
-  return hits.slice(0, limit).map((h, i) => ({
-    id: `news-${h.objectID || i}`,
-    short: trunc(`Actus: ${h.title || "—"}`, 90),
-    severity: "info",
-  }));
 }
 
 export function localTipsItems(count = 5): TickerItem[] {
   const arr = [...TIPS];
-  // rotation simple
   const now = new Date().getTime();
   arr.sort((a, b) => ((a.length + now) % 7) - ((b.length + now) % 7));
   return arr.slice(0, count).map((txt, i) => ({ id: `tip-${i}`, short: txt, severity: "info" }));

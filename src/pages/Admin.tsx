@@ -76,10 +76,10 @@ const Admin = () => {
           cta="Configurer OpenAI"
         />
         <Tile
-          to="/settings/ticker"
+          to="/admin/ticker"
           icon={Settings}
           title="Bandeau — Paramètres"
-          desc="Activer des modules (météo, actus…) et configurer la ville."
+          desc="Activer des modules et configurer la ville météo."
           cta="Ouvrir"
         />
       </div>

@@ -3,7 +3,6 @@ import React from "react";
 export type TickerModules = {
   alerts: boolean;
   weather: boolean;
-  news: boolean;
   tips: boolean;
 };
 
@@ -24,7 +23,6 @@ const defaultSettings: TickerSettings = {
   modules: {
     alerts: true,
     weather: true,
-    news: true,
     tips: true,
   },
   weatherCity: "Paris",
@@ -39,12 +37,12 @@ function loadSettings(): TickerSettings {
       modules: {
         alerts: parsed?.modules?.alerts ?? true,
         weather: parsed?.modules?.weather ?? true,
-        news: parsed?.modules?.news ?? true,
         tips: parsed?.modules?.tips ?? true,
       },
-      weatherCity: typeof parsed?.weatherCity === "string" && parsed.weatherCity.trim()
-        ? parsed.weatherCity.trim()
-        : "Paris",
+      weatherCity:
+        typeof parsed?.weatherCity === "string" && parsed.weatherCity.trim()
+          ? parsed.weatherCity.trim()
+          : "Paris",
     };
   } catch {
     return defaultSettings;

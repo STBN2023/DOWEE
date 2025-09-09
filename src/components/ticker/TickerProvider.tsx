@@ -2,7 +2,7 @@ import React from "react";
 import { getAlerts } from "@/api/alerts";
 import { useAuth } from "@/context/AuthContext";
 import { useTickerSettings } from "@/context/TickerSettingsContext";
-import { fetchWeatherItems, fetchTechNewsItems, localTipsItems, type TickerItem } from "@/api/tickerExtras";
+import { fetchWeatherItems, localTipsItems, type TickerItem } from "@/api/tickerExtras";
 
 type TickerContextValue = {
   items: TickerItem[];
@@ -30,15 +30,16 @@ export const TickerProvider = ({ children }: { children: React.ReactNode }) => {
       const promises: Array<Promise<TickerItem[]>> = [];
 
       if (settings.modules.alerts) {
-        // plus d'éléments pour remplir le bandeau
         promises.push(
-          getAlerts("global", 40).then((r) =>
-            (r.items ?? []).map((it) => ({
-              id: String(it.id),
-              short: String(it.short),
-              severity: (it.severity as any) || "info",
-            }))
-          ).catch(() => [])
+          getAlerts("global", 40)
+            .then((r) =>
+              (r.items ?? []).map((it) => ({
+                id: String(it.id),
+                short: String(it.short),
+                severity: (it.severity as any) || "info",
+              }))
+            )
+            .catch(() => [])
         );
       }
 
@@ -46,16 +47,11 @@ export const TickerProvider = ({ children }: { children: React.ReactNode }) => {
         promises.push(fetchWeatherItems(settings.weatherCity).catch(() => []));
       }
 
-      if (settings.modules.news) {
-        promises.push(fetchTechNewsItems(8).catch(() => []));
-      }
-
       if (settings.modules.tips) {
         promises.push(Promise.resolve(localTipsItems(6)));
       }
 
       const results = await Promise.all(promises);
-      // fusion + déduplication par id
       const flat = results.flat().filter(Boolean);
       const seen = new Set<string>();
       const merged: TickerItem[] = [];
@@ -66,20 +62,18 @@ export const TickerProvider = ({ children }: { children: React.ReactNode }) => {
         merged.push({ ...it, id });
       }
 
-      // Limite souple (pour rester léger), mais assez élevée pour le défilement
       setItems(merged.slice(0, 80));
     } catch {
       setItems([]);
     } finally {
       setLoading(false);
     }
-  }, [authLoading, session, employee, settings.modules.alerts, settings.modules.news, settings.modules.tips, settings.modules.weather, settings.weatherCity]);
+  }, [authLoading, session, employee, settings.modules.alerts, settings.modules.tips, settings.modules.weather, settings.weatherCity]);
 
   React.useEffect(() => {
     refresh();
   }, [refresh]);
 
-  // Rafraîchissement périodique (5 min)
   React.useEffect(() => {
     if (authLoading || !session || !employee) return;
     const id = setInterval(refresh, 5 * 60 * 1000);
