@@ -24,6 +24,7 @@ import PlanDraggable from "@/components/planning/PlanDraggable";
 import { getProjectScores, type ProjectScore } from "@/api/projectScoring";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 import {
   DndContext,
@@ -138,10 +139,12 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
   const [gError, setGError] = React.useState<string | null>(null);
   const [gLastSync, setGLastSync] = React.useState<Date | null>(null);
 
-  // Map cellules "d|hour" -> nb d'événements
+  // Map cellules "d|hour" -> nb d'événements ET titres
   const [gCellEvents, setGCellEvents] = React.useState<Record<string, number>>({});
-  // All-day par jour iso -> nb
+  const [gCellTitles, setGCellTitles] = React.useState<Record<string, string[]>>({});
+  // All-day par jour iso -> nb + titres
   const [gAllDayByIso, setGAllDayByIso] = React.useState<Record<string, number>>({});
+  const [gAllDayTitles, setGAllDayTitles] = React.useState<Record<string, string[]>>({});
 
   const isGConnected = !!gToken;
 
@@ -157,7 +160,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     return token || null;
   }, []);
 
-  // CHANGEMENT: on force la redirection pour afficher l’écran Google sans popup
+  // Redirection (fiable) pour lier Google
   const connectGoogle = async () => {
     try {
       await supabase.auth.signInWithOAuth({
@@ -166,13 +169,11 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
           scopes: "https://www.googleapis.com/auth/calendar.readonly",
           redirectTo: window.location.origin,
           queryParams: {
-            // Améliore la fiabilité d’obtention du token (non obligatoire pour le POC)
             access_type: "offline",
             prompt: "consent",
           },
         },
       });
-      // La redirection intervient immédiatement; ce code ne s’exécute pas forcément ensuite.
     } catch (e: any) {
       showError(e?.message || "Connexion Google impossible.");
     }
@@ -231,8 +232,13 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
       });
 
       const cellMap: Record<string, number> = {};
+      const titlesMap: Record<string, string[]> = {};
       const allDayMap: Record<string, number> = {};
-      for (const d of days) allDayMap[d.iso] = 0;
+      const allDayTitlesMap: Record<string, string[]> = {};
+      for (const d of days) {
+        allDayMap[d.iso] = 0;
+        allDayTitlesMap[d.iso] = [];
+      }
 
       for (const ev of events) {
         if (ev.allDay) {
@@ -241,6 +247,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
             const dayEnd = endOfDayLocal(d.date);
             if (overlaps(ev.start, ev.end, dayStart, dayEnd)) {
               allDayMap[d.iso] = (allDayMap[d.iso] ?? 0) + 1;
+              if (allDayTitlesMap[d.iso].length < 6) allDayTitlesMap[d.iso].push(ev.title);
             }
           }
         } else {
@@ -254,6 +261,8 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
               if (overlaps(ev.start, ev.end, slotStart, slotEnd)) {
                 const k = keyOf(d.iso, h);
                 cellMap[k] = (cellMap[k] ?? 0) + 1;
+                const arr = (titlesMap[k] ||= []);
+                if (arr.length < 3) arr.push(ev.title);
               }
             }
           }
@@ -261,7 +270,9 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
       }
 
       setGCellEvents(cellMap);
+      setGCellTitles(titlesMap);
       setGAllDayByIso(allDayMap);
+      setGAllDayTitles(allDayTitlesMap);
       setGLastSync(new Date());
     } catch (e: any) {
       setGError(e?.message || "Erreur Google Agenda.");
@@ -553,6 +564,9 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     if (!gError) showSuccess("Google Agenda rechargé.");
   };
 
+  const listToTooltip = (arr: string[]) =>
+    arr.length === 0 ? "Aucun évènement" : arr.map((t) => `• ${t}`).join("\n");
+
   return (
     <div className="w-full">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -700,12 +714,19 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
                     <div className="flex items-center justify-between">
                       <span>{d.label}</span>
                       {gEnabled && (gAllDayByIso[d.iso] ?? 0) > 0 && (
-                        <span
-                          title={`${gAllDayByIso[d.iso]} événement(s) toute la journée`}
-                          className="ml-2 rounded-full border border-[#BFBFBF] bg-white px-2 py-0.5 text-[11px] text-[#214A33]"
-                        >
-                          All-day: {gAllDayByIso[d.iso]}
-                        </span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span
+                              className="ml-2 rounded-full border border-sky-300 bg-sky-100 px-2 py-0.5 text-[11px] text-sky-800"
+                              title={`${gAllDayByIso[d.iso]} évènement(s) toute la journée`}
+                            >
+                              All‑day: {gAllDayByIso[d.iso]}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" align="end" className="max-w-xs whitespace-pre-wrap text-xs">
+                            {listToTooltip(gAllDayTitles[d.iso] || [])}
+                          </TooltipContent>
+                        </Tooltip>
                       )}
                     </div>
                   </th>
@@ -724,7 +745,9 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
                     const score = projId ? scoreMap[projId] : undefined;
                     const color = colorFromScore(score);
 
-                    const gHas = gEnabled && (gCellEvents[k] ?? 0) > 0;
+                    const gCount = gEnabled ? (gCellEvents[k] ?? 0) : 0;
+                    const gHas = gCount > 0;
+                    const titles = gCellTitles[k] || [];
                     const conflict = gHas && hasPlan;
 
                     return (
@@ -735,10 +758,21 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
                         className={cn(
                           cellBase,
                           highlight && "ring-2 ring-[#F2994A] bg-[#F2994A]/10",
-                          !highlight && gHas && !hasPlan && "bg-[#BFBFBF]/20",
+                          !highlight && gHas && !hasPlan && "bg-sky-50",
                           !highlight && conflict && "ring-2 ring-red-400"
                         )}
                       >
+                        {/* Visuel conflit: overlay léger rouge en diagonale */}
+                        {conflict && (
+                          <div
+                            className="pointer-events-none absolute inset-0 rounded-sm"
+                            style={{
+                              backgroundImage:
+                                "repeating-linear-gradient(45deg, rgba(239,68,68,0.08) 0px, rgba(239,68,68,0.08) 10px, transparent 10px, transparent 20px)",
+                            }}
+                          />
+                        )}
+
                         {!hasPlan ? (
                           <div className="absolute inset-0 flex items-center justify-center">
                             <span className="pointer-events-none select-none text-xs text-[#214A33]/40">
@@ -754,21 +788,27 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
                           />
                         )}
 
-                        {gHas && !hasPlan && (
-                          <div
-                            className="pointer-events-none absolute right-1 top-1 rounded-full border border-[#BFBFBF] bg-white/80 px-1.5 py-0.5 text-[10px] text-[#214A33]"
-                            title={`${gCellEvents[k]} événement(s) Google sur ce créneau`}
-                          >
-                            Gcal: {gCellEvents[k]}
-                          </div>
-                        )}
-                        {conflict && (
-                          <div
-                            className="pointer-events-none absolute right-1 top-1 rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] text-white"
-                            title="Conflit: événement Google sur ce créneau"
-                          >
-                            Conflit
-                          </div>
+                        {/* Badge Gcal plus visible + tooltip titres */}
+                        {gHas && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div
+                                className={cn(
+                                  "absolute left-1 bottom-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px]",
+                                  conflict
+                                    ? "bg-red-600 text-white"
+                                    : "bg-sky-600 text-white"
+                                )}
+                                title={`${gCount} évènement(s) Google sur ce créneau`}
+                              >
+                                <span className="h-1.5 w-1.5 rounded-full bg-white/90" />
+                                <span>Gcal • {gCount}</span>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" align="start" className="max-w-xs whitespace-pre-wrap text-xs">
+                              {listToTooltip(titles)}
+                            </TooltipContent>
+                          </Tooltip>
                         )}
                       </CellDroppable>
                     );
