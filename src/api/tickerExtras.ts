@@ -41,15 +41,16 @@ export async function fetchWeatherByCoords(lat: number, lon: number, label?: str
   let cityLabel = label;
   if (!cityLabel) {
     const rev = await fetch(
-      `https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}&longitude=${lon}&language=fr&format=json`
+      `https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}&longitude=${lon}&language=fr&format=json&count=1`
     ).then((r) => r.json()).catch(() => null as any);
     const loc = rev?.results?.[0];
+
     // Essayer plusieurs champs, puis fallback coordonnées si tout échoue
     const name =
       (loc?.name && String(loc.name)) ||
       (loc?.admin1 && String(loc.admin1)) ||
       (loc?.admin2 && String(loc.admin2)) ||
-      (loc?.county && String(loc.county)) ||
+      (loc?.admin3 && String(loc.admin3)) ||
       "";
     const cc = (loc?.country_code && String(loc.country_code)) || "";
     if (name) cityLabel = cc ? `${name} (${cc})` : name;

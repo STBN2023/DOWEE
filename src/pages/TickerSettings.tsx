@@ -38,13 +38,15 @@ const TickerSettingsPage: React.FC = () => {
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error("Timeout")), 8000);
         navigator.geolocation.getCurrentPosition(
-          (pos) => {
+          async (pos) => {
             clearTimeout(timer);
             const lat = pos.coords.latitude;
             const lon = pos.coords.longitude;
             // Active automatiquement l’usage de la position + enregistre lat/lon
             setGeo({ useGeo: true, lat, lon });
             setGeoInfo(`Position enregistrée: ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+            // Rafraîchir immédiatement le bandeau
+            await refresh();
             resolve();
           },
           (err) => {
