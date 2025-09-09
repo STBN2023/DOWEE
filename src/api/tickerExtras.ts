@@ -36,7 +36,7 @@ export async function fetchWeatherItems(city: string): Promise<TickerItem[]> {
   return fetchWeatherByCoords(lat, lon, cityLabel);
 }
 
-// Météo via coordonnées; optionnellement reverse geocode pour nom lisible
+// Météo via coordonnées; reverse geocode pour un nom humain lisible
 export async function fetchWeatherByCoords(lat: number, lon: number, label?: string): Promise<TickerItem[]> {
   let cityLabel = label;
   if (!cityLabel) {
@@ -44,7 +44,16 @@ export async function fetchWeatherByCoords(lat: number, lon: number, label?: str
       `https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}&longitude=${lon}&language=fr&format=json`
     ).then((r) => r.json()).catch(() => null as any);
     const loc = rev?.results?.[0];
-    cityLabel = loc?.name ? (loc?.country_code ? `${loc.name} (${loc.country_code})` : loc.name) : "Votre position";
+    // Essayer plusieurs champs, puis fallback coordonnées si tout échoue
+    const name =
+      (loc?.name && String(loc.name)) ||
+      (loc?.admin1 && String(loc.admin1)) ||
+      (loc?.admin2 && String(loc.admin2)) ||
+      (loc?.county && String(loc.county)) ||
+      "";
+    const cc = (loc?.country_code && String(loc.country_code)) || "";
+    if (name) cityLabel = cc ? `${name} (${cc})` : name;
+    if (!cityLabel) cityLabel = `${lat.toFixed(2)}, ${lon.toFixed(2)}`;
   }
 
   const wx = await fetch(

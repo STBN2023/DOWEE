@@ -42,7 +42,8 @@ const TickerSettingsPage: React.FC = () => {
             clearTimeout(timer);
             const lat = pos.coords.latitude;
             const lon = pos.coords.longitude;
-            setGeo({ lat, lon });
+            // Active automatiquement l’usage de la position + enregistre lat/lon
+            setGeo({ useGeo: true, lat, lon });
             setGeoInfo(`Position enregistrée: ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
             resolve();
           },
