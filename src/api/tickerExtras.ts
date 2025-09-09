@@ -9,7 +9,19 @@ const TIPS: string[] = [
   "Astuce: Utilisez la roue dentée pour paramétrer le bandeau.",
 ];
 
-// Météo via Open-Meteo (pas de clé), ville -> lat/lon via geocoding
+function wxDescFromCode(code: number) {
+  if (code === 0) return "Ciel clair";
+  if ([1, 2, 3].includes(code)) return "Variable";
+  if ([45, 48].includes(code)) return "Brouillard";
+  if ([51, 53, 55, 56, 57].includes(code)) return "Bruine";
+  if ([61, 63, 65, 66, 67].includes(code)) return "Pluie";
+  if ([71, 73, 75, 77].includes(code)) return "Neige";
+  if ([80, 81, 82].includes(code)) return "Averses";
+  if ([95, 96, 99].includes(code)) return "Orages";
+  return "Météo";
+}
+
+// Météo via ville
 export async function fetchWeatherItems(city: string): Promise<TickerItem[]> {
   const name = (city || "Paris").trim();
   const geo = await fetch(
@@ -21,6 +33,20 @@ export async function fetchWeatherItems(city: string): Promise<TickerItem[]> {
   const lon = loc?.longitude ?? 2.3522;
   const cityLabel = (loc?.name && loc?.country_code) ? `${loc.name} (${loc.country_code})` : name;
 
+  return fetchWeatherByCoords(lat, lon, cityLabel);
+}
+
+// Météo via coordonnées; optionnellement reverse geocode pour nom lisible
+export async function fetchWeatherByCoords(lat: number, lon: number, label?: string): Promise<TickerItem[]> {
+  let cityLabel = label;
+  if (!cityLabel) {
+    const rev = await fetch(
+      `https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}&longitude=${lon}&language=fr&format=json`
+    ).then((r) => r.json()).catch(() => null as any);
+    const loc = rev?.results?.[0];
+    cityLabel = loc?.name ? (loc?.country_code ? `${loc.name} (${loc.country_code})` : loc.name) : "Votre position";
+  }
+
   const wx = await fetch(
     `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min&timezone=auto&language=fr`
   ).then((r) => r.json()).catch(() => null as any);
@@ -28,20 +54,9 @@ export async function fetchWeatherItems(city: string): Promise<TickerItem[]> {
   const t = Math.round(wx?.current?.temperature_2m ?? 0);
   const tMax = Math.round(wx?.daily?.temperature_2m_max?.[0] ?? t);
   const tMin = Math.round(wx?.daily?.temperature_2m_min?.[0] ?? t);
-
   const code = Number(wx?.current?.weather_code ?? -1);
-  const wDesc =
-    code === 0 ? "Ciel clair"
-    : [1,2,3].includes(code) ? "Variable"
-    : [45,48].includes(code) ? "Brouillard"
-    : [51,53,55,56,57].includes(code) ? "Bruine"
-    : [61,63,65,66,67].includes(code) ? "Pluie"
-    : [71,73,75,77].includes(code) ? "Neige"
-    : [80,81,82].includes(code) ? "Averses"
-    : [95,96,99].includes(code) ? "Orages"
-    : "Météo";
+  const wDesc = wxDescFromCode(code);
 
-  // Un seul item concis (évite les doublons visibles)
   return [
     { id: `wx-${cityLabel}`, short: `Météo ${cityLabel}: ${t}°C • Max ${tMax}° / Min ${tMin}° • ${wDesc}`, severity: "info" },
   ];

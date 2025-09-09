@@ -2,7 +2,7 @@ import React from "react";
 import { getAlerts } from "@/api/alerts";
 import { useAuth } from "@/context/AuthContext";
 import { useTickerSettings } from "@/context/TickerSettingsContext";
-import { fetchWeatherItems, localTipsItems, type TickerItem } from "@/api/tickerExtras";
+import { fetchWeatherItems, fetchWeatherByCoords, localTipsItems, type TickerItem } from "@/api/tickerExtras";
 
 type TickerContextValue = {
   items: TickerItem[];
@@ -14,10 +14,30 @@ const TickerContext = React.createContext<TickerContextValue | undefined>(undefi
 
 export const TickerProvider = ({ children }: { children: React.ReactNode }) => {
   const { loading: authLoading, session, employee } = useAuth();
-  const { settings } = useTickerSettings();
+  const { settings, setGeo } = useTickerSettings() as any;
 
   const [items, setItems] = React.useState<TickerItem[]>([]);
   const [loading, setLoading] = React.useState<boolean>(true);
+
+  const askBrowserPosition = React.useCallback((): Promise<{ lat: number; lon: number } | null> => {
+    return new Promise((resolve) => {
+      if (!("geolocation" in navigator)) return resolve(null);
+      const timer = setTimeout(() => resolve(null), 8000); // timeout doux
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          clearTimeout(timer);
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+          resolve({ lat, lon });
+        },
+        () => {
+          clearTimeout(timer);
+          resolve(null);
+        },
+        { enableHighAccuracy: false, timeout: 7000, maximumAge: 5 * 60 * 1000 }
+      );
+    });
+  }, []);
 
   const refresh = React.useCallback(async () => {
     if (authLoading || !session || !employee) {
@@ -44,7 +64,26 @@ export const TickerProvider = ({ children }: { children: React.ReactNode }) => {
       }
 
       if (settings.modules.weather) {
-        promises.push(fetchWeatherItems(settings.weatherCity).catch(() => []));
+        if (settings.useGeo) {
+          if (typeof settings.lat === "number" && typeof settings.lon === "number") {
+            promises.push(fetchWeatherByCoords(settings.lat, settings.lon).catch(() => []));
+          } else {
+            // Demander la position si absente, puis fallback ville
+            const p = askBrowserPosition()
+              .then(async (coords) => {
+                if (coords) {
+                  // persiste pour les prochains rafraîchissements
+                  setGeo({ lat: coords.lat, lon: coords.lon });
+                  return await fetchWeatherByCoords(coords.lat, coords.lon);
+                }
+                return await fetchWeatherItems(settings.weatherCity);
+              })
+              .catch(() => []);
+            promises.push(p);
+          }
+        } else {
+          promises.push(fetchWeatherItems(settings.weatherCity).catch(() => []));
+        }
       }
 
       if (settings.modules.tips) {
@@ -68,7 +107,7 @@ export const TickerProvider = ({ children }: { children: React.ReactNode }) => {
     } finally {
       setLoading(false);
     }
-  }, [authLoading, session, employee, settings.modules.alerts, settings.modules.tips, settings.modules.weather, settings.weatherCity]);
+  }, [authLoading, session, employee, settings.modules.alerts, settings.modules.tips, settings.modules.weather, settings.useGeo, settings.lat, settings.lon, settings.weatherCity, askBrowserPosition, setGeo]);
 
   React.useEffect(() => {
     refresh();

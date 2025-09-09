@@ -9,12 +9,16 @@ export type TickerModules = {
 export type TickerSettings = {
   modules: TickerModules;
   weatherCity: string; // ex: "Paris"
+  useGeo: boolean;
+  lat: number | null;
+  lon: number | null;
 };
 
 type Ctx = {
   settings: TickerSettings;
   setModules: (mods: Partial<TickerModules>) => void;
   setWeatherCity: (city: string) => void;
+  setGeo: (patch: Partial<{ useGeo: boolean; lat: number | null; lon: number | null }>) => void;
 };
 
 const LS_KEY = "dowee.ticker.settings";
@@ -26,23 +30,26 @@ const defaultSettings: TickerSettings = {
     tips: true,
   },
   weatherCity: "Paris",
+  useGeo: false,
+  lat: null,
+  lon: null,
 };
 
 function loadSettings(): TickerSettings {
   try {
     const raw = localStorage.getItem(LS_KEY);
     if (!raw) return defaultSettings;
-    const parsed = JSON.parse(raw);
+    const p = JSON.parse(raw);
     return {
       modules: {
-        alerts: parsed?.modules?.alerts ?? true,
-        weather: parsed?.modules?.weather ?? true,
-        tips: parsed?.modules?.tips ?? true,
+        alerts: p?.modules?.alerts ?? true,
+        weather: p?.modules?.weather ?? true,
+        tips: p?.modules?.tips ?? true,
       },
-      weatherCity:
-        typeof parsed?.weatherCity === "string" && parsed.weatherCity.trim()
-          ? parsed.weatherCity.trim()
-          : "Paris",
+      weatherCity: typeof p?.weatherCity === "string" && p.weatherCity.trim() ? p.weatherCity.trim() : "Paris",
+      useGeo: !!p?.useGeo,
+      lat: typeof p?.lat === "number" ? p.lat : null,
+      lon: typeof p?.lon === "number" ? p.lon : null,
     };
   } catch {
     return defaultSettings;
@@ -74,7 +81,15 @@ export const TickerSettingsProvider = ({ children }: { children: React.ReactNode
     });
   };
 
-  const value = React.useMemo<Ctx>(() => ({ settings, setModules, setWeatherCity }), [settings]);
+  const setGeo = (patch: Partial<{ useGeo: boolean; lat: number | null; lon: number | null }>) => {
+    setSettings((prev) => {
+      const next = { ...prev, ...patch };
+      saveSettings(next);
+      return next;
+    });
+  };
+
+  const value = React.useMemo<Ctx>(() => ({ settings, setModules, setWeatherCity, setGeo }), [settings]);
 
   return <TickerSettingsContext.Provider value={value}>{children}</TickerSettingsContext.Provider>;
 };
