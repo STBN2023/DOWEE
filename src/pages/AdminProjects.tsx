@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Pencil, Plus, Users, Trash2, ChevronDown, ChevronUp, Archive, Play } from "lucide-react";
+import { Pencil, Plus, Users, Trash2, Archive, Play } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
 import {
@@ -50,11 +50,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { getProjectCosts, type ProjectCostsMap } from "@/api/projectCosts";
 import { getProjectScores, type ProjectScore } from "@/api/projectScoring";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
 
 type Assignments = Record<string, string[]>;
 
@@ -75,40 +70,6 @@ function scoreBadge(score?: number) {
   if (score >= 40) return "bg-orange-50 text-orange-700 border border-orange-200";
   return "bg-red-50 text-red-700 border border-red-200";
 }
-
-function sClient(segment?: string | null): number {
-  if (!segment) return 50;
-  const b = segment.toLowerCase();
-  if (b.includes("super")) return 80;
-  if (b.includes("pas")) return 20;
-  return 50;
-}
-function sMarge(pct: number | null): number {
-  if (pct == null) return 50;
-  if (pct <= 0) return 0;
-  if (pct < 20) return 20 + 2 * (pct - 1);
-  if (pct < 40) return 60 + 2 * (pct - 20);
-  return 100;
-}
-function daysLeftFromIso(iso?: string | null): number | null {
-  if (!iso) return null;
-  const [y, m, d] = iso.split("-").map((x) => parseInt(x, 10));
-  if (!y || !m || !d) return null;
-  const due = new Date(Date.UTC(y, m - 1, d));
-  const today = new Date();
-  const now = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
-  const diffDays = Math.floor((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-  return diffDays;
-}
-function sUrgence(daysLeft: number | null, effortDays: number | null): number {
-  if (daysLeft == null || effortDays == null || effortDays <= 0) return 50;
-  const B = daysLeft / effortDays;
-  if (B <= 0) return 100;
-  if (B < 1) return 90;
-  if (B < 3) return 60;
-  return 20;
-}
-function clamp100(n: number) { return Math.min(100, Math.max(0, n)); }
 
 type SortKey = "code" | "name" | "score";
 type SortDir = "asc" | "desc";
@@ -419,27 +380,6 @@ const AdminProjects = () => {
         </CardHeader>
 
         <CardContent>
-          <div className="mb-3 rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-3 text-[12px] text-[#214A33]">
-            <div className="flex items-center justify-between">
-              <div className="font-medium">Comment est calculé le Score ?</div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="border-[#BFBFBF] text-[#214A33]"
-                onClick={() => setShowScoreHelp((v) => !v)}
-                aria-expanded={showScoreHelp}
-                aria-controls="score-help"
-              >
-                {showScoreHelp ? "Masquer" : "Afficher"}
-              </Button>
-            </div>
-            {showScoreHelp && (
-              <div id="score-help" className="mt-2 text-[12px] text-[#214A33]/90">
-                Score = (0,25×S_client + 0,35×S_marge + 0,20×S_urgence) × (★ ? 1,15 : 1), borné à [0,100].
-              </div>
-            )}
-          </div>
-
           {/* Filtres & tri */}
           <div className="mb-3 grid grid-cols-4 gap-3">
             <div className="col-span-2">
@@ -641,8 +581,8 @@ const AdminProjects = () => {
                               </AlertDialog>
                             )}
 
-                            {/* Rouvrir (pause -> actif) */}
-                            {p.status === "onhold" && (
+                            {/* Rouvrir (pause/archivé -> actif) */}
+                            {(p.status === "onhold" || p.status === "archived") && (
                               <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={() => reopen(p)}>
                                 <Play className="mr-2 h-4 w-4" />
                                 Rouvrir
