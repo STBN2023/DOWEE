@@ -132,17 +132,16 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     return map;
   }, [days]);
 
-  // ---- Google Calendar (Option A) state
+  // ---- Google Calendar State
   const [gEnabled, setGEnabled] = React.useState<boolean>(() => localStorage.getItem("dowee.gcal.enabled") === "1");
   const [gToken, setGToken] = React.useState<string | null>(null);
   const [gLoading, setGLoading] = React.useState<boolean>(false);
   const [gError, setGError] = React.useState<string | null>(null);
   const [gLastSync, setGLastSync] = React.useState<Date | null>(null);
 
-  // Map cellules "d|hour" -> nb d'événements ET titres
+  // Cell events and all-day per day
   const [gCellEvents, setGCellEvents] = React.useState<Record<string, number>>({});
   const [gCellTitles, setGCellTitles] = React.useState<Record<string, string[]>>({});
-  // All-day par jour iso -> nb + titres
   const [gAllDayByIso, setGAllDayByIso] = React.useState<Record<string, number>>({});
   const [gAllDayTitles, setGAllDayTitles] = React.useState<Record<string, string[]>>({});
 
@@ -160,7 +159,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     return token || null;
   }, []);
 
-  // Redirection (fiable) pour lier Google
   const connectGoogle = async () => {
     try {
       await supabase.auth.signInWithOAuth({
@@ -190,7 +188,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     }
     const token = gToken || (await obtainGoogleToken());
     if (!token) return;
-
     if (days.length === 0) return;
 
     const timeMin = new Date(days[0].date);
@@ -209,12 +206,8 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     setGLoading(true);
     setGError(null);
     try {
-      const res = await fetch(url.toString(), {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) {
-        throw new Error(`Google API: ${res.status}`);
-      }
+      const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error(`Google API: ${res.status}`);
       const data = await res.json();
       const items: any[] = data?.items ?? [];
 
@@ -281,10 +274,8 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     }
   }, [gEnabled, gToken, days, hours, obtainGoogleToken]);
 
-  // Chargement semaine
   React.useEffect(() => {
     let mounted = true;
-
     if (authLoading || !employee) {
       setLoading(false);
       return () => { mounted = false; };
@@ -308,8 +299,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
         setLoading(false);
       } catch (e: any) {
         if (!mounted) return;
-        const msg = e?.message || "Erreur de chargement de la semaine.";
-        setErrorMsg(msg);
+        setErrorMsg(e?.message || "Erreur de chargement de la semaine.");
         setLoading(false);
       }
     };
@@ -317,7 +307,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     return () => { mounted = false; };
   }, [weekStart, fallbackProjects, authLoading, employee]);
 
-  // Charger les scores
   React.useEffect(() => {
     let active = true;
     const loadScores = async () => {
@@ -335,7 +324,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     return () => { active = false; };
   }, []);
 
-  // Charger GCal à l’activation et aux changements de semaine
   React.useEffect(() => {
     if (!gEnabled) return;
     fetchGcalEvents();
@@ -416,7 +404,6 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     }
   };
 
-  // DnD handlers
   const onDragStart = (e: DragStartEvent) => {
     const t = e.active.data?.current as any;
     if (t?.type === "project") {
@@ -497,12 +484,8 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
 
         try {
           await patchUserWeek({
-            deletes: [
-              origin.id ? { id: origin.id } : { d: origin.d, hour: origin.hour },
-            ],
-            upserts: [
-              { d: targetD, hour: targetH, project_id: origin.projectId, planned_minutes: 60 },
-            ],
+            deletes: [origin.id ? { id: origin.id } : { d: origin.d, hour: origin.hour }],
+            upserts: [{ d: targetD, hour: targetH, project_id: origin.projectId, planned_minutes: 60 }],
           });
 
           try {
@@ -533,11 +516,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
 
         try {
           await patchUserWeek({
-            deletes: [
-              plan?.id
-                ? { id: plan.id }
-                : { d: plan.d, hour: plan.hour },
-            ],
+            deletes: [plan?.id ? { id: plan.id } : { d: plan.d, hour: plan.hour }],
           });
           showSuccess("Créneau supprimé.");
         } catch (err: any) {
@@ -555,9 +534,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     return `${startLbl} – ${endLbl}`;
   }, [days]);
 
-  const retry = () => {
-    setWeekStart((d) => new Date(d));
-  };
+  const retry = () => setWeekStart((d) => new Date(d));
 
   const reloadGcal = async () => {
     await fetchGcalEvents();
@@ -571,33 +548,24 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     <div className="w-full">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            className="border-[#BFBFBF] text-[#214A33]"
-            onClick={() => setWeekStart((d) => addDays(d, -7))}
-          >
+          <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={() => setWeekStart((d) => addDays(d, -7))}>
             <ChevronLeft className="mr-2 h-4 w-4" />
             Précédente
           </Button>
-          <Button
-            variant="outline"
-            className="border-[#BFBFBF] text-[#214A33]"
-            onClick={() => setWeekStart(mondayOf(new Date()))}
-          >
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={() => setWeekStart(mondayOf(new Date()))}>
             <Home className="mr-2 h-4 w-4" />
             Cette semaine
           </Button>
-          <Button
-            variant="outline"
-            className="border-[#BFBFBF] text-[#214A33]"
-            onClick={() => setWeekStart((d) => addDays(d, 7))}
-          >
+          <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={() => setWeekStart((d) => addDays(d, 7))}>
             Suivante
             <ChevronRight className="ml-2 h-4 w-4" />
           </Button>
         </div>
 
-        {/* Groupe Google Agenda */}
+        {/* Google Agenda controls */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-2 rounded-md border border-[#BFBFBF] bg-white px-2 py-1">
             <span className="text-xs text-[#214A33]/80">Afficher Google Agenda</span>
@@ -605,24 +573,15 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
           </div>
           {isGConnected ? (
             <>
-              <Button
-                variant="outline"
-                className="border-[#BFBFBF] text-[#214A33]"
-                onClick={reloadGcal}
-                disabled={gLoading}
-              >
+              <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={reloadGcal} disabled={gLoading}>
                 {gLoading ? "Chargement…" : "Recharger"}
               </Button>
-              <div className="text-[11px] text-[#214A33]/60 min-w-[140px] text-right">
+              <div className="min-w-[140px] text-right text-[11px] text-[#214A33]/60">
                 {gLastSync ? `Sync: ${gLastSync.toLocaleTimeString()}` : gLoading ? "Chargement…" : "Connecté"}
               </div>
             </>
           ) : (
-            <Button
-              variant="outline"
-              className="border-[#BFBFBF] text-[#214A33]"
-              onClick={connectGoogle}
-            >
+            <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={connectGoogle}>
               Connecter Google Agenda
             </Button>
           )}
@@ -630,13 +589,9 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
 
         <div className="flex items-center gap-2">
           <div className="text-sm font-medium text-[#214A33]">{weekLabel}</div>
-
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button
-                variant="outline"
-                className="border-[#F2994A] text-[#214A33] hover:bg-[#F2994A]/10"
-              >
+              <Button variant="outline" className="border-[#F2994A] text-[#214A33] hover:bg-[#F2994A]/10">
                 <Trash2 className="mr-2 h-4 w-4" />
                 Effacer la semaine
               </Button>
@@ -644,9 +599,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Effacer la semaine ?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Cette action supprimera tous vos créneaux planifiés de la semaine côté serveur.
-                </AlertDialogDescription>
+                <AlertDialogDescription>Cette action supprimera tous vos créneaux planifiés de la semaine côté serveur.</AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Annuler</AlertDialogCancel>
@@ -684,18 +637,10 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
       )}
 
       {gEnabled && gError && (
-        <div className="mb-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
-          {gError}
-        </div>
+        <div className="mb-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">{gError}</div>
       )}
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={pointerWithin}
-        onDragStart={onDragStart}
-        onDragOver={onDragOver}
-        onDragEnd={onDragEnd}
-      >
+      <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd}>
         <div className="mb-4 flex flex-wrap items-center gap-2">
           {(projects.length > 0 ? projects : fallbackProjects).map((p) => (
             <ProjectPill key={p.id} id={p.id} code={p.code} name={p.name} />
@@ -706,31 +651,22 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
           <table className="w-full border-collapse">
             <thead>
               <tr>
-                <th className="sticky left-0 z-10 w-24 bg-[#F7F7F7] p-2 text-left text-sm font-semibold text-[#214A33]">
-                  Heure
-                </th>
-                {days.map((d) => (
-                  <th key={d.iso} className="min-w-[120px] p-2 text-left text-sm font-semibold text-[#214A33]">
-                    <div className="flex items-center justify-between">
-                      <span>{d.label}</span>
-                      {gEnabled && (gAllDayByIso[d.iso] ?? 0) > 0 && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span
-                              className="ml-2 rounded-full border border-sky-300 bg-sky-100 px-2 py-0.5 text-[11px] text-sky-800"
-                              title={`${gAllDayByIso[d.iso]} évènement(s) toute la journée`}
-                            >
-                              All‑day: {gAllDayByIso[d.iso]}
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom" align="end" className="max-w-xs whitespace-pre-wrap text-xs">
-                            {listToTooltip(gAllDayTitles[d.iso] || [])}
-                          </TooltipContent>
-                        </Tooltip>
+                <th className="sticky left-0 z-10 w-24 bg-[#F7F7F7] p-2 text-left text-sm font-semibold text-[#214A33]">Heure</th>
+                {days.map((d) => {
+                  const hasAllDay = gEnabled && (gAllDayByIso[d.iso] ?? 0) > 0;
+                  return (
+                    <th key={d.iso} className="relative min-w-[120px] p-2 text-left text-sm font-semibold text-[#214A33]">
+                      {/* Liseré bleu pour all-day */}
+                      {hasAllDay && (
+                        <div className="pointer-events-none absolute inset-y-1 left-0 w-[3px] rounded-full bg-sky-500" />
                       )}
-                    </div>
-                  </th>
-                ))}
+                      <div className="flex items-center justify-between">
+                        <span>{d.label}</span>
+                        {/* on retire le badge All-day et garde un rendu épuré */}
+                      </div>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
@@ -749,6 +685,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
                     const gHas = gCount > 0;
                     const titles = gCellTitles[k] || [];
                     const conflict = gHas && hasPlan;
+                    const hasAllDay = gEnabled && (gAllDayByIso[d.iso] ?? 0) > 0;
 
                     return (
                       <CellDroppable
@@ -762,7 +699,12 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
                           !highlight && conflict && "ring-2 ring-red-400"
                         )}
                       >
-                        {/* Visuel conflit: overlay léger rouge en diagonale */}
+                        {/* Liseré bleu en colonne si all-day présent */}
+                        {hasAllDay && (
+                          <div className="pointer-events-none absolute inset-y-1 left-0 w-[3px] rounded-full bg-sky-500" />
+                        )}
+
+                        {/* Overlay conflit */}
                         {conflict && (
                           <div
                             className="pointer-events-none absolute inset-0 rounded-sm"
@@ -775,9 +717,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
 
                         {!hasPlan ? (
                           <div className="absolute inset-0 flex items-center justify-center">
-                            <span className="pointer-events-none select-none text-xs text-[#214A33]/40">
-                              Glissez un projet ici…
-                            </span>
+                            <span className="pointer-events-none select-none text-xs text-[#214A33]/40">Glissez un projet ici…</span>
                           </div>
                         ) : (
                           <PlanDraggable
@@ -788,16 +728,14 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
                           />
                         )}
 
-                        {/* Badge Gcal plus visible + tooltip titres */}
+                        {/* Badge Gcal + titres en tooltip */}
                         {gHas && (
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <div
                                 className={cn(
                                   "absolute left-1 bottom-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px]",
-                                  conflict
-                                    ? "bg-red-600 text-white"
-                                    : "bg-sky-600 text-white"
+                                  conflict ? "bg-red-600 text-white" : "bg-sky-600 text-white"
                                 )}
                                 title={`${gCount} évènement(s) Google sur ce créneau`}
                               >
@@ -825,7 +763,7 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
 
         <DragOverlay>
           {overlay.type === "project" ? (
-            <div className="select-none inline-flex items-center gap-2 rounded-full border border-[#BFBFBF] bg-white px-3 py-1 text-sm text-[#214A33] shadow">
+            <div className="inline-flex select-none items-center gap-2 rounded-full border border-[#BFBFBF] bg-white px-3 py-1 text-sm text-[#214A33] shadow">
               <span className="h-2 w-2 rounded-full bg-[#F2994A]" />
               <span className="font-medium">{overlay.code}</span>
               <span className="text-[#214A33]/70">{overlay.name}</span>
