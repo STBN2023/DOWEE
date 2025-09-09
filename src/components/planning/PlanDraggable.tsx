@@ -1,4 +1,5 @@
 import React from "react";
+import { useDraggable } from "@dnd-kit/core";
 
 type Props = {
   planKey: string; // `${d}|${hour}`
@@ -24,14 +25,21 @@ function colorClasses(color: Props["color"]) {
 }
 
 const PlanDraggable: React.FC<Props> = ({ planKey, labelCode, labelName, className, color = "gray" }) => {
-  // Remplacé par HTML5 drag native précédente: maintenu simple sans dnd-kit ici
-  // On laisse le parent gérer le drag via dnd-kit; ce composant est purement visuel
+  // Draggable pour permettre le déplacement/suppression via dnd-kit
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `plan-${planKey}`,
+    data: { type: "plan", planKey },
+  });
+
   const classes = colorClasses(color);
 
   return (
     <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
       title={`${labelCode ?? "—"} — ${labelName ?? "—"}`}
-      className={`absolute inset-1 flex items-center gap-2 rounded-md ${classes.border} ${classes.bg} px-2 text-xs text-[#214A33] shadow-sm ${className ?? ""}`}
+      className={`absolute inset-1 flex items-center gap-2 rounded-md ${classes.border} ${classes.bg} px-2 text-xs text-[#214A33] shadow-sm ${className ?? ""} ${isDragging ? "opacity-70" : ""} cursor-grab active:cursor-grabbing`}
     >
       <span className={`h-2 w-2 rounded-full ${classes.dot}`} />
       <span className="font-medium">{labelCode}</span>
