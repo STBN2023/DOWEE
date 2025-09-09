@@ -105,3 +105,10 @@ export async function deleteProject(project_id: string): Promise<{ ok: true }> {
   });
   return unwrapFunction<{ ok: true }>(res);
 }
+
+export async function finalizeProject(project_id: string, opts?: { delete_future_plans?: boolean }): Promise<{ ok: true; deleted_future?: number }> {
+  const res = await supabase.functions.invoke("admin-projects", {
+    body: { action: "finalize", project_id, delete_future_plans: opts?.delete_future_plans ?? true },
+  });
+  return unwrapFunction<{ ok: true; deleted_future?: number }>(res);
+}

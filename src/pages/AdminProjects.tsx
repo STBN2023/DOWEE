@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Pencil, Plus, Users, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { Pencil, Plus, Users, Trash2, ChevronDown, ChevronUp, Archive } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
 import {
@@ -30,6 +30,7 @@ import {
   setProjectAssignments,
   updateProject,
   deleteProject,
+  finalizeProject,
   type Employee,
   type Project,
   type Status,
@@ -75,7 +76,6 @@ function scoreBadge(score?: number) {
   return "bg-red-50 text-red-700 border border-red-200";
 }
 
-// Helpers score (cohérents avec l’edge function)
 function sClient(segment?: string | null): number {
   if (!segment) return 50;
   const b = segment.toLowerCase();
@@ -143,11 +143,9 @@ const AdminProjects = () => {
     effort_days: "",
   });
 
-  // Affectations
   const [openAssignFor, setOpenAssignFor] = React.useState<string | null>(null);
   const [assignSelection, setAssignSelection] = React.useState<Record<string, boolean>>({});
 
-  // Edition
   const [openEditFor, setOpenEditFor] = React.useState<Project | null>(null);
   const [editForm, setEditForm] = React.useState<{
     name: string;
@@ -173,16 +171,15 @@ const AdminProjects = () => {
     effort_days: "",
   });
 
-  // Aide Score
   const [showScoreHelp, setShowScoreHelp] = React.useState<boolean>(false);
-  // Détails par ligne
   const [openRows, setOpenRows] = React.useState<Record<string, boolean>>({});
 
-  // Filtres + tri
   const [q, setQ] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<"all" | Status>("all");
   const [clientFilter, setClientFilter] = React.useState<string>("all");
   const [sort, setSort] = React.useState<{ key: SortKey; dir: SortDir }>({ key: "score", dir: "desc" });
+
+  const [finalizeFor, setFinalizeFor] = React.useState<Project | null>(null);
 
   const refresh = async () => {
     setLoading(true);
@@ -302,7 +299,6 @@ const AdminProjects = () => {
         client_id: editForm.client_id,
         tariff_id: editForm.tariff_id || null,
         quote_amount: isFinite(Number(quote)) ? Number(quote) : null,
-        // budgets laissés à part ici; la modale actuelle se concentre sur champs principaux
         due_date,
         effort_days,
       });
@@ -314,7 +310,6 @@ const AdminProjects = () => {
     }
   };
 
-  // Liste filtrée + triée
   const filtered = React.useMemo(() => {
     const needle = q.trim().toLowerCase();
     let arr = [...projects];
@@ -329,8 +324,6 @@ const AdminProjects = () => {
     arr.sort((a, b) => {
       if (sort.key === "code") return a.code.localeCompare(b.code) * dirMul;
       if (sort.key === "name") return a.name.localeCompare(b.name) * dirMul;
-
-      // score
       const sa = scoreDetails[a.id]?.score ?? -Infinity;
       const sb = scoreDetails[b.id]?.score ?? -Infinity;
       return (sa - sb) * dirMul;
@@ -340,6 +333,18 @@ const AdminProjects = () => {
   }, [projects, q, statusFilter, clientFilter, sort, scoreDetails]);
 
   const toggleRow = (id: string) => setOpenRows((prev) => ({ ...prev, [id]: !prev[id] }));
+
+  const onFinalize = async () => {
+    if (!finalizeFor) return;
+    try {
+      const res = await finalizeProject(finalizeFor.id, { delete_future_plans: true });
+      showSuccess(`Projet finalisé. ${res.deleted_future ? `${res.deleted_future} créneau(x) futur(s) supprimé(s).` : ""}`);
+      setFinalizeFor(null);
+      await refresh();
+    } catch (e: any) {
+      showError(e?.message || "Finalisation impossible.");
+    }
+  };
 
   return (
     <div className="mx-auto max-w-[1280px] px-6 py-6">
@@ -404,7 +409,6 @@ const AdminProjects = () => {
         </CardHeader>
 
         <CardContent>
-          {/* Aide Score + Toggle */}
           <div className="mb-3 rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-3 text-[12px] text-[#214A33]">
             <div className="flex items-center justify-between">
               <div className="font-medium">Comment est calculé le Score ?</div>
@@ -416,35 +420,12 @@ const AdminProjects = () => {
                 aria-expanded={showScoreHelp}
                 aria-controls="score-help"
               >
-                {showScoreHelp ? (<><ChevronUp className="mr-2 h-4 w-4" />Masquer</>) : (<><ChevronDown className="mr-2 h-4 w-4" />Afficher</>)}
+                {showScoreHelp ? "Masquer" : "Afficher"}
               </Button>
             </div>
-
             {showScoreHelp && (
-              <div id="score-help" className="mt-2 space-y-3">
-                <div className="rounded-md border border-[#BFBFBF]/60 bg-white p-2">
-                  <div className="mb-1 text-[12px] font-semibold text-[#214A33]">Version courte (débutant)</div>
-                  <ul className="list-disc pl-5 space-y-0.5">
-                    <li>Le score va de 0 à 100. Plus c’est haut, plus le projet est prioritaire.</li>
-                    <li>Il dépend de 3 idées simples: le type de client, la marge prévue, et l’urgence.</li>
-                    <li>Client: “super rentable” monte le score; “pas rentable” le baisse.</li>
-                    <li>Marge: plus le pourcentage est élevé, mieux c’est.</li>
-                    <li>Urgence: si l’échéance est proche par rapport à l’effort (B petit), le score augmente.</li>
-                  </ul>
-                  <div className="mt-2 text-[11px] text-[#214A33]/80">
-                    Exemple: client normal, marge 30%, échéance bientôt (B≈0,8) → score autour de 70–85 (prioritaire).
-                  </div>
-                </div>
-
-                <div className="rounded-md border border-[#BFBFBF]/60 bg-white p-2">
-                  <div className="mb-1 text-[12px] font-semibold text-[#214A33]">Détail (avancé)</div>
-                  <ul className="list-disc pl-5 space-y-0.5">
-                    <li>Score = (0,25×S_client + 0,35×S_marge + 0,20×S_urgence + 0,10×S_récurrence + 0,10×S_strat) × (★ ? 1,15 : 1), borné à [0,100].</li>
-                    <li>S_client: Super rentable=80, Normal=50, Pas rentable=20.</li>
-                    <li>S_marge: ≥40% → 100 ; 20–39% → 60–98 ; 1–19% → 22–58 ; ≤0% → 0.</li>
-                    <li>S_urgence: B = (jours restants / effort en jours) → B≤0:100 · 0&lt;B&lt;1:90 · 1≤B&lt;3:60 · B≥3:20.</li>
-                  </ul>
-                </div>
+              <div id="score-help" className="mt-2 text-[12px] text-[#214A33]/90">
+                Score = (0,25×S_client + 0,35×S_marge + 0,20×S_urgence) × (★ ? 1,15 : 1), borné à [0,100].
               </div>
             )}
           </div>
@@ -470,26 +451,8 @@ const AdminProjects = () => {
                 {clients.map((c) => (<SelectItem key={c.id} value={c.id}>{c.code} — {c.name}</SelectItem>))}
               </SelectContent>
             </Select>
-            <div className="col-span-2 flex items-center gap-2">
-              <Select value={sort.key} onValueChange={(v) => setSort((s) => ({ ...s, key: v as SortKey }))}>
-                <SelectTrigger className="bg-white border-[#BFBFBF] text-[#214A33]"><SelectValue placeholder="Tri" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="score">Score</SelectItem>
-                  <SelectItem value="code">Code</SelectItem>
-                  <SelectItem value="name">Nom</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={sort.dir} onValueChange={(v) => setSort((s) => ({ ...s, dir: v as SortDir }))}>
-                <SelectTrigger className="w-[130px] bg-white border-[#BFBFBF] text-[#214A33]"><SelectValue placeholder="Sens" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="asc">Croissant</SelectItem>
-                  <SelectItem value="desc">Décroissant</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
           </div>
 
-          {/* Tableau compact */}
           <div className="rounded-md border border-[#BFBFBF]">
             <table className="w-full border-collapse">
               <thead className="bg-[#F7F7F7]">
@@ -518,18 +481,6 @@ const AdminProjects = () => {
 
                     const details = scoreDetails[p.id];
                     const sc = details?.score;
-                    const seg = details?.segment ?? null;
-                    const star = !!details?.star;
-                    const margin_pct = details?.margin_pct ?? null;
-                    const dueIso = details?.due_date ?? null;
-                    const effortDays = details?.effort_days ?? null;
-                    const dLeft = daysLeftFromIso(dueIso);
-                    const B = (dLeft == null || effortDays == null || effortDays <= 0) ? null : (dLeft / effortDays);
-                    const sClientVal = sClient(seg);
-                    const sMargeVal = sMarge(margin_pct);
-                    const sUrgVal = sUrgence(dLeft, effortDays);
-                    const raw = 0.25 * sClientVal + 0.35 * sMargeVal + 0.20 * sUrgVal;
-                    const final = clamp100(Math.round((raw * (star ? 1.15 : 1)) * 100) / 100);
 
                     const open = !!openRows[p.id];
 
@@ -554,33 +505,14 @@ const AdminProjects = () => {
                             {sc == null ? (
                               <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-semibold", scoreBadge(undefined))}>—</span>
                             ) : (
-                              <HoverCard>
-                                <HoverCardTrigger asChild>
-                                  <span className={cn("inline-flex cursor-help rounded-full px-2 py-0.5 text-xs font-semibold", scoreBadge(sc))}>
-                                    {Math.round(sc).toString().padStart(2, "0")}
-                                  </span>
-                                </HoverCardTrigger>
-                                <HoverCardContent className="w-80 text-xs">
-                                  <div className="space-y-1 text-[#214A33]">
-                                    <div className="font-medium">Détail du score</div>
-                                    <div className="grid grid-cols-2 gap-1">
-                                      <div>Segment client</div><div className="text-right">{seg ?? "—"} {star ? "★" : ""}</div>
-                                      <div>S_client</div><div className="text-right">{sClientVal}</div>
-                                      <div>Marge %</div><div className="text-right">{margin_pct == null ? "—" : `${margin_pct.toFixed(0)}%`}</div>
-                                      <div>S_marge</div><div className="text-right">{Math.round(sMargeVal)}</div>
-                                      <div>Échéance</div><div className="text-right">{dueIso ?? "—"}</div>
-                                      <div>Effort (j)</div><div className="text-right">{effortDays ?? "—"}</div>
-                                      <div>Ratio B</div><div className="text-right">{B == null ? "—" : B.toFixed(2)}</div>
-                                      <div>S_urgence</div><div className="text-right">{sUrgVal}</div>
-                                    </div>
-                                  </div>
-                                </HoverCardContent>
-                              </HoverCard>
+                              <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-semibold", scoreBadge(sc))}>
+                                {Math.round(sc).toString().padStart(2, "0")}
+                              </span>
                             )}
                           </td>
                           <td className="p-2">
                             <Button variant="outline" size="sm" className="border-[#BFBFBF] text-[#214A33]" onClick={() => toggleRow(p.id)}>
-                              {open ? (<><ChevronUp className="mr-2 h-4 w-4" />Masquer</>) : (<><ChevronDown className="mr-2 h-4 w-4" />Détails</>)}
+                              {open ? "Masquer" : "Détails"}
                             </Button>
                           </td>
                           <td className="p-2 flex flex-wrap gap-2">
@@ -614,7 +546,7 @@ const AdminProjects = () => {
                                 </div>
                                 <DialogFooter>
                                   <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={() => setOpenAssignFor(null)}>Annuler</Button>
-                                  <Button className="bg-[#F2994A] hover:bg-[#F2994A]/90 text-white" onClick={confirmAssign}>Enregistrer</Button>
+                                  <Button className="bg-[#F2994A] hover:bg-[#F2994A]/90 text-white" onClick={async () => { await confirmAssign(); }}>Enregistrer</Button>
                                 </DialogFooter>
                               </DialogContent>
                             </Dialog>
@@ -675,6 +607,29 @@ const AdminProjects = () => {
                               </DialogContent>
                             </Dialog>
 
+                            {p.status !== "archived" && (
+                              <AlertDialog open={finalizeFor?.id === p.id} onOpenChange={(o) => (o ? setFinalizeFor(p) : setFinalizeFor(null))}>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]">
+                                    <Archive className="mr-2 h-4 w-4" />
+                                    Finaliser
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Finaliser ce projet ?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Cela archive le projet (statut “archived”) et supprime les créneaux planifiés à venir. L’historique passé est conservé.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Annuler</AlertDialogCancel>
+                                    <AlertDialogAction onClick={onFinalize}>Finaliser</AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
+
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button variant="outline" className="border-red-300 text-red-700 hover:bg-red-50">
@@ -721,13 +676,8 @@ const AdminProjects = () => {
                                   <div>{p.due_date ?? "—"}</div>
                                 </div>
                                 <div className="rounded-md border border-[#BFBFBF]/60 bg-[#F7F7F7] p-2">
-                                  <div className="text-xs text-[#214A33]/70">Effort (jours) / B</div>
-                                  <div>{p.effort_days ?? "—"} {(() => {
-                                    const dLeft = daysLeftFromIso(p.due_date ?? null);
-                                    const eDays = p.effort_days ?? null;
-                                    const b = (dLeft == null || eDays == null || eDays <= 0) ? null : (dLeft / eDays);
-                                    return b != null ? `(B=${b.toFixed(2)})` : "";
-                                  })()}</div>
+                                  <div className="text-xs text-[#214A33]/70">Effort (jours)</div>
+                                  <div>{p.effort_days ?? "—"}</div>
                                 </div>
                                 <div className="col-span-3 rounded-md border border-[#BFBFBF]/60 bg-[#F7F7F7] p-2">
                                   <div className="text-xs text-[#214A33]/70">Salariés affectés</div>
@@ -756,6 +706,11 @@ const AdminProjects = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Confirm Finalize (global) */}
+      <AlertDialog open={!!finalizeFor} onOpenChange={(o) => !o && setFinalizeFor(null)}>
+        {/* Trigger handled per-row; this is kept to satisfy controlled modal typing */}
+      </AlertDialog>
     </div>
   );
 };

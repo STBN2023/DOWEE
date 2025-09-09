@@ -46,7 +46,9 @@ type UpdatePayload = {
   }>;
 };
 type DeletePayload = { action: "delete"; project_id: string };
-type Payload = ListPayload | CreatePayload | AssignPayload | UpdatePayload | DeletePayload;
+type FinalizePayload = { action: "finalize"; project_id: string; delete_future_plans?: boolean };
+
+type Payload = ListPayload | CreatePayload | AssignPayload | UpdatePayload | DeletePayload | FinalizePayload;
 
 function isCreatePayload(p: any): p is CreatePayload {
   return p?.action === "create" && p?.project && typeof p.project?.name === "string" && typeof p.project?.client_id === "string";
@@ -60,9 +62,19 @@ function isUpdatePayload(p: any): p is UpdatePayload {
 function isDeletePayload(p: any): p is DeletePayload {
   return p?.action === "delete" && typeof p?.project_id === "string";
 }
+function isFinalizePayload(p: any): p is FinalizePayload {
+  return p?.action === "finalize" && typeof p?.project_id === "string";
+}
 
 function pad3(n: number) {
   return String(n).padStart(3, "0");
+}
+function todayIsoLocal(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 serve(async (req) => {
@@ -260,6 +272,30 @@ serve(async (req) => {
     const { error } = await admin.from("projects").delete().eq("id", project_id);
     if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+
+  if (isFinalizePayload(body)) {
+    const project_id = body.project_id;
+    const deleteFuture = body.delete_future_plans !== false; // par défaut true
+    const todayIso = todayIsoLocal();
+
+    // 1) Archiver le projet
+    const { error: upErr } = await admin.from("projects").update({ status: "archived" }).eq("id", project_id);
+    if (upErr) return new Response(JSON.stringify({ error: upErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+    // 2) Supprimer les créneaux futurs (on conserve l'historique)
+    let deleted_future = 0;
+    if (deleteFuture) {
+      const { error: delErr, count } = await admin
+        .from("plan_items")
+        .delete({ count: "exact" })
+        .eq("project_id", project_id)
+        .gte("d", todayIso);
+      if (delErr) return new Response(JSON.stringify({ error: delErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      deleted_future = count ?? 0;
+    }
+
+    return new Response(JSON.stringify({ ok: true, deleted_future }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
   return new Response(JSON.stringify({ error: "Invalid action" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
