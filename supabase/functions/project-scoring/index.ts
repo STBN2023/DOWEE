@@ -20,22 +20,12 @@ type ProjectRow = {
   budget_conception: number | null;
   budget_crea: number | null;
   budget_dev: number | null;
-  tariff_id: string | null;
-  due_date: string | null; // YYYY-MM-DD
+  due_date: string | null;
   effort_days: number | null;
 };
 type ClientRow = { id: string; code: string; name: string; segment: string | null; star: boolean | null };
 type ActualRow = { project_id: string; employee_id: string; minutes: number };
 type PlanRow = { project_id: string; employee_id: string; planned_minutes: number };
-
-// Internal cost
-const COST_PER_DAY = { conception: 800, crea: 500, dev: 800 };
-const HOURS_PER_DAY = 8;
-const COST_PER_HOUR = {
-  conception: COST_PER_DAY.conception / HOURS_PER_DAY,
-  crea: COST_PER_DAY.crea / HOURS_PER_DAY,
-  dev: COST_PER_DAY.dev / HOURS_PER_DAY,
-};
 
 function normalizeTeamSlug(input?: string | null): "conception" | "créa" | "dev" | null {
   if (!input) return null;
@@ -45,24 +35,18 @@ function normalizeTeamSlug(input?: string | null): "conception" | "créa" | "dev
   if (base === "commercial" || base === "conception" || base === "direction") return "conception";
   return "conception";
 }
-function rateKey(team: string | null | undefined): "rate_conception" | "rate_crea" | "rate_dev" {
-  const norm = normalizeTeamSlug(team);
-  if (norm === "créa") return "rate_crea";
-  if (norm === "dev") return "rate_dev";
-  return "rate_conception";
-}
 function sClient(segment?: string | null): number {
-  if (!segment) return 50; // défaut
+  if (!segment) return 50;
   const b = segment.toLowerCase();
   if (b.includes("super")) return 80;
   if (b.includes("pas")) return 20;
-  return 50; // normal
+  return 50;
 }
 function sMarge(pct: number | null): number {
   if (pct == null) return 50;
   if (pct <= 0) return 0;
-  if (pct < 20) return 20 + 2 * (pct - 1); // 22..58
-  if (pct < 40) return 60 + 2 * (pct - 20); // 60..98
+  if (pct < 20) return 20 + 2 * (pct - 1);
+  if (pct < 40) return 60 + 2 * (pct - 20);
   return 100;
 }
 function sUrgence(daysLeft: number | null, effortDays: number | null): number {
@@ -83,9 +67,6 @@ serve(async (req) => {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-  const body = (await req.json().catch(() => ({}))) as Partial<Payload>;
-  if (body.action !== "list") return new Response(JSON.stringify({ error: "Invalid action" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -93,68 +74,58 @@ serve(async (req) => {
   const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } });
   const admin = createClient(supabaseUrl, serviceRole, { global: { headers: { Authorization: `Bearer ${serviceRole}` } } });
 
-  // Auth + orphan check
+  const body = (await req.json().catch(() => ({}))) as Partial<Payload>;
+  if (body.action !== "list") return new Response(JSON.stringify({ error: "Invalid action" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
   const { data: userData } = await userClient.auth.getUser();
   if (!userData?.user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  const userId = userData.user.id;
 
-  const { data: empRow, error: empErr } = await admin.from("employees").select("id").eq("id", userId).maybeSingle();
+  const { data: empRow, error: empErr } = await admin.from("employees").select("id").eq("id", userData.user.id).maybeSingle();
   if (empErr) return new Response(JSON.stringify({ error: empErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   if (!empRow) return new Response(JSON.stringify({ error: "Forbidden: orphan session" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-  // Core datasets
+  // Datasets
   const [
     { data: projects, error: projErr },
     { data: clients, error: clientsErr },
     { data: employees, error: emplErr },
+    { data: actuals, error: actErr },
   ] = await Promise.all([
-    admin.from("projects").select("id, code, name, client_id, status, quote_amount, budget_conception, budget_crea, budget_dev, tariff_id, due_date, effort_days").neq("status", "archived"),
+    admin.from("projects").select("id, code, name, client_id, status, quote_amount, budget_conception, budget_crea, budget_dev, due_date, effort_days").neq("status", "archived"),
     admin.from("clients").select("id, code, name, segment, star"),
     admin.from("employees").select("id, team"),
+    admin.from("actual_items").select("project_id, employee_id, minutes"),
   ]);
-
-  if (projErr || clientsErr || emplErr) {
-    const msg = projErr?.message || clientsErr?.message || emplErr?.message || "Unknown error";
+  if (projErr || clientsErr || emplErr || actErr) {
+    const msg = projErr?.message || clientsErr?.message || emplErr?.message || actErr?.message || "Unknown error";
     return new Response(JSON.stringify({ error: msg }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
+  // Dernier coût interne
+  const { data: costRows } = await admin
+    .from("ref_internal_costs")
+    .select("rate_conception, rate_crea, rate_dev, effective_from, created_at")
+    .order("effective_from", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const dayConc = Number(costRows?.[0]?.rate_conception ?? 800);
+  const dayCrea = Number(costRows?.[0]?.rate_crea ?? 500);
+  const dayDev = Number(costRows?.[0]?.rate_dev ?? 800);
+  const H = 8;
+  const HOUR = { conception: dayConc / H, créa: dayCrea / H, dev: dayDev / H };
+
   const projArr = (projects ?? []) as ProjectRow[];
-  const projIds = projArr.map((p) => p.id);
-
-  const [{ data: actuals, error: actErr }] = await Promise.all([
-    admin.from("actual_items").select("project_id, employee_id, minutes").in("project_id", projIds),
-  ]);
-  if (actErr) return new Response(JSON.stringify({ error: actErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-
-  const projectsWithActuals = new Set<string>((actuals ?? []).map((r: any) => r.project_id as string));
-  const withoutActuals = projIds.filter((id) => !projectsWithActuals.has(id));
-  let plans: any[] = [];
-  if (withoutActuals.length > 0) {
-    const { data: planRows, error: planErr } = await admin.from("plan_items").select("project_id, employee_id, planned_minutes").in("project_id", withoutActuals);
-    if (planErr) return new Response(JSON.stringify({ error: planErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    plans = planRows ?? [];
-  }
-
   const clientsMap = new Map<string, ClientRow>();
-  (clients ?? []).forEach((c: any) => clientsMap.set(c.id, c as ClientRow));
+  (clients ?? []).forEach((c) => clientsMap.set((c as any).id, c as any));
 
   const teamMap = new Map<string, string | null>();
-  (employees ?? []).forEach((e: any) => teamMap.set(e.id, (e as EmployeeRow).team ?? null));
+  (employees ?? []).forEach((e) => teamMap.set((e as EmployeeRow).id, (e as EmployeeRow).team ?? null));
 
-  // Costs per project using internal company cost
   const costByProject = new Map<string, number>();
-  for (const row of (actuals ?? []) as ActualRow[]) {
+  for (const row of (actuals ?? []) as any as { project_id: string; employee_id: string; minutes: number }[]) {
     const sec = normalizeTeamSlug(teamMap.get(row.employee_id) ?? null) ?? "conception";
-    const rate = sec === "créa" ? COST_PER_HOUR.crea : sec === "dev" ? COST_PER_HOUR.dev : COST_PER_HOUR.conception;
     const hours = (row.minutes ?? 0) / 60;
-    costByProject.set(row.project_id, (costByProject.get(row.project_id) ?? 0) + hours * rate);
-  }
-  for (const row of (plans as PlanRow[])) {
-    if (projectsWithActuals.has(row.project_id)) continue;
-    const sec = normalizeTeamSlug(teamMap.get(row.employee_id) ?? null) ?? "conception";
-    const rate = sec === "créa" ? COST_PER_HOUR.crea : sec === "dev" ? COST_PER_HOUR.dev : COST_PER_HOUR.conception;
-    const hours = (row.planned_minutes ?? 0) / 60;
-    costByProject.set(row.project_id, (costByProject.get(row.project_id) ?? 0) + hours * rate);
+    costByProject.set(row.project_id, (costByProject.get(row.project_id) ?? 0) + hours * HOUR[sec]);
   }
 
   const out = [];
@@ -179,8 +150,8 @@ serve(async (req) => {
     const s_marge = sMarge(margin_pct);
     const dLeft = daysLeft(p.due_date ?? null);
     const s_urg = sUrgence(dLeft, p.effort_days ?? null);
-    const s_rec = 0; // non disponible
-    const s_strat = 0; // non disponible
+    const s_rec = 0;
+    const s_strat = 0;
 
     const raw = 0.25 * s_client + 0.35 * s_marge + 0.20 * s_urg + 0.10 * s_rec + 0.10 * s_strat;
     const mult = cli?.star ? 1.15 : 1;
@@ -190,7 +161,7 @@ serve(async (req) => {
       project_id: p.id,
       code: p.code,
       name: p.name,
-      client: cli ? { id: cli.id, code: cli.code, name: cli.name } : null,
+      client: cli ? { id: (cli as any).id, code: (cli as any).code, name: (cli as any).name } : null,
       score,
       margin_pct,
       due_date: p.due_date,

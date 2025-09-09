@@ -31,15 +31,6 @@ type ClientRow = { id: string; code: string; name: string };
 type EmployeeRow = { id: string; display_name: string | null; first_name: string | null; last_name: string | null; team: string | null };
 type ActualRow = { employee_id: string; d: string; minutes: number };
 
-// Company internal cost rates per day and conversion to hourly
-const COST_PER_DAY = { conception: 800, crea: 500, dev: 800 };
-const HOURS_PER_DAY = 8;
-const COST_PER_HOUR = {
-  conception: COST_PER_DAY.conception / HOURS_PER_DAY,
-  crea: COST_PER_DAY.crea / HOURS_PER_DAY,
-  dev: COST_PER_DAY.dev / HOURS_PER_DAY,
-};
-
 function isoWeek(d: Date): number {
   const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
   const dayNum = date.getUTCDay() || 7;
@@ -50,18 +41,14 @@ function isoWeek(d: Date): number {
 function monthFromIso(iso: string): number {
   const [y, m, day] = iso.split("-").map((x) => parseInt(x, 10));
   const d = new Date(Date.UTC(y, (m - 1), day));
-  return d.getUTCMonth() + 1; // 1..12
+  return d.getUTCMonth() + 1;
 }
-function rateKey(team: string | null | undefined): "rate_conception" | "rate_crea" | "rate_dev" {
-  if (!team) return "rate_conception";
-  const base = team.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  if (base === "crea" || base === "creation") return "rate_crea";
-  if (base === "dev" || base === "developpement" || base === "developement") return "rate_dev";
-  return "rate_conception";
-}
-function sectionSlug(team: string | null | undefined): "conception" | "crea" | "dev" {
-  const key = rateKey(team);
-  return key === "rate_crea" ? "crea" : key === "rate_dev" ? "dev" : "conception";
+function normalizeTeam(team?: string | null): "conception" | "crea" | "dev" {
+  if (!team) return "conception";
+  const b = team.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (b === "crea" || b === "creation") return "crea";
+  if (b === "dev" || b === "developpement" || b === "developement") return "dev";
+  return "conception";
 }
 function displayName(e: EmployeeRow): string {
   const names = [e.first_name ?? "", e.last_name ?? ""].join(" ").trim();
@@ -83,6 +70,7 @@ serve(async (req) => {
   if (body.action !== "overview" || typeof body.project_id !== "string") {
     return new Response(JSON.stringify({ error: "Invalid payload" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
+
   const year = typeof body.year === "number" && isFinite(body.year) ? body.year : new Date().getFullYear();
   const yStart = `${year}-01-01`;
   const yEnd = `${year}-12-31`;
@@ -102,7 +90,7 @@ serve(async (req) => {
   if (empErr) return new Response(JSON.stringify({ error: empErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   if (!empRow) return new Response(JSON.stringify({ error: "Forbidden: orphan session" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-  // Load project + client + tariff (tariff only for display; cost uses internal rates)
+  // Charger le projet + client (+ barème pour affichage)
   const [{ data: project, error: projErr }, { data: client, error: cliErr }] = await Promise.all([
     admin.from("projects").select("id, code, name, client_id, tariff_id, quote_amount, budget_conception, budget_crea, budget_dev").eq("id", body.project_id).maybeSingle(),
     admin.from("clients").select("id, code, name").eq("id", (await admin.from("projects").select("client_id").eq("id", body.project_id).maybeSingle()).data?.client_id ?? "00000000-0000-0000-0000-000000000000").maybeSingle(),
@@ -116,13 +104,27 @@ serve(async (req) => {
     tariff = (t ?? null) as any;
   }
 
-  // Load employees
+  // Dernière valeur de coût interne (fallback à 800/500/800)
+  const { data: costRows } = await admin
+    .from("ref_internal_costs")
+    .select("rate_conception, rate_crea, rate_dev, effective_from, created_at")
+    .order("effective_from", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  const dayConc = Number(costRows?.[0]?.rate_conception ?? 800);
+  const dayCrea = Number(costRows?.[0]?.rate_crea ?? 500);
+  const dayDev = Number(costRows?.[0]?.rate_dev ?? 800);
+  const H = 8;
+  const HOUR = { conception: dayConc / H, crea: dayCrea / H, dev: dayDev / H };
+
+  // Employés (pour nom + équipe)
   const { data: employees, error: empListErr } = await admin.from("employees").select("id, display_name, first_name, last_name, team");
   if (empListErr) return new Response(JSON.stringify({ error: empListErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   const empMap = new Map<string, EmployeeRow>();
-  (employees ?? []).forEach((e) => empMap.set(e.id, e as any));
+  (employees ?? []).forEach((e) => empMap.set((e as any).id, e as any));
 
-  // Prefer actuals for realized, fallback to plans if none
+  // Réalisé (actuals) -> fallback plans si vide
   const { data: actuals, error: actErr } = await admin
     .from("actual_items")
     .select("employee_id, d, minutes")
@@ -134,7 +136,6 @@ serve(async (req) => {
 
   let rows: ActualRow[] = (actuals ?? []) as any[];
   if ((rows ?? []).length === 0) {
-    // fallback to plans
     const { data: plans, error: planErr } = await admin
       .from("plan_items")
       .select("employee_id, d, planned_minutes")
@@ -145,7 +146,6 @@ serve(async (req) => {
     rows = (plans ?? []).map((p: any) => ({ employee_id: p.employee_id, d: p.d, minutes: p.planned_minutes ?? 0 }));
   }
 
-  // Aggregations with internal company cost
   const members = new Map<string, { id: string; name: string; team: string | null; hours: number }>();
   const totalsBySection: Record<"conception" | "crea" | "dev", { hours: number; cost: number }> = {
     conception: { hours: 0, cost: 0 },
@@ -156,23 +156,19 @@ serve(async (req) => {
 
   for (const r of rows) {
     const emp = empMap.get(r.employee_id);
-    const sec = sectionSlug(emp?.team ?? null);
+    const sec = normalizeTeam(emp?.team ?? null);
     const minutes = r.minutes ?? 0;
     const hours = minutes / 60;
 
-    // per member
     if (emp) {
       const key = emp.id;
       if (!members.has(key)) members.set(key, { id: key, name: displayName(emp), team: emp.team, hours: 0 });
       members.get(key)!.hours += hours;
     }
 
-    // per section with internal cost
     totalsBySection[sec].hours += hours;
-    const rate = COST_PER_HOUR[sec];
-    totalsBySection[sec].cost += hours * rate;
+    totalsBySection[sec].cost += hours * HOUR[sec];
 
-    // weeks
     const [yy, mm, dd] = r.d.split("-").map((x) => parseInt(x, 10));
     const dObj = new Date(Date.UTC(yy, mm - 1, dd));
     const w = isoWeek(dObj);
@@ -188,7 +184,7 @@ serve(async (req) => {
       id: project.id,
       code: project.code,
       name: project.name,
-      client: client ? { id: client.id, code: (client as ClientRow).code, name: (client as ClientRow).name } : null,
+      client: client ? { id: (client as any).id, code: (client as any).code, name: (client as any).name } : null,
       quote_amount: project.quote_amount,
       budgets: {
         conception: project.budget_conception,
@@ -235,8 +231,7 @@ serve(async (req) => {
       monthlyTotals: (() => {
         const map = new Map<number, number>();
         for (const w of weeks.values()) {
-          const m = monthFromIso(`${year}-${String(w.month).padStart(2, "0")}-01`);
-          map.set(m, (map.get(m) ?? 0) + w.hours);
+          map.set(w.month, (map.get(w.month) ?? 0) + w.hours);
         }
         const out: Array<{ month: number; hours: number }> = [];
         for (let m = 1; m <= 12; m++) out.push({ month: m, hours: round2(map.get(m) ?? 0) });

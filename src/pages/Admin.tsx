@@ -2,7 +2,7 @@ import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { Users, Building2, FolderKanban, Shapes, Coins } from "lucide-react";
+import { Users, Building2, FolderKanban, Shapes, Coins, Banknote } from "lucide-react";
 
 const Tile = ({ to, icon: Icon, title, desc, cta }: { to: string; icon: any; title: string; desc: string; cta: string }) => (
   <Card className="border-[#BFBFBF]">
@@ -51,8 +51,15 @@ const Admin = () => {
           to="/admin/tariffs"
           icon={Coins}
           title="Barèmes (tarifs)"
-          desc="Définir et ajuster les tarifs horaires HT."
+          desc="Définir et ajuster les tarifs de facturation HT."
           cta="Gérer les barèmes"
+        />
+        <Tile
+          to="/admin/internal-costs"
+          icon={Banknote}
+          title="Coûts internes"
+          desc="Définir et versionner les coûts journaliers internes."
+          cta="Gérer les coûts"
         />
         <Tile
           to="/admin/references"

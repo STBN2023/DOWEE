@@ -25,6 +25,7 @@ import ReportsChanges from "./pages/ReportsChanges";
 import ProfitabilityClients from "./pages/ProfitabilityClients";
 import ProfitabilityProjects from "./pages/ProfitabilityProjects";
 import ExitValidationGuard from "./components/ExitValidationGuard";
+import AdminInternalCosts from "./pages/AdminInternalCosts";
 
 const queryClient = new QueryClient();
 
@@ -138,6 +139,14 @@ const App = () => (
                 }
               />
               <Route
+                path="/admin/internal-costs"
+                element={
+                  <ProtectedRoute>
+                    <AdminInternalCosts />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/admin/references"
                 element={
                   <ProtectedRoute>
@@ -153,7 +162,6 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

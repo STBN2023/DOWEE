@@ -17,20 +17,10 @@ type ProjectRow = {
   budget_conception: number | null;
   budget_crea: number | null;
   budget_dev: number | null;
-  tariff_id: string | null;
 };
 type EmployeeRow = { id: string; team: string | null };
 type ActualRow = { project_id: string; employee_id: string; minutes: number };
 type PlanRow = { project_id: string; employee_id: string; planned_minutes: number };
-
-// Company internal cost per day and per hour
-const COST_PER_DAY = { conception: 800, crea: 500, dev: 800 };
-const HOURS_PER_DAY = 8;
-const COST_PER_HOUR = {
-  conception: COST_PER_DAY.conception / HOURS_PER_DAY,
-  crea: COST_PER_DAY.crea / HOURS_PER_DAY,
-  dev: COST_PER_DAY.dev / HOURS_PER_DAY,
-};
 
 function normalizeTeamSlug(input?: string | null): "conception" | "créa" | "dev" | null {
   if (!input) return null;
@@ -40,6 +30,7 @@ function normalizeTeamSlug(input?: string | null): "conception" | "créa" | "dev
   if (base === "commercial" || base === "conception" || base === "direction") return "conception";
   return "conception";
 }
+function round2(n: number) { return Math.round(n * 100) / 100; }
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -50,11 +41,6 @@ serve(async (req) => {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-  const body = (await req.json().catch(() => ({}))) as Partial<Payload>;
-  if (body.action !== "overview") {
-    return new Response(JSON.stringify({ error: "Invalid action" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  }
-
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -62,21 +48,20 @@ serve(async (req) => {
   const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } });
   const admin = createClient(supabaseUrl, serviceRole, { global: { headers: { Authorization: `Bearer ${serviceRole}` } } });
 
-  // Auth + orphan check
   const { data: userData } = await userClient.auth.getUser();
   if (!userData?.user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
   const { data: empRow, error: empErr } = await admin.from("employees").select("id").eq("id", userData.user.id).maybeSingle();
   if (empErr) return new Response(JSON.stringify({ error: empErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   if (!empRow) return new Response(JSON.stringify({ error: "Forbidden: orphan session" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-  // Core datasets
   const [
     { data: clients, error: clientsErr },
     { data: projects, error: projErr },
     { data: employees, error: emplErr },
   ] = await Promise.all([
     admin.from("clients").select("id, code, name"),
-    admin.from("projects").select("id, client_id, status, quote_amount, budget_conception, budget_crea, budget_dev, tariff_id").neq("status", "archived"),
+    admin.from("projects").select("id, client_id, status, quote_amount, budget_conception, budget_crea, budget_dev").neq("status", "archived"),
     admin.from("employees").select("id, team"),
   ]);
 
@@ -85,18 +70,27 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: msg }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
-  const activeProjects = (projects ?? []) as ProjectRow[];
+  // Dernière entrée coûts internes
+  const { data: costRows } = await admin
+    .from("ref_internal_costs")
+    .select("rate_conception, rate_crea, rate_dev, effective_from, created_at")
+    .order("effective_from", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const dayConc = Number(costRows?.[0]?.rate_conception ?? 800);
+  const dayCrea = Number(costRows?.[0]?.rate_crea ?? 500);
+  const dayDev = Number(costRows?.[0]?.rate_dev ?? 800);
+  const H = 8;
+  const HOUR = { conception: dayConc / H, créa: dayCrea / H, dev: dayDev / H };
+
+  const activeProjects = (projects ?? []).map((p: any) => p as ProjectRow).filter((p) => p.status !== "archived");
   const projectIds = activeProjects.map((p) => p.id);
 
-  // Load actuals for all active projects; then fallback to plans for projects with zero actuals
   const { data: actuals, error: actErr } = await admin
     .from("actual_items")
     .select("project_id, employee_id, minutes")
     .in("project_id", projectIds);
-
-  if (actErr) {
-    return new Response(JSON.stringify({ error: actErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  }
+  if (actErr) return new Response(JSON.stringify({ error: actErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   const projectsWithActuals = new Set<string>((actuals ?? []).map((r: any) => r.project_id as string));
   const withoutActuals = projectIds.filter((id) => !projectsWithActuals.has(id));
@@ -107,41 +101,32 @@ serve(async (req) => {
       .from("plan_items")
       .select("project_id, employee_id, planned_minutes")
       .in("project_id", withoutActuals);
-
-    if (planErr) {
-      return new Response(JSON.stringify({ error: planErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
+    if (planErr) return new Response(JSON.stringify({ error: planErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     plans = planRows ?? [];
   }
 
   const teamMap = new Map<string, string | null>();
   (employees ?? []).forEach((e) => teamMap.set((e as EmployeeRow).id, (e as EmployeeRow).team ?? null));
 
-  // Cost per project using internal cost per hour
   const costByProject = new Map<string, number>();
-  // Actuals
-  for (const row of (actuals ?? []) as ActualRow[]) {
-    const team = teamMap.get(row.employee_id) ?? null;
-    const sec = normalizeTeamSlug(team) ?? "conception";
-    const rate = sec === "créa" ? COST_PER_HOUR.crea : sec === "dev" ? COST_PER_HOUR.dev : COST_PER_HOUR.conception;
+  for (const row of (actuals ?? []) as any as { project_id: string; employee_id: string; minutes: number }[]) {
+    const sec = normalizeTeamSlug(teamMap.get(row.employee_id) ?? null) ?? "conception";
+    const rate = HOUR[sec];
     const hours = (row.minutes ?? 0) / 60;
     costByProject.set(row.project_id, (costByProject.get(row.project_id) ?? 0) + hours * rate);
   }
-  // Plans fallback for projects without actuals
-  for (const row of plans as PlanRow[]) {
-    const projId = row.project_id;
+  for (const row of (plans as any[])) {
+    const projId = (row as any).project_id as string;
     if (projectsWithActuals.has(projId)) continue;
-    const team = teamMap.get(row.employee_id) ?? null;
-    const sec = normalizeTeamSlug(team) ?? "conception";
-    const rate = sec === "créa" ? COST_PER_HOUR.crea : sec === "dev" ? COST_PER_HOUR.dev : COST_PER_HOUR.conception;
-    const hours = (row.planned_minutes ?? 0) / 60;
+    const sec = normalizeTeamSlug(teamMap.get((row as any).employee_id) ?? null) ?? "conception";
+    const rate = HOUR[sec];
+    const hours = ((row as any).planned_minutes ?? 0) / 60;
     costByProject.set(projId, (costByProject.get(projId) ?? 0) + hours * rate);
   }
 
   const clientMap = new Map<string, { id: string; code: string; name: string }>();
   (clients ?? []).forEach((c) => clientMap.set((c as any).id, c as any));
 
-  // Build client KPIs
   const result = new Map<string, {
     client_id: string;
     code: string;
@@ -158,15 +143,14 @@ serve(async (req) => {
     if (!client_id) continue;
     const c = clientMap.get(client_id);
     if (!c) continue;
-
     const sold = (p.quote_amount ?? 0) || ((p.budget_conception ?? 0) + (p.budget_crea ?? 0) + (p.budget_dev ?? 0));
     const cost = costByProject.get(p.id) ?? 0;
 
     if (!result.has(client_id)) {
       result.set(client_id, {
         client_id,
-        code: c.code,
-        name: c.name,
+        code: (c as any).code,
+        name: (c as any).name,
         projects_count: 0,
         sold_total_ht: 0,
         cost_total: 0,
@@ -180,8 +164,6 @@ serve(async (req) => {
     agg.cost_total += cost;
   }
 
-  // finalize margins
-  function round2(n: number) { return Math.round(n * 100) / 100; }
   for (const [cid, agg] of result.entries()) {
     agg.sold_total_ht = round2(agg.sold_total_ht);
     agg.cost_total = round2(agg.cost_total);

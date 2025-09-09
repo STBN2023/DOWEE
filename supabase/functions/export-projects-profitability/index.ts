@@ -19,21 +19,11 @@ type ProjectRow = {
   budget_conception: number | null;
   budget_crea: number | null;
   budget_dev: number | null;
-  tariff_id: string | null;
 };
 type ClientRow = { id: string; code: string; name: string };
 type EmployeeRow = { id: string; team: string | null };
 type ActualRow = { project_id: string; employee_id: string; minutes: number };
 type PlanRow = { project_id: string; employee_id: string; planned_minutes: number };
-
-// Internal cost
-const COST_PER_DAY = { conception: 800, crea: 500, dev: 800 };
-const HOURS_PER_DAY = 8;
-const COST_PER_HOUR = {
-  conception: COST_PER_DAY.conception / HOURS_PER_DAY,
-  crea: COST_PER_DAY.crea / HOURS_PER_DAY,
-  dev: COST_PER_DAY.dev / HOURS_PER_DAY,
-};
 
 function normalizeTeamSlug(input?: string | null): "conception" | "créa" | "dev" | null {
   if (!input) return null;
@@ -71,7 +61,6 @@ serve(async (req) => {
   const { data: userData } = await userClient.auth.getUser();
   if (!userData?.user) return new Response("Unauthorized", { status: 401, headers: corsHeaders });
 
-  // Orphan check
   const { data: empRow, error: empErr } = await admin.from("employees").select("id").eq("id", userData.user.id).maybeSingle();
   if (empErr) return new Response(empErr.message, { status: 400, headers: corsHeaders });
   if (!empRow) return new Response("Forbidden: orphan session", { status: 403, headers: corsHeaders });
@@ -82,7 +71,7 @@ serve(async (req) => {
     { data: employees, error: emplErr },
   ] = await Promise.all([
     admin.from("clients").select("id, code, name"),
-    admin.from("projects").select("id, code, name, client_id, status, quote_amount, budget_conception, budget_crea, budget_dev, tariff_id").neq("status", "archived"),
+    admin.from("projects").select("id, code, name, client_id, status, quote_amount, budget_conception, budget_crea, budget_dev").neq("status", "archived"),
     admin.from("employees").select("id, team"),
   ]);
 
@@ -90,6 +79,18 @@ serve(async (req) => {
     const msg = clientsErr?.message || projErr?.message || emplErr?.message || "Unknown error";
     return new Response(msg, { status: 400, headers: corsHeaders });
   }
+
+  const { data: costRows } = await admin
+    .from("ref_internal_costs")
+    .select("rate_conception, rate_crea, rate_dev, effective_from, created_at")
+    .order("effective_from", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const dayConc = Number(costRows?.[0]?.rate_conception ?? 800);
+  const dayCrea = Number(costRows?.[0]?.rate_crea ?? 500);
+  const dayDev = Number(costRows?.[0]?.rate_dev ?? 800);
+  const H = 8;
+  const HOUR = { conception: dayConc / H, créa: dayCrea / H, dev: dayDev / H };
 
   let activeProjects = (projects ?? []) as ProjectRow[];
   if (filterClientId) activeProjects = activeProjects.filter((p) => p.client_id === filterClientId);
@@ -100,7 +101,6 @@ serve(async (req) => {
     .from("actual_items")
     .select("project_id, employee_id, minutes")
     .in("project_id", projectIds);
-
   if (actErr) return new Response(actErr.message, { status: 400, headers: corsHeaders });
 
   const projectsWithActuals = new Set<string>((actuals ?? []).map((r: any) => r.project_id as string));
@@ -116,38 +116,34 @@ serve(async (req) => {
     plans = planRows ?? [];
   }
 
-  const clientsMap = new Map<string, ClientRow>();
-  (clients ?? []).forEach((c) => clientsMap.set((c as any).id, c as any));
-
   const teamMap = new Map<string, string | null>();
   (employees ?? []).forEach((e) => teamMap.set((e as EmployeeRow).id, (e as EmployeeRow).team ?? null));
 
   const out = [];
   const costByProject = new Map<string, number>();
-  for (const row of (actuals ?? []) as ActualRow[]) {
+  for (const row of (actuals ?? []) as any as { project_id: string; employee_id: string; minutes: number }[]) {
     const sec = normalizeTeamSlug(teamMap.get(row.employee_id) ?? null) ?? "conception";
-    const rate = sec === "créa" ? COST_PER_HOUR.crea : sec === "dev" ? COST_PER_HOUR.dev : COST_PER_HOUR.conception;
     const hours = (row.minutes ?? 0) / 60;
-    costByProject.set(row.project_id, (costByProject.get(row.project_id) ?? 0) + hours * rate);
+    costByProject.set(row.project_id, (costByProject.get(row.project_id) ?? 0) + hours * HOUR[sec]);
   }
-  for (const row of plans as PlanRow[]) {
-    if (projectsWithActuals.has(row.project_id)) continue;
-    const sec = normalizeTeamSlug(teamMap.get(row.employee_id) ?? null) ?? "conception";
-    const rate = sec === "créa" ? COST_PER_HOUR.crea : sec === "dev" ? COST_PER_HOUR.dev : COST_PER_HOUR.conception;
-    const hours = (row.planned_minutes ?? 0) / 60;
-    costByProject.set(row.project_id, (costByProject.get(row.project_id) ?? 0) + hours * rate);
+  for (const row of (plans as any[])) {
+    const proj = (row as any).project_id as string;
+    if (projectsWithActuals.has(proj)) continue;
+    const sec = normalizeTeamSlug(teamMap.get((row as any).employee_id) ?? null) ?? "conception";
+    const hours = ((row as any).planned_minutes ?? 0) / 60;
+    costByProject.set(proj, (costByProject.get(proj) ?? 0) + hours * HOUR[sec]);
   }
 
   for (const p of activeProjects) {
+    const cli = p.client_id ? (clients as any[])?.find((c) => (c as any).id === p.client_id) as ClientRow | undefined : undefined;
     const sold = (p.quote_amount ?? 0) || ((p.budget_conception ?? 0) + (p.budget_crea ?? 0) + (p.budget_dev ?? 0));
     const cost = costByProject.get(p.id) ?? 0;
     const margin = round2(sold - cost);
     const margin_pct = sold > 0 ? round2((margin / sold) * 100) : null;
-    const cli = p.client_id ? clientsMap.get(p.client_id) ?? null : null;
 
     out.push({
-      code: p.code,
-      name: p.name,
+      project_code: p.code,
+      project_name: p.name,
       client_code: cli?.code ?? "",
       client_name: cli?.name ?? "",
       sold_ht: round2(sold),
@@ -157,20 +153,11 @@ serve(async (req) => {
     });
   }
 
-  out.sort((a, b) => a.code.localeCompare(b.code));
+  out.sort((a, b) => a.project_code.localeCompare(b.project_code));
   const header = ["project_code","project_name","client_code","client_name","sold_ht","cost_realized","margin","margin_pct"];
   const lines = [header.join(",")];
   for (const r of out) {
-    lines.push([
-      csvEscape(r.code),
-      csvEscape(r.name),
-      csvEscape(r.client_code),
-      csvEscape(r.client_name),
-      r.sold_ht,
-      r.cost_realized,
-      r.margin,
-      r.margin_pct ?? ""
-    ].join(","));
+    lines.push([csvEscape(r.project_code), csvEscape(r.project_name), csvEscape(r.client_code), csvEscape(r.client_name), r.sold_ht, r.cost_realized, r.margin, r.margin_pct ?? ""].join(","));
   }
   const filename = `projects_profitability_${new Date().toISOString().slice(0,10)}.csv`;
   return new Response(lines.join("\n"), {

@@ -1,5 +1,5 @@
 import React from "react";
-import { Menu, Home, CalendarDays, BarChart3, Settings, Users, Building2, FolderKanban, Shapes, Bug, ListChecks, Wallet, Receipt } from "lucide-react";
+import { Menu, Home, CalendarDays, BarChart3, Settings, Users, Building2, FolderKanban, Shapes, Bug, ListChecks, Wallet, Receipt, Banknote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Link } from "react-router-dom";
@@ -49,6 +49,8 @@ const BurgerMenu = () => {
             <NavItem to="/admin/employees" icon={Users} label="Profils salariés" onClick={() => setOpen(false)} />
             <NavItem to="/admin/clients" icon={Building2} label="Clients" onClick={() => setOpen(false)} />
             <NavItem to="/admin/projects" icon={FolderKanban} label="Projets" onClick={() => setOpen(false)} />
+            <NavItem to="/admin/tariffs" icon={Wallet} label="Barèmes (tarifs)" onClick={() => setOpen(false)} />
+            <NavItem to="/admin/internal-costs" icon={Banknote} label="Coûts internes" onClick={() => setOpen(false)} />
             <NavItem to="/admin/references" icon={Shapes} label="Références" onClick={() => setOpen(false)} />
             {role === "admin" && (
               <NavItem to="/debug" icon={Bug} label="Debug" onClick={() => setOpen(false)} />

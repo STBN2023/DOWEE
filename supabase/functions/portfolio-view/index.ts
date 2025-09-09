@@ -10,37 +10,10 @@ const corsHeaders = {
 type Scope = "global" | "team" | "me";
 type Payload = { action: "overview"; scope: Scope; year?: number; team?: string };
 
-type ProjectRow = {
-  id: string;
-  status: string;
-  tariff_id: string | null;
-  quote_amount: number | null;
-  budget_conception: number | null;
-  budget_crea: number | null;
-  budget_dev: number | null;
-};
-
-type Tariff = {
-  id: string;
-  label: string;
-  rate_conception: number;
-  rate_crea: number;
-  rate_dev: number;
-};
-
 type EmployeeRow = { id: string; display_name: string | null; first_name: string | null; last_name: string | null; team: string | null };
 type PE = { project_id: string; employee_id: string };
 type ActualRow = { project_id: string; employee_id: string; d: string; minutes: number };
 type PlanRow = { project_id: string; employee_id: string; d: string; planned_minutes: number };
-
-// Company internal cost (per day) and conversion to hourly
-const COST_PER_DAY = { conception: 800, crea: 500, dev: 800 };
-const HOURS_PER_DAY = 8;
-const COST_PER_HOUR = {
-  conception: COST_PER_DAY.conception / HOURS_PER_DAY,
-  crea: COST_PER_DAY.crea / HOURS_PER_DAY,
-  dev: COST_PER_DAY.dev / HOURS_PER_DAY,
-};
 
 function isoWeek(d: Date): number {
   const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
@@ -57,15 +30,15 @@ function normalizeTeamSlug(input?: string | null): "conception" | "créa" | "dev
   if (base === "dev" || base === "developpement" || base === "developement") return "dev";
   return input;
 }
-function rateKey(team: string | null | undefined): "rate_conception" | "rate_crea" | "rate_dev" {
+function rateKey(team: string | null | undefined): "conception" | "crea" | "dev" {
   const norm = normalizeTeamSlug(team);
-  if (norm === "créa") return "rate_crea";
-  if (norm === "dev") return "rate_dev";
-  return "rate_conception";
+  if (norm === "créa") return "crea";
+  if (norm === "dev") return "dev";
+  return "conception";
 }
 function sectionSlug(team: string | null | undefined): "conception" | "crea" | "dev" {
   const k = rateKey(team);
-  return k === "rate_crea" ? "crea" : (k === "rate_dev" ? "dev" : "conception");
+  return k;
 }
 function displayName(e: EmployeeRow): string {
   const names = [e.first_name ?? "", e.last_name ?? ""].join(" ").trim();
@@ -85,6 +58,7 @@ serve(async (req) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
   const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } });
   const admin = createClient(supabaseUrl, serviceRole, { global: { headers: { Authorization: `Bearer ${serviceRole}` } } });
 
@@ -104,32 +78,41 @@ serve(async (req) => {
 
   const [
     { data: projects, error: projErr },
-    { data: tariffs, error: tarErr },
     { data: employees, error: emplErr },
     { data: pe, error: peErr },
   ] = await Promise.all([
-    admin.from("projects").select("id, status, tariff_id, quote_amount, budget_conception, budget_crea, budget_dev"),
-    admin.from("ref_tariffs").select("id, label, rate_conception, rate_crea, rate_dev"),
+    admin.from("projects").select("id, status, quote_amount, budget_conception, budget_crea, budget_dev"),
     admin.from("employees").select("id, display_name, first_name, last_name, team"),
     admin.from("project_employees").select("project_id, employee_id"),
   ]);
-  if (projErr || tarErr || emplErr || peErr) {
-    const msg = projErr?.message || tarErr?.message || emplErr?.message || peErr?.message || "Unknown error";
+  if (projErr || emplErr || peErr) {
+    const msg = projErr?.message || emplErr?.message || peErr?.message || "Unknown error";
     return new Response(JSON.stringify({ error: msg }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
+
+  // Coûts internes (dernière entrée)
+  const { data: costRows } = await admin
+    .from("ref_internal_costs")
+    .select("rate_conception, rate_crea, rate_dev, effective_from, created_at")
+    .order("effective_from", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const dayConc = Number(costRows?.[0]?.rate_conception ?? 800);
+  const dayCrea = Number(costRows?.[0]?.rate_crea ?? 500);
+  const dayDev = Number(costRows?.[0]?.rate_dev ?? 800);
+  const H = 8;
+  const HOUR = { conception: dayConc / H, créa: dayCrea / H, dev: dayDev / H };
 
   const empMap = new Map<string, EmployeeRow>();
   (employees ?? []).forEach((e: any) => empMap.set(e.id, e as EmployeeRow));
 
-  const activeProjects = (projects ?? []).filter((p: any) => p.status !== "archived") as ProjectRow[];
+  const activeProjects = (projects ?? []).filter((p: any) => p.status !== "archived");
 
-  // Determine included projects and allowed employee ids depending on scope
   let includedProjectIds = new Set<string>();
   let allowedEmployeeIds: Set<string> | null = null;
 
   if (scope === "global") {
     for (const p of activeProjects) includedProjectIds.add(p.id);
-    allowedEmployeeIds = null; // everyone
   } else if (scope === "team") {
     const teamEmpIds = new Set<string>();
     for (const e of employees ?? []) {
@@ -145,7 +128,6 @@ serve(async (req) => {
       if (projIds.has(p.id)) includedProjectIds.add(p.id);
     }
   } else {
-    // me
     allowedEmployeeIds = new Set([userId]);
     const projIds = new Set<string>();
     for (const row of (pe ?? []) as PE[]) {
@@ -156,18 +138,12 @@ serve(async (req) => {
     }
   }
 
-  // Load time rows (actuals first, else plans), filtered by year, projects and optionally employees
   const filterProjectIds = [...includedProjectIds];
   let rows: Array<{ project_id: string; employee_id: string; d: string; minutes: number }> = [];
 
   if (filterProjectIds.length > 0) {
     const [{ data: actuals, error: actErr }] = await Promise.all([
-      admin
-        .from("actual_items")
-        .select("project_id, employee_id, d, minutes")
-        .in("project_id", filterProjectIds)
-        .gte("d", yStart)
-        .lte("d", yEnd),
+      admin.from("actual_items").select("project_id, employee_id, d, minutes").in("project_id", filterProjectIds).gte("d", yStart).lte("d", yEnd),
     ]);
     if (actErr) return new Response(JSON.stringify({ error: actErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
@@ -189,9 +165,9 @@ serve(async (req) => {
     rows = rows.filter((r) => allowedEmployeeIds!.has(r.employee_id));
   }
 
-  const totalsBySection: Record<"conception" | "crea" | "dev", { hours: number; cost: number }> = {
+  const totalsBySection: Record<"conception" | "créa" | "dev", { hours: number; cost: number }> = {
     conception: { hours: 0, cost: 0 },
-    crea: { hours: 0, cost: 0 },
+    créa: { hours: 0, cost: 0 },
     dev: { hours: 0, cost: 0 },
   };
   const members = new Map<string, { id: string; name: string; team: string | null; hours: number }>();
@@ -199,23 +175,17 @@ serve(async (req) => {
 
   for (const r of rows) {
     const emp = empMap.get(r.employee_id);
-    const sec = sectionSlug(emp?.team ?? null);
+    const sec = (normalizeTeamSlug(emp?.team ?? null) ?? "conception") as "conception" | "créa" | "dev";
     const hours = (r.minutes ?? 0) / 60;
 
-    // hours
     totalsBySection[sec].hours += hours;
+    totalsBySection[sec].cost += hours * HOUR[sec];
 
-    // internal cost
-    const rate = COST_PER_HOUR[sec];
-    totalsBySection[sec].cost += hours * rate;
-
-    // member
     if (emp) {
       if (!members.has(emp.id)) members.set(emp.id, { id: emp.id, name: displayName(emp), team: emp.team, hours: 0 });
       members.get(emp.id)!.hours += hours;
     }
 
-    // week buckets
     const [yy, mm, dd] = r.d.split("-").map((x) => parseInt(x, 10));
     const dObj = new Date(Date.UTC(yy, (mm - 1), dd));
     const w = isoWeek(dObj);
@@ -224,17 +194,13 @@ serve(async (req) => {
     weeks.get(w)!.hours += hours;
   }
 
-  // Sold totals (sum budgets across included projects)
-  let sold_total = 0;
-  let sold_conc = 0;
-  let sold_crea = 0;
-  let sold_dev = 0;
+  let sold_total = 0, sold_conc = 0, sold_crea = 0, sold_dev = 0;
   for (const p of activeProjects) {
     if (!includedProjectIds.has(p.id)) continue;
-    sold_total += Number(p.quote_amount ?? 0);
-    sold_conc += Number(p.budget_conception ?? 0);
-    sold_crea += Number(p.budget_crea ?? 0);
-    sold_dev += Number(p.budget_dev ?? 0);
+    sold_total += Number((p as any).quote_amount ?? 0);
+    sold_conc += Number((p as any).budget_conception ?? 0);
+    sold_crea += Number((p as any).budget_crea ?? 0);
+    sold_dev += Number((p as any).budget_dev ?? 0);
   }
 
   const response = {
@@ -249,11 +215,11 @@ serve(async (req) => {
       }
     },
     realized: {
-      total_hours: round2(totalsBySection.conception.hours + totalsBySection.crea.hours + totalsBySection.dev.hours),
-      total_cost: round2(totalsBySection.conception.cost + totalsBySection.crea.cost + totalsBySection.dev.cost),
+      total_hours: round2(totalsBySection.conception.hours + totalsBySection.créa.hours + totalsBySection.dev.hours),
+      total_cost: round2(totalsBySection.conception.cost + totalsBySection.créa.cost + totalsBySection.dev.cost),
       by_section: {
         conception: { hours: round2(totalsBySection.conception.hours), cost: round2(totalsBySection.conception.cost) },
-        crea: { hours: round2(totalsBySection.crea.hours), cost: round2(totalsBySection.crea.cost) },
+        crea: { hours: round2(totalsBySection.créa.hours), cost: round2(totalsBySection.créa.cost) },
         dev: { hours: round2(totalsBySection.dev.hours), cost: round2(totalsBySection.dev.cost) },
       }
     },
@@ -261,9 +227,9 @@ serve(async (req) => {
       members: Array.from(members.values()).sort((a, b) => b.hours - a.hours).map((m) => ({ ...m, hours: round2(m.hours) })),
       totals: {
         conception: round2(totalsBySection.conception.hours),
-        crea: round2(totalsBySection.crea.hours),
+        crea: round2(totalsBySection.créa.hours),
         dev: round2(totalsBySection.dev.hours),
-        total: round2(totalsBySection.conception.hours + totalsBySection.crea.hours + totalsBySection.dev.hours),
+        total: round2(totalsBySection.conception.hours + totalsBySection.créa.hours + totalsBySection.dev.hours),
       }
     },
     weekly: {

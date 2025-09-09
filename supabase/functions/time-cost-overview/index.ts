@@ -7,12 +7,12 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-type Payload = { action: "overview"; start?: string }; // start = YYYY-MM-DD (lundi)
+type Payload = { action: "overview"; start?: string };
 
 function mondayOf(d = new Date()): Date {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
-  const day = (x.getDay() + 6) % 7; // 0=Mon
+  const day = (x.getDay() + 6) % 7;
   x.setDate(x.getDate() - day);
   return x;
 }
@@ -27,22 +27,14 @@ type EmployeeRow = { id: string; team: string | null };
 type PlanRow = { project_id: string; employee_id: string; planned_minutes: number; d: string };
 type ActualRow = { project_id: string; employee_id: string; minutes: number; d: string };
 
-// Internal cost rates (per day) and hourly conversion
-const COST_PER_DAY = { conception: 800, crea: 500, dev: 800 };
-const HOURS_PER_DAY = 8;
-const COST_PER_HOUR = {
-  conception: COST_PER_DAY.conception / HOURS_PER_DAY,
-  crea: COST_PER_DAY.crea / HOURS_PER_DAY,
-  dev: COST_PER_DAY.dev / HOURS_PER_DAY,
-};
-
-function mapTeamToSection(team: string | null | undefined): "conception" | "créa" | "dev" {
+function normalizeTeam(team?: string | null): "conception" | "créa" | "dev" {
   if (!team) return "conception";
-  const base = team.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  if (base === "crea" || base === "creation") return "créa";
-  if (base === "dev" || base === "developpement" || base === "developement") return "dev";
+  const b = team.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (b === "crea" || b === "creation") return "créa";
+  if (b === "dev" || b === "developpement" || b === "developement") return "dev";
   return "conception";
 }
+function round2(n: number) { return Math.round(n * 100) / 100; }
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -90,14 +82,25 @@ serve(async (req) => {
   if (empErr) return new Response(JSON.stringify({ error: empErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   if (!empRow) return new Response(JSON.stringify({ error: "Forbidden: orphan session" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-  // Date range (week)
   const start = body.start ? new Date(body.start) : mondayOf(new Date());
   const end = new Date(start);
   end.setDate(end.getDate() + 6);
   const startIso = isoDate(start);
   const endIso = isoDate(end);
 
-  // Load data
+  // Dernière entrée coûts internes
+  const { data: costRows } = await admin
+    .from("ref_internal_costs")
+    .select("rate_conception, rate_crea, rate_dev, effective_from, created_at")
+    .order("effective_from", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const dayConc = Number(costRows?.[0]?.rate_conception ?? 800);
+  const dayCrea = Number(costRows?.[0]?.rate_crea ?? 500);
+  const dayDev = Number(costRows?.[0]?.rate_dev ?? 800);
+  const H = 8;
+  const HOUR = { conception: dayConc / H, "créa": dayCrea / H, dev: dayDev / H };
+
   const [
     { data: employees, error: emplErr },
     { data: plans, error: planErr },
@@ -114,7 +117,7 @@ serve(async (req) => {
   }
 
   const teamMap = new Map<string, string | null>();
-  (employees ?? []).forEach((e) => teamMap.set((e as any).id, (e as EmployeeRow).team ?? null));
+  (employees ?? []).forEach((e: any) => teamMap.set(e.id, (e as EmployeeRow).team ?? null));
 
   type Agg = { hours_planned: number; hours_actual: number; cost_planned: number; cost_actual: number };
   const global: Agg = { hours_planned: 0, hours_actual: 0, cost_planned: 0, cost_actual: 0 };
@@ -122,61 +125,32 @@ serve(async (req) => {
   (["conception", "créa", "dev"] as const).forEach((t) => byTeam.set(t, { hours_planned: 0, hours_actual: 0, cost_planned: 0, cost_actual: 0 }));
   const me: Agg = { hours_planned: 0, hours_actual: 0, cost_planned: 0, cost_actual: 0 };
 
-  // Plans
   for (const row of (plans ?? []) as PlanRow[]) {
-    const section = mapTeamToSection(teamMap.get(row.employee_id) ?? null);
+    const sec = normalizeTeam(teamMap.get(row.employee_id) ?? null);
     const hours = (row.planned_minutes ?? 0) / 60;
-    const rate = section === "conception" ? COST_PER_HOUR.conception : section === "créa" ? COST_PER_HOUR.crea : COST_PER_HOUR.dev;
-    const cost = hours * rate;
-
-    global.hours_planned += hours;
-    global.cost_planned += cost;
-
-    const agg = byTeam.get(section)!;
-    agg.hours_planned += hours;
-    agg.cost_planned += cost;
-
-    if (row.employee_id === userId) {
-      me.hours_planned += hours;
-      me.cost_planned += cost;
-    }
+    const cost = hours * HOUR[sec];
+    global.hours_planned += hours; global.cost_planned += cost;
+    const agg = byTeam.get(sec)!; agg.hours_planned += hours; agg.cost_planned += cost;
+    if (row.employee_id === userId) { me.hours_planned += hours; me.cost_planned += cost; }
   }
 
-  // Actuals
   for (const row of (actuals ?? []) as ActualRow[]) {
-    const section = mapTeamToSection(teamMap.get(row.employee_id) ?? null);
+    const sec = normalizeTeam(teamMap.get(row.employee_id) ?? null);
     const hours = (row.minutes ?? 0) / 60;
-    const rate = section === "conception" ? COST_PER_HOUR.conception : section === "créa" ? COST_PER_HOUR.crea : COST_PER_HOUR.dev;
-    const cost = hours * rate;
-
-    global.hours_actual += hours;
-    global.cost_actual += cost;
-
-    const agg = byTeam.get(section)!;
-    agg.hours_actual += hours;
-    agg.cost_actual += cost;
-
-    if (row.employee_id === userId) {
-      me.hours_actual += hours;
-      me.cost_actual += cost;
-    }
+    const cost = hours * HOUR[sec];
+    global.hours_actual += hours; global.cost_actual += cost;
+    const agg = byTeam.get(sec)!; agg.hours_actual += hours; agg.cost_actual += cost;
+    if (row.employee_id === userId) { me.hours_actual += hours; me.cost_actual += cost; }
   }
 
-  // Round cost to 2 decimals
-  function round2(n: number) { return Math.round(n * 100) / 100; }
-  global.cost_planned = round2(global.cost_planned);
-  global.cost_actual = round2(global.cost_actual);
-  byTeam.forEach((agg) => {
-    agg.cost_planned = round2(agg.cost_planned);
-    agg.cost_actual = round2(agg.cost_actual);
-  });
-  me.cost_planned = round2(me.cost_planned);
-  me.cost_actual = round2(me.cost_actual);
+  global.cost_planned = round2(global.cost_planned); global.cost_actual = round2(global.cost_actual);
+  byTeam.forEach((agg) => { agg.cost_planned = round2(agg.cost_planned); agg.cost_actual = round2(agg.cost_actual); });
+  me.cost_planned = round2(me.cost_planned); me.cost_actual = round2(me.cost_actual);
 
   const response = {
     range: { start: startIso, end: endIso },
     global,
-    byTeam: (["conception", "créa", "dev"] as const).map((t) => ({ team: t, ...byTeam.get(t)! })),
+    byTeam: (["conception", "créa", "dev"] as const).map((t) => ({ team: t as any, ...byTeam.get(t)! })),
     me,
   };
 
