@@ -17,7 +17,7 @@ export default function HelpInfo({ title, botHint, children }: Props) {
         <button
           type="button"
           aria-label="Aide"
-          className="ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full border border-[#BFBFBF] bg-white text-[#214A33] hover:bg-[#F7F7F7] focus:outline-none focus:ring-2 focus:ring-[#214A33]/40"
+          className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full text-[#214A33]/60 hover:text-[#214A33] hover:bg-[#214A33]/5 focus:outline-none focus:ring-2 focus:ring-[#214A33]/30"
         >
           <Info className="h-3.5 w-3.5" />
         </button>

@@ -151,19 +151,6 @@ const ProfitabilityProjects: React.FC = () => {
           </div>
         </CardHeader>
         <CardContent>
-          {/* Encart d’aide + lien vers bot */}
-          <div className="mb-3 rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-3 text-sm text-[#214A33]">
-            Besoin du détail du calcul ? Cliquez sur les badges (i) ou
-            <button
-              type="button"
-              onClick={() => window.dispatchEvent(new Event("dowee:bot:open"))}
-              className="ml-1 inline-flex items-center underline decoration-[#214A33]/40 underline-offset-2 hover:text-[#214A33]/80"
-            >
-              ouvrez le bot
-            </button>
-            {" "}pour poser vos questions.
-          </div>
-
           {errorMsg && <div className="mb-3 rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-700">{errorMsg}</div>}
 
           <div className="overflow-x-auto rounded-md border border-[#BFBFBF] bg-white">
