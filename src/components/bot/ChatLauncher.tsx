@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { doweeChat } from "@/api/doweeBot";
 
 /**
  * ChatLauncher — DoWee (charte couleur appliquée)
@@ -9,16 +10,29 @@ import { motion, AnimatePresence } from "framer-motion";
  *  - Gris neutre: #BFBFBF (bordures, texte secondaire)
  *  - Blanc crème: #F7F7F7 (fonds)
  */
-export default function ChatLauncher({ onOpenChange, onSend }: { onOpenChange?: (open: boolean) => void; onSend?: (msg: string) => Promise<string> | string; }) {
+export default function ChatLauncher({
+  onOpenChange,
+  onSend,
+}: {
+  onOpenChange?: (open: boolean) => void;
+  onSend?: (msg: string) => Promise<string> | string;
+}) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([
-    { role: "assistant", content: "Je suis DoWee. Pose une question sur l'utilisation du logiciel." },
+    {
+      role: "assistant",
+      content:
+        "Je suis DoWee. Pose une question sur l'utilisation du logiciel.",
+    },
   ]);
   const [pending, setPending] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
+    listRef.current?.scrollTo({
+      top: listRef.current.scrollHeight,
+      behavior: "smooth",
+    });
   }, [messages, open]);
 
   const toggle = () => {
@@ -27,14 +41,55 @@ export default function ChatLauncher({ onOpenChange, onSend }: { onOpenChange?: 
     onOpenChange?.(next);
   };
 
+  function cleanAnswer(answer: string, userMsg: string): string {
+    // Supprime les préfixes de relecture
+    let out = answer.replace(/^\s*(tu|vous)\s+as|avez\s+dit\s*:.*$/gim, "").trim();
+    // Si la réponse répète exactement la question entre guillemets, on l’enlève
+    const q = userMsg.trim().replace(/\s+/g, " ").toLowerCase();
+    out = out
+      .replace(new RegExp(`^"\\s*${escapeRegExp(q)}\\s*"`), "")
+      .replace(new RegExp(`^\\s*${escapeRegExp(q)}\\s*$`, "i"), "")
+      .trim();
+    return out || "Je n’ai pas besoin de répéter la question. Voici la réponse :";
+  }
+
+  function escapeRegExp(s: string) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  async function callAssistant(withMsg: string): Promise<string> {
+    // Si onSend externe existe, on l’utilise, sinon on appelle le RAG
+    const custom = onSend?.(withMsg);
+    if (custom) return await custom;
+
+    const history = [...messages, { role: "user", content: withMsg }].map((m) => ({
+      role: m.role,
+      content: m.content,
+    })) as Array<{ role: "user" | "assistant"; content: string }>;
+
+    try {
+      const res = await doweeChat(history as any);
+      return res.answer ?? "Je n’ai pas trouvé d’information pertinente.";
+    } catch {
+      return "Je n’ai pas la réponse pour l’instant.";
+    }
+  }
+
   async function handleSend(msg: string) {
     setMessages((m) => [...m, { role: "user", content: msg }]);
     setPending(true);
     try {
-      const reply = await (onSend?.(msg) ?? defaultEcho(msg));
+      let reply = await callAssistant(msg);
+      reply = cleanAnswer(reply, msg);
       setMessages((m) => [...m, { role: "assistant", content: reply }]);
-    } catch (e) {
-      setMessages((m) => [...m, { role: "assistant", content: "Erreur: impossible d'obtenir une réponse" }]);
+    } catch {
+      setMessages((m) => [
+        ...m,
+        {
+          role: "assistant",
+          content: "Une erreur est survenue.",
+        },
+      ]);
     } finally {
       setPending(false);
     }
@@ -84,13 +139,21 @@ export default function ChatLauncher({ onOpenChange, onSend }: { onOpenChange?: 
             className="mt-3 w=[min(92vw,380px)] h-[min(70vh,560px)] rounded-2xl bg-[#F7F7F7] shadow-2xl ring-1 ring-[#BFBFBF] overflow-hidden"
           >
             <Header onClose={toggle} />
-            <div ref={listRef} className="h-[calc(100%-3.5rem-3.5rem)] overflow-y-auto p-3 bg-gradient-to-b from-[#F7F7F7] to-white space-y-3">
+            <div
+              ref={listRef}
+              className="h-[calc(100%-3.5rem-3.5rem)] overflow-y-auto p-3 bg-gradient-to-b from-[#F7F7F7] to-white space-y-3"
+            >
               {messages.map((m, i) => (
                 <Message key={i} role={m.role} content={m.content} />
               ))}
               {pending && <Typing />}
             </div>
-            <Footer onSend={(msg) => { handleSend(msg); }} />
+            <Footer
+              onSend={(text) => {
+                const t = (text || "").trim();
+                if (t) handleSend(t);
+              }}
+            />
           </motion.div>
         )}
       </AnimatePresence>
@@ -102,13 +165,21 @@ function Message({ role, content }: { role: "user" | "assistant"; content: strin
   const isUser = role === "user";
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-      <div className={`${isUser ? "bg-[#F2994A] text-white" : "bg-white text-[#214A33]"} max-w-[85%] px-3 py-2 rounded-2xl shadow-sm ring-1 ring-[#BFBFBF] ${isUser ? "rounded-br-sm" : "rounded-bl-sm"}`}>
+      <div
+        className={`${
+          isUser ? "bg-[#F2994A] text-white" : "bg-white text-[#214A33]"
+        } max-w-[85%] px-3 py-2 rounded-2xl shadow-sm ring-1 ring-[#BFBFBF] ${
+          isUser ? "rounded-br-sm" : "rounded-bl-sm"
+        }`}
+      >
         {!isUser && (
           <div className="mb-1 flex items-center gap-2 text-[#6b6b6b] text-xs">
             <RobotHead className="w-4 h-4" /> DoWee
           </div>
         )}
-        <div className="whitespace-pre-wrap text-sm leading-relaxed">{content}</div>
+        <div className="whitespace-pre-wrap text-sm leading-relaxed">
+          {content}
+        </div>
       </div>
     </div>
   );
@@ -119,9 +190,21 @@ function Typing() {
     <div className="flex items-center gap-2 text-xs text-[#6b6b6b]">
       <RobotHead className="w-4 h-4" />
       <span>rédaction…</span>
-      <motion.span className="inline-block w-1 h-1 rounded-full bg-[#BFBFBF]" animate={{ opacity: [0.2, 1, 0.2] }} transition={{ duration: 1, repeat: Infinity }} />
-      <motion.span className="inline-block w-1 h-1 rounded-full bg-[#BFBFBF]" animate={{ opacity: [0.2, 1, 0.2] }} transition={{ duration: 1, delay: 0.2, repeat: Infinity }} />
-      <motion.span className="inline-block w-1 h-1 rounded-full bg-[#BFBFBF]" animate={{ opacity: [0.2, 1, 0.2] }} transition={{ duration: 1, delay: 0.4, repeat: Infinity }} />
+      <motion.span
+        className="inline-block w-1 h-1 rounded-full bg-[#BFBFBF]"
+        animate={{ opacity: [0.2, 1, 0.2] }}
+        transition={{ duration: 1, repeat: Infinity }}
+      />
+      <motion.span
+        className="inline-block w-1 h-1 rounded-full bg-[#BFBFBF]"
+        animate={{ opacity: [0.2, 1, 0.2] }}
+        transition={{ duration: 1, delay: 0.2, repeat: Infinity }}
+      />
+      <motion.span
+        className="inline-block w-1 h-1 rounded-full bg-[#BFBFBF]"
+        animate={{ opacity: [0.2, 1, 0.2] }}
+        transition={{ duration: 1, delay: 0.4, repeat: Infinity }}
+      />
     </div>
   );
 }
@@ -163,7 +246,10 @@ function Footer({ onSend }: { onSend: (msg: string) => void }) {
         className="flex-1 h-10 rounded-xl border border-[#BFBFBF] px-3 outline-none focus:ring-2 focus:ring-[#214A33] bg-white"
         autoComplete="off"
       />
-      <button type="submit" className="h-10 px-3 rounded-xl bg-[#F2994A] text-white hover:bg-[#E38C3F]">
+      <button
+        type="submit"
+        className="h-10 px-3 rounded-xl bg-[#F2994A] text-white hover:bg-[#E38C3F]"
+      >
         Envoyer
       </button>
     </form>
@@ -174,14 +260,21 @@ function Footer({ onSend }: { onSend: (msg: string) => void }) {
 function ChatIcon({ className = "" }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>
-      <path d="M2 4.75A2.75 2.75 0 0 1 4.75 2h14.5A2.75 2.75 0 0 1 22 4.75v8.5A2.75 2.75 0 0 1 19.25 16H8l-4.5 4.5V16H4.75A2.75 2.75 0 0 1 2 13.25v-8.5Z"/>
+      <path d="M2 4.75A2.75 2.75 0 0 1 4.75 2h14.5A2.75 2.75 0 0 1 22 4.75v8.5A2.75 2.75 0 0 1 19.25 16H8l-4.5 4.5V16H4.75A2.75 2.75 0 0 1 2 13.25v-8.5Z" />
     </svg>
   );
 }
 
 function CloseIcon({ className = "" }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden
+    >
       <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M6 18L18 6" />
     </svg>
   );
@@ -207,7 +300,14 @@ function RobotHead({ className = "" }: { className?: string }) {
 
 function AnimatedRobot({ className = "" }: { className?: string }) {
   return (
-    <motion.svg viewBox="0 0 64 64" className={className} aria-hidden initial={{ rotate: 0 }} animate={{ rotate: [0, -4, 0, 4, 0] }} transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}>
+    <motion.svg
+      viewBox="0 0 64 64"
+      className={className}
+      aria-hidden
+      initial={{ rotate: 0 }}
+      animate={{ rotate: [0, -4, 0, 4, 0] }}
+      transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
+    >
       <defs>
         <linearGradient id="g" x1="0" x2="1">
           <stop offset="0" stopColor="#F2994A" />
@@ -215,20 +315,45 @@ function AnimatedRobot({ className = "" }: { className?: string }) {
         </linearGradient>
       </defs>
       {/* Corps */}
-      <motion.rect x="10" y="18" width="44" height="34" rx="10" fill="url(#g)" animate={{ y: [18, 16, 18] }} transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }} />
+      <motion.rect
+        x="10"
+        y="18"
+        width="44"
+        height="34"
+        rx="10"
+        fill="url(#g)"
+        animate={{ y: [18, 16, 18] }}
+        transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
+      />
       {/* Antenne */}
-      <motion.circle cx="32" cy="10" r="3" fill="#BFBFBF" animate={{ cy: [10, 8, 10] }} transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }} />
+      <motion.circle
+        cx="32"
+        cy="10"
+        r="3"
+        fill="#BFBFBF"
+        animate={{ cy: [10, 8, 10] }}
+        transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+      />
       <rect x="31" y="12" width="2" height="6" rx="1" fill="#BFBFBF" />
       {/* Visage */}
       <rect x="16" y="24" width="32" height="16" rx="8" fill="#F7F7F7" />
-      <motion.circle cx="26" cy="32" r="3" fill="#214A33" animate={{ r: [3, 3, 1.2, 3] }} transition={{ duration: 2.4, repeat: Infinity, times: [0, 0.7, 0.75, 1] }} />
-      <motion.circle cx="38" cy="32" r="3" fill="#214A33" animate={{ r: [3, 3, 1.2, 3] }} transition={{ duration: 2.4, repeat: Infinity, times: [0, 0.7, 0.75, 1] }} />
+      <motion.circle
+        cx="26"
+        cy="32"
+        r="3"
+        fill="#214A33"
+        animate={{ r: [3, 3, 1.2, 3] }}
+        transition={{ duration: 2.4, repeat: Infinity, times: [0, 0.7, 0.75, 1] }}
+      />
+      <motion.circle
+        cx="38"
+        cy="32"
+        r="3"
+        fill="#214A33"
+        animate={{ r: [3, 3, 1.2, 3] }}
+        transition={{ duration: 2.4, repeat: Infinity, times: [0, 0.7, 0.75, 1] }}
+      />
       <rect x="28" y="38" width="8" height="2" rx="1" fill="#214A33" />
     </motion.svg>
   );
-}
-
-// Fallback simple si aucune API n'est branchée
-function defaultEcho(q: string) {
-  return new Promise<string>((r) => setTimeout(() => r(`Tu as dit: "${q}"\n(Branche onSend pour appeler ton API RAG)`), 500));
 }
