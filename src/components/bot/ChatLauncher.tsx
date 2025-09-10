@@ -114,12 +114,13 @@ export default function ChatLauncher({
   }, []);
 
   const dismissedKey = useMemo(() => `dowee.bot.afternoon.dismissed.${todayIso}`, [todayIso]);
+  const loginPromptKey = useMemo(() => `dowee.bot.login.prompted.${todayIso}`, [todayIso]);
 
   const runAfternoonCheck = useCallback(
-    async (opts?: { ignoreAfternoonFlag?: boolean }) => {
-      if (!session || !employee) return; // attendre que le profil soit prêt (évite la session orpheline)
+    async (opts?: { ignoreAfternoonFlag?: boolean; ignoreDismissed?: boolean }) => {
+      if (!session || !employee) return; // attendre que le profil soit prêt
       if (!opts?.ignoreAfternoonFlag && !settings.afternoonReminderEnabled) return;
-      if (localStorage.getItem(dismissedKey) === "1") return;
+      if (!opts?.ignoreDismissed && localStorage.getItem(dismissedKey) === "1") return;
 
       try {
         const status = await getDayStatus(todayIso);
@@ -142,12 +143,16 @@ export default function ChatLauncher({
     [session, employee, settings.afternoonReminderEnabled, dismissedKey, todayIso, onOpenChange]
   );
 
-  // Proposer à la connexion si param activé — seulement quand employee est chargé
+  // Proposer à la connexion si param activé — 1 seule fois par session, en ignorant le 'Plus tard' du jour
   useEffect(() => {
     if (session && employee && settings.promptOnLoginEnabled) {
-      runAfternoonCheck({ ignoreAfternoonFlag: true });
+      const already = sessionStorage.getItem(loginPromptKey) === "1";
+      if (!already) {
+        runAfternoonCheck({ ignoreAfternoonFlag: true, ignoreDismissed: true });
+        sessionStorage.setItem(loginPromptKey, "1");
+      }
     }
-  }, [session, employee, settings.promptOnLoginEnabled, runAfternoonCheck]);
+  }, [session, employee, settings.promptOnLoginEnabled, runAfternoonCheck, loginPromptKey]);
 
   // Test manuel
   useEffect(() => {
