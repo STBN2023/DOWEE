@@ -22,7 +22,7 @@ export default function ChatLauncher({
   onSend?: (msg: string) => Promise<string> | string;
 }) {
   const navigate = useNavigate();
-  const { session } = useAuth();
+  const { session, employee } = useAuth();
   const { settings } = useBotSettings();
 
   const [open, setOpen] = useState(false);
@@ -117,7 +117,7 @@ export default function ChatLauncher({
 
   const runAfternoonCheck = useCallback(
     async (opts?: { ignoreAfternoonFlag?: boolean }) => {
-      if (!session) return;
+      if (!session || !employee) return; // attendre que le profil soit prêt (évite la session orpheline)
       if (!opts?.ignoreAfternoonFlag && !settings.afternoonReminderEnabled) return;
       if (localStorage.getItem(dismissedKey) === "1") return;
 
@@ -139,15 +139,15 @@ export default function ChatLauncher({
         // silencieux
       }
     },
-    [session, settings.afternoonReminderEnabled, dismissedKey, todayIso, onOpenChange]
+    [session, employee, settings.afternoonReminderEnabled, dismissedKey, todayIso, onOpenChange]
   );
 
-  // Proposer à la connexion si param activé
+  // Proposer à la connexion si param activé — seulement quand employee est chargé
   useEffect(() => {
-    if (session && settings.promptOnLoginEnabled) {
+    if (session && employee && settings.promptOnLoginEnabled) {
       runAfternoonCheck({ ignoreAfternoonFlag: true });
     }
-  }, [session, settings.promptOnLoginEnabled, runAfternoonCheck]);
+  }, [session, employee, settings.promptOnLoginEnabled, runAfternoonCheck]);
 
   // Test manuel
   useEffect(() => {
