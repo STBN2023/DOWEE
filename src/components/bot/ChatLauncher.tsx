@@ -53,7 +53,7 @@ export default function ChatLauncher({
     onOpenChange?.(next);
   };
 
-  // --- Ajout: ouverture programmatique via évènement global
+  // --- Ouverture programmatique simple
   useEffect(() => {
     const openHandler = () => {
       setOpen(true);
@@ -62,6 +62,24 @@ export default function ChatLauncher({
     window.addEventListener("dowee:bot:open", openHandler as any);
     return () => window.removeEventListener("dowee:bot:open", openHandler as any);
   }, [onOpenChange]);
+
+  // --- Ouverture + question programmatique
+  useEffect(() => {
+    const askHandler = (ev: Event) => {
+      const e = ev as CustomEvent<{ message?: string }>;
+      const msg = (e.detail?.message || "").trim();
+      if (!msg) return;
+      // ouvrir le bot puis envoyer la question
+      setOpen(true);
+      onOpenChange?.(true);
+      // léger délai pour laisser le panneau s’ouvrir visuellement
+      setTimeout(() => {
+        handleSend(msg);
+      }, 60);
+    };
+    window.addEventListener("dowee:bot:ask", askHandler as EventListener);
+    return () => window.removeEventListener("dowee:bot:ask", askHandler as EventListener);
+  }, [onOpenChange]); // handleSend est stable via closure ci-dessous
 
   function cleanAnswer(answer: string, userMsg: string): string {
     let out = answer.replace(/^\s*(tu|vous)\s+as|avez\s+dit\s*:.*$/gim, "").trim();
@@ -95,11 +113,13 @@ export default function ChatLauncher({
   }
 
   async function handleSend(msg: string) {
-    setMessages((m) => [...m, { role: "user", content: msg }]);
+    const text = (msg || "").trim();
+    if (!text) return;
+    setMessages((m) => [...m, { role: "user", content: text }]);
     setPending(true);
     try {
-      let reply = await callAssistant(msg);
-      reply = cleanAnswer(reply, msg);
+      let reply = await callAssistant(text);
+      reply = cleanAnswer(reply, text);
       setMessages((m) => [...m, { role: "assistant", content: reply }]);
     } catch {
       setMessages((m) => [

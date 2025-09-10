@@ -7,10 +7,26 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 type Props = {
   title?: string;
   botHint?: string;
+  // Optionnel: question explicite à envoyer au bot
+  ask?: string;
   children?: React.ReactNode;
 };
 
-export default function HelpInfo({ title, botHint, children }: Props) {
+export default function HelpInfo({ title, botHint, ask, children }: Props) {
+  const sendToBot = (msg?: string) => {
+    const fallback =
+      (title && `Peux-tu expliquer: ${title} ?`) ||
+      "Peux-tu m’expliquer ce point ?";
+    const message = (msg || ask || "").trim() || fallback;
+    try {
+      window.dispatchEvent(
+        new CustomEvent("dowee:bot:ask", { detail: { message } })
+      );
+    } catch {
+      // no-op
+    }
+  };
+
   return (
     <Tooltip delayDuration={150}>
       <TooltipTrigger asChild>
@@ -29,6 +45,15 @@ export default function HelpInfo({ title, botHint, children }: Props) {
         {botHint && (
           <div className="mt-2 text-[11px] text-muted-foreground">{botHint}</div>
         )}
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={() => sendToBot(ask)}
+            className="text-[11px] underline text-[#214A33] hover:text-[#214A33]/80"
+          >
+            Demander au bot
+          </button>
+        </div>
       </TooltipContent>
     </Tooltip>
   );
