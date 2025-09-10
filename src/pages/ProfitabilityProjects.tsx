@@ -8,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
 import { getProjectsProfitability, type ProjectProfit } from "@/api/projectProfitability";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Info } from "lucide-react";
+import { Info, Bot as BotIcon } from "lucide-react";
 
 function eur(n: number | null | undefined) {
   if (n == null) return "—";
@@ -26,11 +26,15 @@ function marginBadge(pct: number | null) {
 type SortKey = "code" | "client" | "sold" | "cost" | "margin" | "margin_pct";
 type SortDir = "asc" | "desc";
 
-const Hint = ({ children }: { children: React.ReactNode }) => (
+const Hint = ({ children, label }: { children: React.ReactNode; label?: string }) => (
   <Tooltip>
     <TooltipTrigger asChild>
-      <span className="ml-1 inline-flex cursor-help items-center justify-center align-middle">
-        <Info className="h-3.5 w-3.5 text-[#214A33]/70" />
+      <span
+        className="ml-1 inline-flex cursor-help items-center justify-center align-middle"
+        aria-label={label || "Informations"}
+        title={label || "Informations"}
+      >
+        <Info className="h-4 w-4 text-[#214A33]/80" />
       </span>
     </TooltipTrigger>
     <TooltipContent side="top" className="max-w-xs text-xs leading-relaxed">{children}</TooltipContent>
@@ -151,12 +155,20 @@ const ProfitabilityProjects: React.FC = () => {
             <Button className="bg-[#214A33] text-white hover:bg-[#214A33]/90" onClick={exportCsv} disabled={exporting}>
               {exporting ? "Export…" : "Exporter CSV"}
             </Button>
+            <Button
+              variant="outline"
+              className="border-[#BFBFBF] text-[#214A33]"
+              onClick={() => window.dispatchEvent(new Event("dowee:bot:open"))}
+            >
+              <BotIcon className="mr-2 h-4 w-4" />
+              Ouvrir le bot
+            </Button>
           </div>
         </CardHeader>
         <CardContent>
           {/* Encart d’aide + lien vers bot */}
           <div className="mb-3 rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-3 text-sm text-[#214A33]">
-            Besoin du détail du calcul ? Passez la souris sur les icônes d’aide ou
+            Besoin du détail du calcul ? Passez la souris sur les icônes d’aide (i) ou
             <button
               type="button"
               onClick={() => window.dispatchEvent(new Event("dowee:bot:open"))}
@@ -181,7 +193,7 @@ const ProfitabilityProjects: React.FC = () => {
                   </th>
                   <th className="p-2 text-right font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("sold")}>
                     CA vendu
-                    <Hint>
+                    <Hint label="Comment est calculé le CA vendu ?">
                       Valeur HT vendue du projet:
                       <br />- Utilise projects.quote_amount si présent,
                       <br />- Sinon somme budgets: conception + créa + dev.
@@ -189,7 +201,7 @@ const ProfitabilityProjects: React.FC = () => {
                   </th>
                   <th className="p-2 text-right font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("cost")}>
                     Coût
-                    <Hint>
+                    <Hint label="Comment est calculé le coût ?">
                       Coût réalisé estimé:
                       <br />- Heures réelles (actual_items) × taux horaire par équipe,
                       <br />- À défaut, heures planifiées (plan_items),
@@ -199,14 +211,14 @@ const ProfitabilityProjects: React.FC = () => {
                   </th>
                   <th className="p-2 text-right font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("margin")}>
                     Marge
-                    <Hint>
+                    <Hint label="Comment est calculée la marge ?">
                       Marge en euros:
                       <br />marge = CA vendu − coût réalisé.
                     </Hint>
                   </th>
                   <th className="p-2 text-right font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("margin_pct")}>
                     Marge %
-                    <Hint>
+                    <Hint label="Comment est calculée la marge % ?">
                       Pourcentage:
                       <br />marge % = (marge / CA vendu) × 100,
                       <br />affiché si CA vendu &gt; 0.
@@ -247,6 +259,8 @@ const ProfitabilityProjects: React.FC = () => {
           </div>
 
           <div className="mt-2 text-[11px] text-[#214A33]/60">
+            Astuce: sur mobile, appuyez plutôt sur l’icône (i) pour voir l’explication.
+            <br />
             Codes couleur: ≥40% vert, 20–39% jaune, 1–19% orange, ≤0% rouge.
           </div>
         </CardContent>
