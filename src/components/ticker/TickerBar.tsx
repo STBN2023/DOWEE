@@ -58,30 +58,30 @@ const TickerBar: React.FC = () => {
 
   const renderShort = (txt?: string) => linkify(String(txt ?? ""));
 
+  const content = (
+    <div className="flex items-center gap-10 whitespace-nowrap">
+      {base.map((it: any) => (
+        <span key={it.id} className="inline-flex items-center whitespace-nowrap">
+          <span className={cn("mr-2 inline-block h-2 w-2 shrink-0 rounded-full", dotClass(it?.severity))} />
+          <span className="whitespace-nowrap font-medium">{renderShort(it?.short)}</span>
+        </span>
+      ))}
+    </div>
+  );
+
   return (
     <div className="pointer-events-auto fixed inset-x-0 bottom-0 z-40 border-t border-[#BFBFBF] bg-white">
       <div className="relative overflow-hidden">
         <div
           className={cn(
-            "flex w-[200%] py-2 text-sm text-[#214A33] translate-x-0 whitespace-nowrap",
+            "flex w-max whitespace-nowrap will-change-transform",
             !prefersReduced && "animate-[ticker_30s_linear_infinite] hover:[animation-play-state:paused]"
           )}
         >
-          <div className="flex w-1/2 shrink-0 items-center gap-10 whitespace-nowrap">
-            {base.map((it) => (
-              <span key={`${(it as any).id}-A`} className="inline-flex items-center whitespace-nowrap">
-                <span className={cn("mr-2 inline-block h-2 w-2 rounded-full", dotClass((it as any)?.severity))} />
-                <span className="whitespace-nowrap font-medium">{renderShort((it as any)?.short)}</span>
-              </span>
-            ))}
-          </div>
-          <div className="flex w-1/2 shrink-0 items-center gap-10 whitespace-nowrap" aria-hidden="true">
-            {base.map((it) => (
-              <span key={`${(it as any).id}-B`} className="inline-flex items-center whitespace-nowrap">
-                <span className={cn("mr-2 inline-block h-2 w-2 rounded-full", dotClass((it as any)?.severity))} />
-                <span className="whitespace-nowrap font-medium">{renderShort((it as any)?.short)}</span>
-              </span>
-            ))}
+          {/* Contenu duplicaté pour boucle continue sans chevauchement */}
+          <div className="flex shrink-0 items-center whitespace-nowrap">{content}</div>
+          <div className="flex shrink-0 items-center whitespace-nowrap" aria-hidden="true">
+            {content}
           </div>
         </div>
       </div>
@@ -89,7 +89,7 @@ const TickerBar: React.FC = () => {
       <style>
         {`
         @keyframes ticker {
-          0% { transform: translateX(0%); }
+          0% { transform: translateX(0); }
           100% { transform: translateX(-50%); }
         }
         `}
