@@ -25,13 +25,22 @@ export type PortfolioView = {
   };
 };
 
-export async function getPortfolioView(params: { scope: "global" } & { year?: number }): Promise<PortfolioView>;
-export async function getPortfolioView(params: { scope: "team"; team: string } & { year?: number }): Promise<PortfolioView>;
-export async function getPortfolioView(params: { scope: "me" } & { year?: number }): Promise<PortfolioView>;
-export async function getPortfolioView(params: any): Promise<PortfolioView> {
-  const body: any = { action: "overview", scope: params.scope };
-  if (params.year) body.year = params.year;
-  if (params.scope === "team") body.team = params.team;
+type GlobalParams = { scope: "global"; year?: number };
+type TeamParams = { scope: "team"; team: string; year?: number };
+type MeParams = { scope: "me"; year?: number };
+type PVParams = GlobalParams | TeamParams | MeParams;
+
+export async function getPortfolioView(params: GlobalParams): Promise<PortfolioView>;
+export async function getPortfolioView(params: TeamParams): Promise<PortfolioView>;
+export async function getPortfolioView(params: MeParams): Promise<PortfolioView>;
+export async function getPortfolioView(params: PVParams): Promise<PortfolioView> {
+  const body: Record<string, unknown> = { action: "overview", scope: params.scope };
+  if ("year" in params && typeof params.year === "number") {
+    body.year = params.year;
+  }
+  if (params.scope === "team") {
+    body.team = params.team;
+  }
   const res = await supabase.functions.invoke("portfolio-view", { body });
   return unwrapFunction<PortfolioView>(res);
 }
