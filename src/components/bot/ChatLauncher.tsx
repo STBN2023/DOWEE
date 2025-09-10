@@ -18,11 +18,11 @@ const ChatLauncher: React.FC = () => {
       >
         <Button
           onClick={() => setOpen((v) => !v)}
-          className="h-12 w-12 rounded-full bg-[#214A33] text-white shadow-lg hover:bg-[#214A33]/90"
+          className="h-12 w-12 rounded-full bg-white text-[#214A33] shadow-lg hover:bg-[#F7F7F7] border border-[#BFBFBF]"
           aria-label={open ? "Fermer Dowee Bot" : "Ouvrir Dowee Bot"}
           title="Dowee Bot"
         >
-          <AnimatedRobot size={24} decorative />
+          <AnimatedRobot size={32} decorative />
         </Button>
       </motion.div>
     </>
