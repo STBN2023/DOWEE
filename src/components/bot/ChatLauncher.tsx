@@ -11,7 +11,7 @@ const ChatLauncher: React.FC = () => {
     <>
       <ChatPanel open={open} onClose={() => setOpen(false)} />
       <motion.div
-        className="fixed bottom-4 right-4 z-50"
+        className="fixed right-4 bottom-20 z-[70]"
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: "spring", stiffness: 260, damping: 20 }}
