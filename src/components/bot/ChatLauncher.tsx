@@ -124,6 +124,7 @@ export default function ChatLauncher({
   }, []);
 
   const dismissedKey = useMemo(() => `dowee.bot.afternoon.dismissed.${todayIso}`, [todayIso]);
+  const afternoonPromptKey = useMemo(() => `dowee.bot.afternoon.prompted.${todayIso}`, [todayIso]);
   // IMPORTANT: la clé tient compte du réglage pour ne pas bloquer après changement d’option
   const loginPromptKey = useMemo(
     () => `dowee.bot.login.prompted.${todayIso}.${settings.promptOnLoginIgnoreDismissed ? "ign" : "respect"}`,
@@ -131,14 +132,21 @@ export default function ChatLauncher({
   );
 
   const runAfternoonCheck = useCallback(
-    async (opts?: { ignoreAfternoonFlag?: boolean; ignoreDismissed?: boolean }) => {
+    async (opts?: { ignoreAfternoonFlag?: boolean; ignoreDismissed?: boolean; ignorePrompted?: boolean }) => {
       if (!session || !employee) return; // attendre que le profil soit prêt
       if (!opts?.ignoreAfternoonFlag && !settings.afternoonReminderEnabled) return;
       if (!opts?.ignoreDismissed && localStorage.getItem(dismissedKey) === "1") return;
+      if (!opts?.ignorePrompted && sessionStorage.getItem(afternoonPromptKey) === "1") return;
+      // si déjà affiché dans ce rendu
+      if (afternoonCta) return;
 
       try {
         const status = await getDayStatus(todayIso);
         if (status?.validated) return;
+
+        // Mémoriser immédiatement pour éviter tout doublon
+        sessionStorage.setItem(afternoonPromptKey, "1");
+
         setOpen(true);
         setAfternoonCta(true);
         setMessages((m) => [
@@ -154,7 +162,16 @@ export default function ChatLauncher({
         // silencieux
       }
     },
-    [session, employee, settings.afternoonReminderEnabled, dismissedKey, todayIso, onOpenChange]
+    [
+      session,
+      employee,
+      settings.afternoonReminderEnabled,
+      dismissedKey,
+      afternoonPromptKey,
+      afternoonCta,
+      todayIso,
+      onOpenChange,
+    ]
   );
 
   // Proposer à la connexion selon réglage: ignorer (ou non) 'Plus tard'
@@ -171,9 +188,9 @@ export default function ChatLauncher({
     }
   }, [session, employee, settings.promptOnLoginEnabled, settings.promptOnLoginIgnoreDismissed, runAfternoonCheck, loginPromptKey]);
 
-  // Test manuel
+  // Test manuel: ignorer aussi le mémo 'prompted' pour pouvoir re-tester
   useEffect(() => {
-    const handler = () => runAfternoonCheck({ ignoreAfternoonFlag: true, ignoreDismissed: true });
+    const handler = () => runAfternoonCheck({ ignoreAfternoonFlag: true, ignoreDismissed: true, ignorePrompted: true });
     window.addEventListener("dowee:bot:triggerAfternoon", handler as any);
     return () => window.removeEventListener("dowee:bot:triggerAfternoon", handler as any);
   }, [runAfternoonCheck]);
