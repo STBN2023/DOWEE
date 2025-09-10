@@ -37,6 +37,7 @@ export type Project = {
   budget_dev: number | null;
   due_date: string | null;
   effort_days: number | null;
+  version?: string | null;
 };
 
 export type Assignments = Record<string, string[]>;
@@ -65,6 +66,7 @@ export async function createProject(input: {
   budget_dev?: number | null;
   due_date?: string | null;
   effort_days?: number | null;
+  version?: string | null;
 }): Promise<Project> {
   const res = await supabase.functions.invoke("admin-projects", {
     body: { action: "create", project: input },
@@ -84,6 +86,7 @@ export async function updateProject(project_id: string, patch: Partial<{
   budget_dev: number | null;
   due_date: string | null;
   effort_days: number | null;
+  version: string | null;
 }>): Promise<Project> {
   const res = await supabase.functions.invoke("admin-projects", {
     body: { action: "update", project_id, patch },

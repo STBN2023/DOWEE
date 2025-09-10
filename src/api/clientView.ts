@@ -6,6 +6,7 @@ export type ClientView = {
     id: string;
     code: string;
     name: string;
+    version: string | null;
     client: { id: string; code: string; name: string } | null;
     quote_amount: number | null;
     budgets: { conception: number | null; crea: number | null; dev: number | null };

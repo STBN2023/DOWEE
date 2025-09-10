@@ -18,13 +18,12 @@ type CreatePayload = {
     client_id: string;
     tariff_id?: string | null;
     quote_amount?: number | null;
-    // budgets optionnels à la création
     budget_conception?: number | null;
     budget_crea?: number | null;
     budget_dev?: number | null;
-    // nouveaux champs
-    due_date?: string | null; // YYYY-MM-DD
+    due_date?: string | null;
     effort_days?: number | null;
+    version?: string | null;
   };
 };
 type AssignPayload = { action: "assign"; project_id: string; employee_ids: string[] };
@@ -40,9 +39,9 @@ type UpdatePayload = {
     budget_conception: number | null;
     budget_crea: number | null;
     budget_dev: number | null;
-    // nouveaux champs
     due_date: string | null;
     effort_days: number | null;
+    version: string | null;
   }>;
 };
 type DeletePayload = { action: "delete"; project_id: string };
@@ -115,7 +114,7 @@ serve(async (req) => {
       { data: tariffs, error: tariffsErr },
     ] = await Promise.all([
       admin.from("employees").select("id, first_name, last_name, display_name"),
-      admin.from("projects").select("id, code, name, status, client_id, tariff_id, quote_amount, budget_conception, budget_crea, budget_dev, due_date, effort_days"),
+      admin.from("projects").select("id, code, name, status, client_id, tariff_id, quote_amount, budget_conception, budget_crea, budget_dev, due_date, effort_days, version"),
       admin.from("project_employees").select("project_id, employee_id"),
       admin.from("clients").select("id, code, name").order("code", { ascending: true }),
       admin.from("ref_tariffs").select("id, label, rate_conception, rate_crea, rate_dev").order("created_at", { ascending: true }),
@@ -153,6 +152,7 @@ serve(async (req) => {
     const { budget_conception = null, budget_crea = null, budget_dev = null } = body.project;
     const due_date = typeof body.project.due_date === "string" ? body.project.due_date : null;
     const effort_days = typeof body.project.effort_days === "number" ? body.project.effort_days : null;
+    const version = typeof body.project.version === "string" && body.project.version.trim() ? body.project.version.trim() : null;
 
     const { data: client, error: clientErr } = await admin.from("clients").select("code").eq("id", client_id).maybeSingle();
     if (clientErr || !client) {
@@ -195,8 +195,9 @@ serve(async (req) => {
         budget_dev,
         due_date,
         effort_days,
+        version,
       })
-      .select("id, code, name, status, client_id, tariff_id, quote_amount, budget_conception, budget_crea, budget_dev, due_date, effort_days")
+      .select("id, code, name, status, client_id, tariff_id, quote_amount, budget_conception, budget_crea, budget_dev, due_date, effort_days, version")
       .single();
 
     if (insErr) {
@@ -219,12 +220,13 @@ serve(async (req) => {
     if ("budget_dev" in patch) payload.budget_dev = patch.budget_dev ?? null;
     if ("due_date" in patch) payload.due_date = patch.due_date ?? null;
     if ("effort_days" in patch) payload.effort_days = patch.effort_days ?? null;
+    if ("version" in patch) payload.version = (typeof patch.version === "string" && patch.version.trim()) ? patch.version.trim() : null;
 
     const { data, error } = await admin
       .from("projects")
       .update(payload)
       .eq("id", project_id)
-      .select("id, code, name, status, client_id, tariff_id, quote_amount, budget_conception, budget_crea, budget_dev, due_date, effort_days")
+      .select("id, code, name, status, client_id, tariff_id, quote_amount, budget_conception, budget_crea, budget_dev, due_date, effort_days, version")
       .single();
 
     if (error) {
@@ -276,11 +278,9 @@ serve(async (req) => {
     const deleteFuture = body.delete_future_plans !== false; // par défaut true
     const todayIso = todayIsoLocal();
 
-    // 1) Mettre en pause (on hold) le projet
     const { error: upErr } = await admin.from("projects").update({ status: "onhold" }).eq("id", project_id);
     if (upErr) return new Response(JSON.stringify({ error: upErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    // 2) Supprimer les créneaux futurs (on conserve l'historique)
     let deleted_future = 0;
     if (deleteFuture) {
       const { error: delErr, count } = await admin
