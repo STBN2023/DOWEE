@@ -4,6 +4,7 @@ export type BotSettings = {
   afternoonReminderEnabled: boolean;
   afternoonReminderHour: number; // 0-23
   afternoonReminderRepeatMinutes: number; // intervalle de répétition (min)
+  promptOnLoginEnabled: boolean; // nouveau: proposer à la connexion
 };
 
 type Ctx = {
@@ -11,6 +12,7 @@ type Ctx = {
   setEnabled: (v: boolean) => void;
   setHour: (h: number) => void;
   setRepeatMinutes: (m: number) => void;
+  setPromptOnLoginEnabled: (v: boolean) => void;
 };
 
 const LS_KEY = "dowee.bot.settings";
@@ -19,6 +21,7 @@ const defaultSettings: BotSettings = {
   afternoonReminderEnabled: true,
   afternoonReminderHour: 16,
   afternoonReminderRepeatMinutes: 30,
+  promptOnLoginEnabled: true,
 };
 
 function loadSettings(): BotSettings {
@@ -32,6 +35,7 @@ function loadSettings(): BotSettings {
       afternoonReminderEnabled: !!p?.afternoonReminderEnabled,
       afternoonReminderHour: Number.isFinite(hour) ? Math.max(0, Math.min(23, hour)) : 16,
       afternoonReminderRepeatMinutes: Number.isFinite(repeat) ? Math.max(5, Math.min(240, repeat)) : 30,
+      promptOnLoginEnabled: p?.promptOnLoginEnabled !== undefined ? !!p.promptOnLoginEnabled : true,
     };
   } catch {
     return defaultSettings;
@@ -73,8 +77,16 @@ export const BotSettingsProvider = ({ children }: { children: React.ReactNode })
     });
   };
 
+  const setPromptOnLoginEnabled = (v: boolean) => {
+    setSettings((prev) => {
+      const next = { ...prev, promptOnLoginEnabled: !!v };
+      saveSettings(next);
+      return next;
+    });
+  };
+
   const value: Ctx = React.useMemo(
-    () => ({ settings, setEnabled, setHour, setRepeatMinutes }),
+    () => ({ settings, setEnabled, setHour, setRepeatMinutes, setPromptOnLoginEnabled }),
     [settings]
   );
 

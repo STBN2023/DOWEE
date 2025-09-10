@@ -16,7 +16,7 @@ const AdminBot: React.FC = () => {
   const isAdmin = employee?.role === "admin";
 
   // Réglages bot (relance)
-  const { settings, setEnabled, setHour, setRepeatMinutes } = useBotSettings();
+  const { settings, setEnabled, setHour, setRepeatMinutes, setPromptOnLoginEnabled } = useBotSettings();
   const [hour, setHourInput] = React.useState<string>(String(settings.afternoonReminderHour));
   const [repeat, setRepeatInput] = React.useState<string>(String(settings.afternoonReminderRepeatMinutes));
 
@@ -120,6 +120,14 @@ const AdminBot: React.FC = () => {
           <div className="grid gap-3">
             <div className="flex items-center justify-between rounded-md border border-[#BFBFBF] bg-white px-3 py-2">
               <div className="flex flex-col">
+                <Label className="text-[#214A33]">Proposer la validation à la connexion</Label>
+                <span className="text-xs text-[#214A33]/60">Ouvre le bot dès l’ouverture de session si la journée n’est pas validée.</span>
+              </div>
+              <Switch checked={settings.promptOnLoginEnabled} onCheckedChange={(v) => setPromptOnLoginEnabled(!!v)} />
+            </div>
+
+            <div className="flex items-center justify-between rounded-md border border-[#BFBFBF] bg-white px-3 py-2">
+              <div className="flex flex-col">
                 <Label className="text-[#214A33]">Relance l’après‑midi (validation du planning)</Label>
                 <span className="text-xs text-[#214A33]/60">Ouvre le chat à l’heure choisie si la journée n’est pas validée.</span>
               </div>
@@ -160,29 +168,6 @@ const AdminBot: React.FC = () => {
                   }}
                   placeholder="30"
                 />
-              </div>
-            </div>
-
-            <div className="rounded-md border border-[#BFBFBF] bg-white p-3">
-              <Label className="text-[#214A33]">Tester la relance</Label>
-              <div className="mt-2 flex gap-2">
-                <Button
-                  variant="outline"
-                  className="border-[#BFBFBF] text-[#214A33]"
-                  onClick={() => {
-                    try {
-                      window.dispatchEvent(new Event("dowee:bot:triggerAfternoon"));
-                      showSuccess("Relance déclenchée.");
-                    } catch {
-                      showError("Impossible de déclencher la relance.");
-                    }
-                  }}
-                >
-                  Déclencher maintenant
-                </Button>
-              </div>
-              <div className="mt-2 text-xs text-[#214A33]/60">
-                Le chat s’ouvre si la journée n’est pas validée; sinon, rien ne s’affiche.
               </div>
             </div>
 

@@ -5,37 +5,15 @@ import { ThemeSupa } from "@supabase/auth-ui-shared";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/context/AuthContext";
-import { getDayStatus } from "@/api/dayValidation";
-import { format } from "date-fns";
 
 const Login = () => {
   const navigate = useNavigate();
   const { session } = useAuth();
 
   React.useEffect(() => {
-    let cancelled = false;
-
-    const handlePostLogin = async () => {
-      if (!session) return;
-      try {
-        const todayIso = format(new Date(), "yyyy-MM-dd");
-        const status = await getDayStatus(todayIso);
-        if (cancelled) return;
-
-        if (status.validated) {
-          navigate("/dashboards", { replace: true });
-        } else {
-          navigate("/today", { replace: true });
-        }
-      } catch {
-        if (!cancelled) navigate("/", { replace: true });
-      }
-    };
-
-    handlePostLogin();
-    return () => {
-      cancelled = true;
-    };
+    if (!session) return;
+    // Nouveau: on va sur le dashboard perso
+    navigate("/dashboards?tab=me", { replace: true });
   }, [session, navigate]);
 
   return (

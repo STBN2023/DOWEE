@@ -35,7 +35,7 @@ export default function ChatLauncher({
   ]);
   const [pending, setPending] = useState(false);
 
-  // État de la relance “après-midi”
+  // État de la relance “après-midi” / à la connexion
   const [afternoonCta, setAfternoonCta] = useState<boolean>(false);
 
   const listRef = useRef<HTMLDivElement>(null);
@@ -104,7 +104,7 @@ export default function ChatLauncher({
     }
   }
 
-  // ---------- Rappel automatique (configurable) ----------
+  // ---------- Rappel / Vérification ----------
   const todayIso = useMemo(() => {
     const now = new Date();
     const y = now.getFullYear();
@@ -115,6 +115,48 @@ export default function ChatLauncher({
 
   const dismissedKey = useMemo(() => `dowee.bot.afternoon.dismissed.${todayIso}`, [todayIso]);
 
+  const runAfternoonCheck = useCallback(
+    async (opts?: { ignoreAfternoonFlag?: boolean }) => {
+      if (!session) return;
+      if (!opts?.ignoreAfternoonFlag && !settings.afternoonReminderEnabled) return;
+      if (localStorage.getItem(dismissedKey) === "1") return;
+
+      try {
+        const status = await getDayStatus(todayIso);
+        if (status?.validated) return;
+        setOpen(true);
+        setAfternoonCta(true);
+        setMessages((m) => [
+          ...m,
+          {
+            role: "assistant",
+            content:
+              "Il est l’heure de vérifier/valider votre planning du jour. Souhaitez‑vous le faire maintenant ?",
+          },
+        ]);
+        onOpenChange?.(true);
+      } catch {
+        // silencieux
+      }
+    },
+    [session, settings.afternoonReminderEnabled, dismissedKey, todayIso, onOpenChange]
+  );
+
+  // Proposer à la connexion si param activé
+  useEffect(() => {
+    if (session && settings.promptOnLoginEnabled) {
+      runAfternoonCheck({ ignoreAfternoonFlag: true });
+    }
+  }, [session, settings.promptOnLoginEnabled, runAfternoonCheck]);
+
+  // Test manuel
+  useEffect(() => {
+    const handler = () => runAfternoonCheck({ ignoreAfternoonFlag: true });
+    window.addEventListener("dowee:bot:triggerAfternoon", handler as any);
+    return () => window.removeEventListener("dowee:bot:triggerAfternoon", handler as any);
+  }, [runAfternoonCheck]);
+
+  // Planification à l’heure de l’après‑midi
   const scheduleAfternoonCheck = useCallback(() => {
     if (!settings.afternoonReminderEnabled) return -1;
     const now = new Date();
@@ -124,37 +166,6 @@ export default function ChatLauncher({
     if (ms <= 0) return 10;
     return ms;
   }, [settings.afternoonReminderEnabled, settings.afternoonReminderHour]);
-
-  const runAfternoonCheck = useCallback(async () => {
-    if (!session) return;
-    if (!settings.afternoonReminderEnabled) return;
-    if (localStorage.getItem(dismissedKey) === "1") return;
-
-    try {
-      const status = await getDayStatus(todayIso);
-      if (status?.validated) return;
-      setOpen(true);
-      setAfternoonCta(true);
-      setMessages((m) => [
-        ...m,
-        {
-          role: "assistant",
-          content:
-            "Il est l’heure de valider votre planning de l’après‑midi. Souhaitez‑vous le faire maintenant ?",
-        },
-      ]);
-      onOpenChange?.(true);
-    } catch {
-      // silencieux
-    }
-  }, [session, todayIso, dismissedKey, onOpenChange, settings.afternoonReminderEnabled]);
-
-  useEffect(() => {
-    // Écouteur de test manuel
-    const handler = () => runAfternoonCheck();
-    window.addEventListener("dowee:bot:triggerAfternoon", handler as any);
-    return () => window.removeEventListener("dowee:bot:triggerAfternoon", handler as any);
-  }, [runAfternoonCheck]);
 
   useEffect(() => {
     const delay = scheduleAfternoonCheck();
@@ -250,10 +261,10 @@ export default function ChatLauncher({
               {afternoonCta && (
                 <div className="mt-2 rounded-xl border border-[#BFBFBF] bg-white p-3">
                   <div className="mb-2 text-sm font-medium text-[#214A33]">
-                    Valider votre planning de l’après‑midi ?
+                    Vérifier / valider votre planning du jour ?
                   </div>
                   <div className="text-xs text-[#214A33]/80 mb-3">
-                    Cela copie vos créneaux planifiés en heures réelles et marque la journée validée (modifiable ensuite).
+                    “Valider aujourd’hui” copie vos créneaux planifiés en heures réelles et marque la journée validée (modifiable ensuite).
                   </div>
                   <div className="flex gap-2">
                     <button
@@ -268,7 +279,7 @@ export default function ChatLauncher({
                       onClick={onNotNow}
                       className="inline-flex items-center rounded-md border border-[#BFBFBF] bg-white px-3 py-1.5 text-sm text-[#214A33] hover:bg-[#F7F7F7]"
                     >
-                      Pas tout de suite
+                      Plus tard
                     </button>
                   </div>
                 </div>

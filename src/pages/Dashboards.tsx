@@ -13,11 +13,21 @@ import TeamPortfolio from "@/components/dashboards/TeamPortfolio";
 import MePortfolio from "@/components/dashboards/MePortfolio";
 import { addDays } from "date-fns";
 import { ChevronLeft, ChevronRight, Home } from "lucide-react";
+import { useLocation } from "react-router-dom";
 
 const Dashboards = () => {
   const { role } = useRole();
   const { loading: authLoading, employee } = useAuth();
-  const defaultTab = role === "admin" ? "global" : role === "manager" ? "team" : "me";
+  const location = useLocation();
+
+  const urlTab = React.useMemo(() => {
+    const p = new URLSearchParams(location.search).get("tab");
+    if (p === "global" || p === "client" || p === "team" || p === "me") return p;
+    return null;
+  }, [location.search]);
+
+  const roleDefault = role === "admin" ? "global" : role === "manager" ? "team" : "me";
+  const initialTab = urlTab ?? roleDefault;
 
   const [globalStats, setGlobalStats] = React.useState<{ total: number; active: number; onhold: number }>({ total: 0, active: 0, onhold: 0 });
   const [teamStats, setTeamStats] = React.useState<{ conception: number; crea: number; dev: number }>({ conception: 0, crea: 0, dev: 0 });
@@ -113,7 +123,7 @@ const Dashboards = () => {
         <div className="mb-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{errorMsg}</div>
       )}
 
-      <Tabs defaultValue={defaultTab} className="w-full">
+      <Tabs defaultValue={initialTab} className="w-full">
         <TabsList className="bg-[#F7F7F7]">
           <TabsTrigger value="global">Global</TabsTrigger>
           <TabsTrigger value="client">Client</TabsTrigger>

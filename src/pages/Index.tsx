@@ -3,8 +3,6 @@ import { Button } from "@/components/ui/button";
 import { MadeWithDyad } from "@/components/made-with-dyad";
 import { useAuth } from "@/context/AuthContext";
 import React from "react";
-import { getDayStatus } from "@/api/dayValidation";
-import { format } from "date-fns";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -12,21 +10,8 @@ const Index = () => {
 
   React.useEffect(() => {
     if (!session) return;
-    let cancelled = false;
-
-    const decide = async () => {
-      try {
-        const todayIso = format(new Date(), "yyyy-MM-dd");
-        const st = await getDayStatus(todayIso);
-        if (cancelled) return;
-        navigate(st.validated ? "/dashboards" : "/today", { replace: true });
-      } catch {
-        if (!cancelled) navigate("/today", { replace: true });
-      }
-    };
-
-    decide();
-    return () => { cancelled = true; };
+    // Nouveau: toujours dashboard perso
+    navigate("/dashboards?tab=me", { replace: true });
   }, [session, navigate]);
 
   const firstName = React.useMemo(() => {
@@ -55,13 +40,9 @@ const Index = () => {
                 <div className="text-lg font-semibold text-[#214A33]">
                   Bonjour {firstName} 👋
                 </div>
-                {/* Boutons conservés à titre d’accès direct si besoin */}
                 <div className="flex gap-2">
                   <Button asChild className="bg-[#214A33] hover:bg-[#214A33]/90 text-white">
-                    <Link to="/today">Aller à la journée</Link>
-                  </Button>
-                  <Button asChild variant="outline" className="border-[#BFBFBF] text-[#214A33]">
-                    <Link to="/dashboards">Tableaux de bord</Link>
+                    <Link to="/dashboards?tab=me">Mon tableau de bord</Link>
                   </Button>
                 </div>
               </div>
