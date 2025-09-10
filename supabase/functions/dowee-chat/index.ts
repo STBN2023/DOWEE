@@ -150,6 +150,31 @@ function formatEur(n: number | null | undefined) {
   return `${Math.round(n as number)} €`
 }
 
+// === Nouveaux helpers: réponses rentabilité projets ===
+function answerSoldExplainer() {
+  return [
+    "CA vendu — mode de calcul:",
+    "- On prend projects.quote_amount si renseigné,",
+    "- sinon la somme des budgets par service: conception + créa + dev.",
+    "- Unités: HT.",
+  ].join("\n")
+}
+function answerCostExplainer() {
+  return [
+    "Coût — mode d’estimation:",
+    "- Heures réelles (actual_items) × taux horaire par équipe (coûts internes €/jour ÷ 8),",
+    "- À défaut d’heures réelles, on utilise les heures planifiées (plan_items),",
+    "- Taux issus de la dernière entrée ref_internal_costs (par défaut 800/500/800 €/j conc./créa/dev).",
+  ].join("\n")
+}
+function answerMarginExplainer() {
+  return [
+    "Marge — définitions:",
+    "- Marge (€) = CA vendu − coût réalisé (estimé).",
+    "- Marge % = (marge / CA vendu) × 100 (affichée si CA vendu > 0).",
+  ].join("\n")
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders })
   if (req.method !== "POST") return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } })
@@ -346,7 +371,6 @@ serve(async (req) => {
 
   // 8) Analyse/Conseils (rôle + dashboards + priorités + statut)
   if (isAnalysisIntent(q)) {
-    // Récupérer métriques
     const [tcRes, metRes, topRes] = await Promise.all([
       fetch(`${supabaseUrl}/functions/v1/time-cost-overview`, { method: "POST", headers: { Authorization: authHeader, "Content-Type": "application/json" }, body: JSON.stringify({ action: "overview" }) }),
       fetch(`${supabaseUrl}/functions/v1/metrics-overview`, { method: "POST", headers: { Authorization: authHeader, "Content-Type": "application/json" }, body: JSON.stringify({ action: "overview" }) }),
@@ -366,7 +390,6 @@ serve(async (req) => {
       scores = data?.scores || []
     }
 
-    // Filtrer top selon rôle/user si besoin
     let top = scores.slice()
     if (myRole !== "admin") {
       const { data: pe } = await admin.from("project_employees").select("project_id").eq("employee_id", userId)
@@ -376,13 +399,12 @@ serve(async (req) => {
     top.sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
     top = top.slice(0, 3)
 
-    // Analyse simple (fallback sans LLM)
     const range = tc?.range ? `${tc.range.start} → ${tc.range.end}` : "semaine en cours"
     const hp = tc?.global?.hours_planned ?? 0
     const ha = tc?.global?.hours_actual ?? 0
     const cp = tc?.global?.cost_planned ?? 0
     const ca = tc?.global?.cost_actual ?? 0
-    const gapHours = ha - hp // + = surconsommation réelle
+    const gapHours = ha - hp
     const gapCost = ca - cp
 
     const bullets: string[] = []
@@ -401,10 +423,8 @@ serve(async (req) => {
     }
     bullets.push(`Statut journée: ${dv ? "déjà validée" : "à valider"}`)
 
-    // Conseils par rôle
     const actions = roleAdvice(myRole)
 
-    // LLM configuré ?
     const { data: secret } = await admin.from("secrets_llm").select("api_key, provider").eq("id", "openai").maybeSingle()
     const apiKey = (secret as any)?.api_key as string | undefined
     const provider = (secret as any)?.provider as string | undefined
@@ -420,7 +440,6 @@ serve(async (req) => {
       return new Response(JSON.stringify({ answer, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
     }
 
-    // Prompt enrichi pour une interprétation plus fine
     const contextBlocks = [
       `ROLE: ${myRole}${myTeam ? ` • équipe=${myTeam}` : ""}`,
       `DASHBOARD: hours_planned=${hp.toFixed(1)}; hours_actual=${ha.toFixed(1)}; cost_planned=${Math.round(cp)}; cost_actual=${Math.round(ca)}; projects_active=${met?.global?.nb_projects_active ?? 0}; projects_onhold=${met?.global?.nb_projects_onhold ?? 0}`,
@@ -460,6 +479,17 @@ serve(async (req) => {
     ].join("\n")
 
     return new Response(JSON.stringify({ answer, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
+  }
+
+  // 8bis) Explications spécifiques Rentabilité — Projets (tooltips)
+  if (q.includes("ca vendu") || (q.includes("ca") && q.includes("vendu"))) {
+    return new Response(JSON.stringify({ answer: answerSoldExplainer(), citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
+  }
+  if (q.includes("cout") && (q.includes("estime") || q.includes("estimation") || q.includes("calcul"))) {
+    return new Response(JSON.stringify({ answer: answerCostExplainer(), citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
+  }
+  if (q.includes("marge")) {
+    return new Response(JSON.stringify({ answer: answerMarginExplainer(), citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
   }
 
   // 9) RAG (guide) + fallback ILIKE + LLM si dispo
