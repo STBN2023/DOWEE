@@ -1,5 +1,5 @@
 import React from "react";
-import { Menu, Home, CalendarDays, BarChart3, Settings, Users, Building2, FolderKanban, Shapes, Bug, ListChecks, Wallet, Receipt, Banknote, Brain, BookOpen, Bot as BotIcon } from "lucide-react";
+import { Menu, Home, CalendarDays, BarChart3, Settings, Users, Building2, FolderKanban, Shapes, Bug, ListChecks, Wallet, Receipt, Banknote, Brain, Bot as BotIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Link } from "react-router-dom";
@@ -54,8 +54,7 @@ const BurgerMenu = () => {
             <NavItem to="/admin/ticker" icon={Settings} label="Bandeau" onClick={() => setOpen(false)} />
             <NavItem to="/admin/references" icon={Shapes} label="Références" onClick={() => setOpen(false)} />
             <NavItem to="/admin/llm" icon={Brain} label="LLM (OpenAI)" onClick={() => setOpen(false)} />
-            <NavItem to="/admin/rag" icon={BookOpen} label="Base de connaissance (RAG)" onClick={() => setOpen(false)} />
-            <NavItem to="/admin/bot" icon={BotIcon} label="Bot (paramètres)" onClick={() => setOpen(false)} />
+            <NavItem to="/admin/bot" icon={BotIcon} label="Bot" onClick={() => setOpen(false)} />
             {role === "admin" && (
               <NavItem to="/debug" icon={Bug} label="Debug" onClick={() => setOpen(false)} />
             )}

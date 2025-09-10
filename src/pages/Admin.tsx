@@ -2,7 +2,7 @@ import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { Users, Building2, FolderKanban, Shapes, Coins, Banknote, Brain, Settings } from "lucide-react";
+import { Users, Building2, FolderKanban, Shapes, Coins, Banknote, Brain, Settings, Bot as BotIcon, BookOpen } from "lucide-react";
 
 const Tile = ({ to, icon: Icon, title, desc, cta }: { to: string; icon: any; title: string; desc: string; cta: string }) => (
   <Card className="border-[#BFBFBF]">
@@ -72,14 +72,28 @@ const Admin = () => {
           to="/admin/llm"
           icon={Brain}
           title="LLM (OpenAI)"
-          desc="Configurer la clé API OpenAI pour le bandeau d’alertes."
+          desc="Configurer la clé API OpenAI pour la reformulation des alertes."
           cta="Configurer OpenAI"
+        />
+        <Tile
+          to="/admin/bot"
+          icon={BotIcon}
+          title="Bot"
+          desc="Relances, base de connaissance (RAG) et intégration LLM."
+          cta="Ouvrir"
+        />
+        <Tile
+          to="/admin/bot"
+          icon={BookOpen}
+          title="Base de connaissance (RAG)"
+          desc="Indexer le guide utilisateur pour enrichir les réponses du bot."
+          cta="Ouvrir"
         />
         <Tile
           to="/admin/ticker"
           icon={Settings}
           title="Bandeau"
-          desc="Activer des modules et configurer la ville météo."
+          desc="Activer des modules et configurer la météo."
           cta="Ouvrir"
         />
       </div>

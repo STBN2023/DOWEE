@@ -32,7 +32,6 @@ import TickerBar from "./components/ticker/TickerBar";
 import { TickerSettingsProvider } from "./context/TickerSettingsContext";
 import TickerSettingsPage from "./pages/TickerSettings";
 import ChatLauncher from "./components/bot/ChatLauncher";
-import AdminRag from "./pages/AdminRag";
 import AdminBot from "./pages/AdminBot";
 import { BotSettingsProvider } from "./context/BotSettingsContext";
 
@@ -179,14 +178,6 @@ const App = () => (
                       element={
                         <ProtectedRoute>
                           <TickerSettingsPage />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/admin/rag"
-                      element={
-                        <ProtectedRoute>
-                          <AdminRag />
                         </ProtectedRoute>
                       }
                     />
