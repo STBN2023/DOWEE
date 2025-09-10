@@ -53,6 +53,16 @@ export default function ChatLauncher({
     onOpenChange?.(next);
   };
 
+  // --- Ajout: ouverture programmatique via évènement global
+  useEffect(() => {
+    const openHandler = () => {
+      setOpen(true);
+      onOpenChange?.(true);
+    };
+    window.addEventListener("dowee:bot:open", openHandler as any);
+    return () => window.removeEventListener("dowee:bot:open", openHandler as any);
+  }, [onOpenChange]);
+
   function cleanAnswer(answer: string, userMsg: string): string {
     let out = answer.replace(/^\s*(tu|vous)\s+as|avez\s+dit\s*:.*$/gim, "").trim();
     const q = userMsg.trim().replace(/\s+/g, " ").toLowerCase();
@@ -348,12 +358,12 @@ function Typing() {
       <motion.span
         className="inline-block w-1 h-1 rounded-full bg-[#BFBFBF]"
         animate={{ opacity: [0.2, 1, 0.2] }}
-        transition={{ duration: 1, delay: 0.2, repeat: Infinity }}
+        transition={{ duration: 1, repeat: Infinity }}
       />
       <motion.span
         className="inline-block w-1 h-1 rounded-full bg-[#BFBFBF]"
         animate={{ opacity: [0.2, 1, 0.2] }}
-        transition={{ duration: 1, delay: 0.4, repeat: Infinity }}
+        transition={{ duration: 1, repeat: Infinity }}
       />
     </div>
   );

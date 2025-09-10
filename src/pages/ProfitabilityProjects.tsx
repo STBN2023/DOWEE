@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
 import { getProjectsProfitability, type ProjectProfit } from "@/api/projectProfitability";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Info } from "lucide-react";
 
 function eur(n: number | null | undefined) {
   if (n == null) return "—";
@@ -23,6 +25,17 @@ function marginBadge(pct: number | null) {
 
 type SortKey = "code" | "client" | "sold" | "cost" | "margin" | "margin_pct";
 type SortDir = "asc" | "desc";
+
+const Hint = ({ children }: { children: React.ReactNode }) => (
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <span className="ml-1 inline-flex cursor-help items-center justify-center align-middle">
+        <Info className="h-3.5 w-3.5 text-[#214A33]/70" />
+      </span>
+    </TooltipTrigger>
+    <TooltipContent side="top" className="max-w-xs text-xs leading-relaxed">{children}</TooltipContent>
+  </Tooltip>
+);
 
 const ProfitabilityProjects: React.FC = () => {
   const [loading, setLoading] = React.useState(true);
@@ -141,18 +154,64 @@ const ProfitabilityProjects: React.FC = () => {
           </div>
         </CardHeader>
         <CardContent>
+          {/* Encart d’aide + lien vers bot */}
+          <div className="mb-3 rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-3 text-sm text-[#214A33]">
+            Besoin du détail du calcul ? Passez la souris sur les icônes d’aide ou
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new Event("dowee:bot:open"))}
+              className="ml-1 inline-flex items-center underline decoration-[#214A33]/40 underline-offset-2 hover:text-[#214A33]/80"
+            >
+              ouvrez le bot
+            </button>
+            {" "}pour poser vos questions.
+          </div>
+
           {errorMsg && <div className="mb-3 rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-700">{errorMsg}</div>}
 
           <div className="overflow-x-auto rounded-md border border-[#BFBFBF] bg-white">
             <table className="w-full border-collapse text-sm">
               <thead className="bg-[#F7F7F7]">
                 <tr>
-                  <th className="p-2 text-left font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("code")}>Projet</th>
-                  <th className="p-2 text-left font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("client")}>Client</th>
-                  <th className="p-2 text-right font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("sold")}>CA vendu</th>
-                  <th className="p-2 text-right font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("cost")}>Coût</th>
-                  <th className="p-2 text-right font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("margin")}>Marge</th>
-                  <th className="p-2 text-right font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("margin_pct")}>Marge %</th>
+                  <th className="p-2 text-left font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("code")}>
+                    Projet
+                  </th>
+                  <th className="p-2 text-left font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("client")}>
+                    Client
+                  </th>
+                  <th className="p-2 text-right font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("sold")}>
+                    CA vendu
+                    <Hint>
+                      Valeur HT vendue du projet:
+                      <br />- Utilise projects.quote_amount si présent,
+                      <br />- Sinon somme budgets: conception + créa + dev.
+                    </Hint>
+                  </th>
+                  <th className="p-2 text-right font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("cost")}>
+                    Coût
+                    <Hint>
+                      Coût réalisé estimé:
+                      <br />- Heures réelles (actual_items) × taux horaire par équipe,
+                      <br />- À défaut, heures planifiées (plan_items),
+                      <br />- Taux issus de ref_internal_costs (€/jour ÷ 8),
+                      <br />- Défaut si vide: 800/500/800 €/j (conc./créa/dev).
+                    </Hint>
+                  </th>
+                  <th className="p-2 text-right font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("margin")}>
+                    Marge
+                    <Hint>
+                      Marge en euros:
+                      <br />marge = CA vendu − coût réalisé.
+                    </Hint>
+                  </th>
+                  <th className="p-2 text-right font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("margin_pct")}>
+                    Marge %
+                    <Hint>
+                      Pourcentage:
+                      <br />marge % = (marge / CA vendu) × 100,
+                      <br />affiché si CA vendu &gt; 0.
+                    </Hint>
+                  </th>
                 </tr>
               </thead>
               <tbody>
