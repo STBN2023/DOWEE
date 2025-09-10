@@ -14,14 +14,12 @@ const RobotSVG: React.FC<{ size?: number }> = ({ size = 28 }) => {
         .robot { transition: transform .25s ease; }
         .robot:hover { transform: translateY(-1px); }
 
-        /* Make transforms relative to shape bounds */
-        .eye { transform-box: fill-box; transform-origin: center; }
-        .antenna { transform-box: fill-box; transform-origin: center; }
-        .mouth { transform-box: fill-box; transform-origin: center; }
+        /* Transform origins */
+        .eye, .antenna, .mouth { transform-box: fill-box; transform-origin: center; }
 
         @keyframes blink {
           0%, 6%, 100% { transform: scaleY(1); }
-          3% { transform: scaleY(0.05); }
+          3% { transform: scaleY(0.06); }
         }
         .eye { animation: blink 5.5s infinite; }
         .eye.eye-right { animation-delay: .15s; }
@@ -33,31 +31,40 @@ const RobotSVG: React.FC<{ size?: number }> = ({ size = 28 }) => {
         .antenna { animation: bob 2.4s ease-in-out infinite; }
 
         @keyframes pulse {
-          0%, 100% { opacity: .7; }
+          0%, 100% { opacity: .75; }
           50% { opacity: 1; }
         }
         .mouth { animation: pulse 1.6s ease-in-out infinite; }
 
-        /* Subtle shadow for depth */
-        .shadow { filter: drop-shadow(0 1px 1px rgba(0,0,0,.12)); }
+        .shadow { filter: drop-shadow(0 1px 1px rgba(0,0,0,.2)); }
       `}
       </style>
 
-      {/* Corps */}
-      <rect x="10" y="16" width="28" height="20" rx="6" className="shadow" fill="#214A33" />
+      {/* Corps très clair + liseré vert pour contraster sur le bouton vert */}
+      <rect
+        x="10"
+        y="16"
+        width="28"
+        height="20"
+        rx="6"
+        className="shadow"
+        fill="#F7F7F7"
+        stroke="#214A33"
+        strokeWidth="1.3"
+      />
 
-      {/* Yeux (anim blink) */}
-      <circle cx="18" cy="26" r="3" className="eye eye-left" fill="#F7F7F7" />
-      <circle cx="30" cy="26" r="3" className="eye eye-right" fill="#F7F7F7" />
+      {/* Yeux verts foncés + petit reflet blanc */}
+      <circle cx="18" cy="26" r="3" className="eye eye-left" fill="#214A33" />
+      <circle cx="30" cy="26" r="3" className="eye eye-right" fill="#214A33" />
+      <circle cx="17.2" cy="25.2" r="0.7" fill="#F7F7F7" />
+      <circle cx="29.2" cy="25.2" r="0.7" fill="#F7F7F7" />
 
-      {/* Antenne (anim bob) */}
-      <rect x="22" y="6" width="4" height="8" rx="2" className="antenna" fill="#214A33" />
+      {/* Antenne + bras orange pour pop visuel */}
+      <rect x="22" y="6" width="4" height="8" rx="2" className="antenna" fill="#F2994A" />
+      <rect x="6" y="22" width="4" height="8" rx="2" fill="#F2994A" />
+      <rect x="38" y="22" width="4" height="8" rx="2" fill="#F2994A" />
 
-      {/* Bras */}
-      <rect x="6" y="22" width="4" height="8" rx="2" fill="#BFBFBF" />
-      <rect x="38" y="22" width="4" height="8" rx="2" fill="#BFBFBF" />
-
-      {/* Barre "bouche" (anim pulse) */}
+      {/* Bouche orange qui pulse */}
       <rect x="14" y="34" width="20" height="4" rx="2" className="mouth" fill="#F2994A" />
     </svg>
   );
