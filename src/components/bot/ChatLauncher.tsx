@@ -22,7 +22,8 @@ const ChatLauncher: React.FC = () => {
           aria-label={open ? "Fermer Dowee Bot" : "Ouvrir Dowee Bot"}
           title="Dowee Bot"
         >
-          <AnimatedRobot size={56} decorative />
+          {/* Robot plus grand, bulle inchangée */}
+          <AnimatedRobot size={62} decorative />
         </Button>
       </motion.div>
     </>
