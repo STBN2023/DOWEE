@@ -41,7 +41,7 @@ export default function ChatLauncher({ onOpenChange, onSend }: { onOpenChange?: 
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-[1000] select-none">
+    <div className="fixed bottom-[64px] right-4 z-[1000] select-none">
       <div className="flex items-end gap-3">
         {/* Bouton robot animé */}
         <motion.button
@@ -90,7 +90,7 @@ export default function ChatLauncher({ onOpenChange, onSend }: { onOpenChange?: 
               ))}
               {pending && <Typing />}
             </div>
-            <Footer onSend={handleSend} />
+            <Footer onSend={(msg) => { handleSend(msg); }} />
           </motion.div>
         )}
       </AnimatePresence>
