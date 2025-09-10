@@ -76,9 +76,9 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-  const user = userData.user;
-  const userId = user.id;
+  const userId = userData.user.id;
 
+  // Refuser si aucun profil employé (ne plus créer automatiquement)
   const { data: empRow, error: empErr } = await admin
     .from("employees")
     .select("id")
@@ -91,28 +91,11 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-
   if (!empRow) {
-    const display_name =
-      (user.user_metadata?.display_name as string | undefined)?.trim() ||
-      user.email ||
-      "Utilisateur";
-    const first_name = (user.user_metadata?.first_name as string | undefined) || null;
-    const last_name = (user.user_metadata?.last_name as string | undefined) || null;
-
-    const { error: createErr } = await admin
-      .from("employees")
-      .upsert(
-        { id: userId, display_name, first_name, last_name },
-        { onConflict: "id" }
-      );
-
-    if (createErr) {
-      return new Response(JSON.stringify({ error: `Profile creation failed: ${createErr.message}` }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    return new Response(JSON.stringify({ error: "Forbidden: employee profile not found" }), {
+      status: 403,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   if (action === "get") {

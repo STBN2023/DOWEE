@@ -30,7 +30,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = React.useState<User | null>(null);
   const [employee, setEmployee] = React.useState<EmployeeRow | null>(null);
 
-  const upsertEmployeeIfMissing = async (u: User) => {
+  const signOutLocal = async (feedback?: string) => {
+    await supabase.auth.signOut();
+    setSession(null);
+    setUser(null);
+    setEmployee(null);
+    if (feedback) showError(feedback);
+  };
+
+  const getEmployeeOrSignOut = async (u: User) => {
     const { data, error } = await supabase
       .from("employees")
       .select("*")
@@ -41,36 +49,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       showError(`Connexion impossible: ${error.message}`);
       return null;
     }
-    if (data) return data as EmployeeRow;
-
-    const display_name =
-      (u.user_metadata?.display_name as string | undefined)?.trim() ||
-      (u.email ?? "Utilisateur");
-    const first_name = (u.user_metadata?.first_name as string | undefined) || null;
-    const last_name = (u.user_metadata?.last_name as string | undefined) || null;
-
-    const { data: created, error: insErr } = await supabase
-      .from("employees")
-      .insert({
-        id: u.id,
-        display_name,
-        first_name,
-        last_name,
-      })
-      .select("*")
-      .single();
-
-    if (insErr) {
-      showError(`Activation du profil impossible: ${insErr.message}`);
+    if (!data) {
+      await signOutLocal("Votre compte n’est pas autorisé sur DoWee (profil absent).");
       return null;
     }
-
-    showSuccess("Profil initialisé.");
-    return created as EmployeeRow;
+    return data as EmployeeRow;
   };
 
   const fetchEmployee = async (u: User) => {
-    const row = await upsertEmployeeIfMissing(u);
+    const row = await getEmployeeOrSignOut(u);
     setEmployee(row);
   };
 
@@ -85,13 +72,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setSession(sess);
       setUser(sess?.user ?? null);
 
-      // Débloque l’UI immédiatement; on finalise le profil en arrière-plan
+      // Débloquer l’UI; vérification profil en arrière-plan
       setLoading(false);
 
       if (sess?.user) {
-        fetchEmployee(sess.user).catch(() => {
-          // Les erreurs sont déjà remontées via toasts; on évite de rebloquer l’UI
-        });
+        fetchEmployee(sess.user).catch(() => {});
       } else {
         setEmployee(null);
       }
