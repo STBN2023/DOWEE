@@ -23,6 +23,9 @@ const AdminBot: React.FC = () => {
   // LLM
   const [llm, setLlm] = React.useState<{ configured: boolean; provider: string | null } | null>(null);
 
+  // TEST: déclenchement immédiat du bot
+  const [testNow, setTestNow] = React.useState(false);
+
   // RAG
   const [text, setText] = React.useState("");
   const [name, setName] = React.useState("guide_utilisateur.md");
@@ -132,6 +135,30 @@ const AdminBot: React.FC = () => {
                 <span className="text-xs text-[#214A33]/60">Ouvre le chat à l’heure choisie si la journée n’est pas validée.</span>
               </div>
               <Switch checked={settings.afternoonReminderEnabled} onCheckedChange={(v) => setEnabled(!!v)} />
+            </div>
+
+            {/* Test immédiat */}
+            <div className="flex items-center justify-between rounded-md border border-[#BFBFBF] bg-white px-3 py-2">
+              <div className="flex flex-col">
+                <Label className="text-[#214A33]">Tester l’invite maintenant</Label>
+                <span className="text-xs text-[#214A33]/60">Ouvre le bot tout de suite (ignore temporairement les suspensions).</span>
+              </div>
+              <Switch
+                checked={testNow}
+                onCheckedChange={(v) => {
+                  if (v) {
+                    setTestNow(true);
+                    try {
+                      window.dispatchEvent(new Event("dowee:bot:triggerAfternoon"));
+                      showSuccess("Bot ouvert (test) — si la journée n’est pas validée.");
+                    } finally {
+                      setTimeout(() => setTestNow(false), 400);
+                    }
+                  } else {
+                    setTestNow(false);
+                  }
+                }}
+              />
             </div>
 
             <div className="grid gap-2 rounded-md border border-[#BFBFBF] bg-white p-3 md:grid-cols-2">
