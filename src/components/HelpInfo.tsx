@@ -1,46 +1,35 @@
-import React from "react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+"use client";
 
-type HelpInfoProps = {
-  title: string;
-  children: React.ReactNode;
+import React from "react";
+import { Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+
+type Props = {
+  title?: string;
   botHint?: string;
+  children?: React.ReactNode;
 };
 
-const HelpInfo: React.FC<HelpInfoProps> = ({ title, children, botHint }) => {
+export default function HelpInfo({ title, botHint, children }: Props) {
   return (
-    <Dialog>
-      <DialogTrigger asChild>
+    <Tooltip delayDuration={150}>
+      <TooltipTrigger asChild>
         <button
           type="button"
-          aria-label={`Aide: ${title}`}
-          title={`Aide: ${title}`}
-          className="ml-1 inline-flex h-5 w-5 cursor-pointer select-none items-center justify-center rounded-full bg-[#F2994A] text-[11px] font-bold text-white ring-1 ring-[#BFBFBF] hover:bg-[#E38C3F] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#214A33]"
+          aria-label="Aide"
+          className="ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full border border-[#BFBFBF] bg-white text-[#214A33] hover:bg-[#F7F7F7] focus:outline-none focus:ring-2 focus:ring-[#214A33]/40"
         >
-          i
+          <Info className="h-3.5 w-3.5" />
         </button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          {botHint && <DialogDescription>{botHint}</DialogDescription>}
-        </DialogHeader>
-        <div className="space-y-2 text-sm text-[#214A33]">
-          {children}
-        </div>
-        <div className="mt-3 flex justify-end">
-          <Button
-            variant="outline"
-            className="border-[#BFBFBF] text-[#214A33]"
-            onClick={() => window.dispatchEvent(new Event("dowee:bot:open"))}
-          >
-            Poser une question au bot
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-};
+      </TooltipTrigger>
 
-export default HelpInfo;
+      <TooltipContent side="top" align="start" className="max-w-sm">
+        {title && <div className="mb-1 text-sm font-medium">{title}</div>}
+        {children && <div className="text-xs leading-relaxed">{children}</div>}
+        {botHint && (
+          <div className="mt-2 text-[11px] text-muted-foreground">{botHint}</div>
+        )}
+      </TooltipContent>
+    </Tooltip>
+  );
+}

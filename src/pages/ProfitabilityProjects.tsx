@@ -8,7 +8,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
 import { getProjectsProfitability, type ProjectProfit } from "@/api/projectProfitability";
 import HelpInfo from "@/components/HelpInfo";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { Bot as BotIcon } from "lucide-react";
 
 function eur(n: number | null | undefined) {
@@ -120,160 +119,158 @@ const ProfitabilityProjects: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
-      <TooltipProvider>
-        <Card className="border-[#BFBFBF]">
-          <CardHeader className="flex flex-wrap items-center justify-between gap-2">
-            <CardTitle className="text-[#214A33]">Rentabilité — Projets</CardTitle>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="w-[260px]">
-                <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher projet…" />
-              </div>
-              <Select value={clientId} onValueChange={setClientId}>
-                <SelectTrigger className="w-[320px] bg-white border-[#BFBFBF] text-[#214A33]">
-                  <SelectValue placeholder="Filtrer par client" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tous les clients</SelectItem>
-                  {clients.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button className="bg-[#214A33] text-white hover:bg-[#214A33]/90" onClick={exportCsv} disabled={exporting}>
-                {exporting ? "Export…" : "Exporter CSV"}
-              </Button>
-              <Button
-                variant="outline"
-                className="border-[#BFBFBF] text-[#214A33]"
-                onClick={() => window.dispatchEvent(new Event("dowee:bot:open"))}
-              >
-                <BotIcon className="mr-2 h-4 w-4" />
-                Ouvrir le bot
-              </Button>
+      <Card className="border-[#BFBFBF]">
+        <CardHeader className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle className="text-[#214A33]">Rentabilité — Projets</CardTitle>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="w-[260px]">
+              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher projet…" />
             </div>
-          </CardHeader>
-          <CardContent>
-            {/* Encart d’aide + lien vers bot */}
-            <div className="mb-3 rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-3 text-sm text-[#214A33]">
-              Besoin du détail du calcul ? Cliquez sur les badges (i) ou
-              <button
-                type="button"
-                onClick={() => window.dispatchEvent(new Event("dowee:bot:open"))}
-                className="ml-1 inline-flex items-center underline decoration-[#214A33]/40 underline-offset-2 hover:text-[#214A33]/80"
-              >
-                ouvrez le bot
-              </button>
-              {" "}pour poser vos questions.
-            </div>
+            <Select value={clientId} onValueChange={setClientId}>
+              <SelectTrigger className="w-[320px] bg-white border-[#BFBFBF] text-[#214A33]">
+                <SelectValue placeholder="Filtrer par client" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les clients</SelectItem>
+                {clients.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button className="bg-[#214A33] text-white hover:bg-[#214A33]/90" onClick={exportCsv} disabled={exporting}>
+              {exporting ? "Export…" : "Exporter CSV"}
+            </Button>
+            <Button
+              variant="outline"
+              className="border-[#BFBFBF] text-[#214A33]"
+              onClick={() => window.dispatchEvent(new Event("dowee:bot:open"))}
+            >
+              <BotIcon className="mr-2 h-4 w-4" />
+              Ouvrir le bot
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {/* Encart d’aide + lien vers bot */}
+          <div className="mb-3 rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-3 text-sm text-[#214A33]">
+            Besoin du détail du calcul ? Cliquez sur les badges (i) ou
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new Event("dowee:bot:open"))}
+              className="ml-1 inline-flex items-center underline decoration-[#214A33]/40 underline-offset-2 hover:text-[#214A33]/80"
+            >
+              ouvrez le bot
+            </button>
+            {" "}pour poser vos questions.
+          </div>
 
-            {errorMsg && <div className="mb-3 rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-700">{errorMsg}</div>}
+          {errorMsg && <div className="mb-3 rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-700">{errorMsg}</div>}
 
-            <div className="overflow-x-auto rounded-md border border-[#BFBFBF] bg-white">
-              <table className="w-full border-collapse text-sm">
-                <thead className="bg-[#F7F7F7]">
+          <div className="overflow-x-auto rounded-md border border-[#BFBFBF] bg-white">
+            <table className="w-full border-collapse text-sm">
+              <thead className="bg-[#F7F7F7]">
+                <tr>
+                  <th className="p-2 text-left text-sm font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("code")}>
+                    Projet
+                  </th>
+                  <th className="p-2 text-left text-sm font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("client")}>
+                    Client
+                  </th>
+                  <th className="p-2 text-right text-sm font-semibold text-[#214A33]">
+                    <div className="inline-flex items-center">
+                      CA vendu
+                      <HelpInfo
+                        title="CA vendu — mode de calcul"
+                        botHint="Besoin de détails chiffrés ? Posez la question au bot."
+                      >
+                        <ul className="list-disc pl-4">
+                          <li>Valeur HT vendue du projet.</li>
+                          <li>Utilise projects.quote_amount si renseigné, sinon somme des budgets par service (conception + créa + dev).</li>
+                        </ul>
+                      </HelpInfo>
+                    </div>
+                  </th>
+                  <th className="p-2 text-right text-sm font-semibold text-[#214A33]">
+                    <div className="inline-flex items-center">
+                      Coût
+                      <HelpInfo
+                        title="Coût — mode d’estimation"
+                        botHint="Demandez au bot comment ce coût est estimé pour un projet donné."
+                      >
+                        <ul className="list-disc pl-4">
+                          <li>Heures réelles (actual_items) × taux horaire par équipe.</li>
+                          <li>À défaut d’heures réelles, on utilise les heures planifiées (plan_items).</li>
+                          <li>Taux issus de ref_internal_costs (€/jour ÷ 8) — défaut: 800/500/800 €/j (conc./créa/dev).</li>
+                        </ul>
+                      </HelpInfo>
+                    </div>
+                  </th>
+                  <th className="p-2 text-right text-sm font-semibold text-[#214A33]">
+                    <div className="inline-flex items-center">
+                      Marge
+                      <HelpInfo
+                        title="Marge — définition"
+                        botHint="Le bot peut expliquer les écarts de marge projet par projet."
+                      >
+                        <ul className="list-disc pl-4">
+                          <li>marge (€) = CA vendu − coût réalisé (estimé).</li>
+                        </ul>
+                      </HelpInfo>
+                    </div>
+                  </th>
+                  <th className="p-2 text-right text-sm font-semibold text-[#214A33]">
+                    <div className="inline-flex items-center">
+                      Marge %
+                      <HelpInfo
+                        title="Marge % — calcul"
+                        botHint="Posez au bot: “comment est la marge % de ACME-2025-001 ?”"
+                      >
+                        <ul className="list-disc pl-4">
+                          <li>marge % = (marge / CA vendu) × 100.</li>
+                          <li>Affichée uniquement si CA vendu &gt; 0.</li>
+                        </ul>
+                      </HelpInfo>
+                    </div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
                   <tr>
-                    <th className="p-2 text-left text-sm font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("code")}>
-                      Projet
-                    </th>
-                    <th className="p-2 text-left text-sm font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("client")}>
-                      Client
-                    </th>
-                    <th className="p-2 text-right text-sm font-semibold text-[#214A33]">
-                      <div className="inline-flex items-center">
-                        CA vendu
-                        <HelpInfo
-                          title="CA vendu — mode de calcul"
-                          botHint="Besoin de détails chiffrés ? Posez la question au bot."
-                        >
-                          <ul className="list-disc pl-4">
-                            <li>Valeur HT vendue du projet.</li>
-                            <li>Utilise projects.quote_amount si renseigné, sinon somme des budgets par service (conception + créa + dev).</li>
-                          </ul>
-                        </HelpInfo>
-                      </div>
-                    </th>
-                    <th className="p-2 text-right text-sm font-semibold text-[#214A33]">
-                      <div className="inline-flex items-center">
-                        Coût
-                        <HelpInfo
-                          title="Coût — mode d’estimation"
-                          botHint="Demandez au bot comment ce coût est estimé pour un projet donné."
-                        >
-                          <ul className="list-disc pl-4">
-                            <li>Heures réelles (actual_items) × taux horaire par équipe.</li>
-                            <li>À défaut d’heures réelles, on utilise les heures planifiées (plan_items).</li>
-                            <li>Taux issus de ref_internal_costs (€/jour ÷ 8) — défaut: 800/500/800 €/j (conc./créa/dev).</li>
-                          </ul>
-                        </HelpInfo>
-                      </div>
-                    </th>
-                    <th className="p-2 text-right text-sm font-semibold text-[#214A33]">
-                      <div className="inline-flex items-center">
-                        Marge
-                        <HelpInfo
-                          title="Marge — définition"
-                          botHint="Le bot peut expliquer les écarts de marge projet par projet."
-                        >
-                          <ul className="list-disc pl-4">
-                            <li>marge (€) = CA vendu − coût réalisé (estimé).</li>
-                          </ul>
-                        </HelpInfo>
-                      </div>
-                    </th>
-                    <th className="p-2 text-right text-sm font-semibold text-[#214A33]">
-                      <div className="inline-flex items-center">
-                        Marge %
-                        <HelpInfo
-                          title="Marge % — calcul"
-                          botHint="Posez au bot: “comment est la marge % de ACME-2025-001 ?”"
-                        >
-                          <ul className="list-disc pl-4">
-                            <li>marge % = (marge / CA vendu) × 100.</li>
-                            <li>Affichée uniquement si CA vendu &gt; 0.</li>
-                          </ul>
-                        </HelpInfo>
-                      </div>
-                    </th>
+                    <td colSpan={6} className="p-4 text-center text-[#214A33]/60">Chargement…</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td colSpan={6} className="p-4 text-center text-[#214A33]/60">Chargement…</td>
+                ) : filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-4 text-center text-[#214A33]/60">Aucun résultat.</td>
+                  </tr>
+                ) : (
+                  filtered.map((p) => (
+                    <tr key={p.project_id} className="border-t border-[#BFBFBF]">
+                      <td className="p-2">
+                        <div className="text-[#214A33]"><span className="font-medium">{p.code}</span> — {p.name}</div>
+                      </td>
+                      <td className="p-2">{p.client ? `${p.client.code} — ${p.client.name}` : "—"}</td>
+                      <td className="p-2 text-right">{eur(p.sold_ht)}</td>
+                      <td className="p-2 text-right">{eur(p.cost_realized)}</td>
+                      <td className="p-2 text-right">{eur(p.margin)}</td>
+                      <td className="p-2 text-right">
+                        <div className="inline-flex items-center gap-2">
+                          <span className="tabular-nums">{p.margin_pct == null ? "—" : `${p.margin_pct.toFixed(0)}%`}</span>
+                          {marginBadge(p.margin_pct)}
+                        </div>
+                      </td>
                     </tr>
-                  ) : filtered.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="p-4 text-center text-[#214A33]/60">Aucun résultat.</td>
-                    </tr>
-                  ) : (
-                    filtered.map((p) => (
-                      <tr key={p.project_id} className="border-t border-[#BFBFBF]">
-                        <td className="p-2">
-                          <div className="text-[#214A33]"><span className="font-medium">{p.code}</span> — {p.name}</div>
-                        </td>
-                        <td className="p-2">{p.client ? `${p.client.code} — ${p.client.name}` : "—"}</td>
-                        <td className="p-2 text-right">{eur(p.sold_ht)}</td>
-                        <td className="p-2 text-right">{eur(p.cost_realized)}</td>
-                        <td className="p-2 text-right">{eur(p.margin)}</td>
-                        <td className="p-2 text-right">
-                          <div className="inline-flex items-center gap-2">
-                            <span className="tabular-nums">{p.margin_pct == null ? "—" : `${p.margin_pct.toFixed(0)}%`}</span>
-                            {marginBadge(p.margin_pct)}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
 
-            <div className="mt-2 text-[11px] text-[#214A33]/60">
-              Astuce: sur mobile, cliquez le badge (i) pour ouvrir l’aide.
-            </div>
-          </CardContent>
-        </Card>
-      </TooltipProvider>
+          <div className="mt-2 text-[11px] text-[#214A33]/60">
+            Astuce: sur mobile, cliquez le badge (i) pour ouvrir l’aide.
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };
