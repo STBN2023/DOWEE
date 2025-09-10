@@ -7,7 +7,8 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 }
 
-type Payload = { messages: Array<{ role: "user"|"assistant"|"system"; content: string }> }
+type Msg = { role: "user"|"assistant"|"system"; content: string }
+type Payload = { messages: Msg[] }
 
 function systemPrompt() {
   return [
@@ -70,7 +71,7 @@ function answerScoreHow() {
   ].join("\n")
 }
 
-// --- Score (exemple détaillé) ---
+// --- Score (exemple/générique) ---
 function isScoreExample(q: string) {
   return q.includes("exemple") && q.includes("score")
 }
@@ -111,6 +112,20 @@ function extractProjectCode(text: string): string | null {
   const m = text.match(/([A-Z0-9]+-\d{4}-\d{1,4})/i)
   return m ? m[1].toUpperCase() : null
 }
+function simpleScoreExplanationWithExample(): string {
+  const s_client = 50  // client normal
+  const s_marge = sMarge(30) // 30% → 60 + 2*(10) = 80
+  const s_urg = sUrgence(2, 8) // 2 jours restants / 8j d’effort → B=0,25 → 90
+  const s_rec = 0, s_strat = 0
+  const calc = clamp100(round2(0.25*s_client + 0.35*s_marge + 0.20*s_urg + 0.10*s_rec + 0.10*s_strat))
+  return [
+    "En clair:",
+    "1) On combine 5 notes: client (25%), marge (35%), urgence (20%), récurrence (10%), stratégie (10%).",
+    "2) Plus la marge est haute et l’échéance proche, plus le score monte.",
+    "3) Client “Star” ajoute un bonus ×1,15.",
+    `Exemple: client “Normal” (50), marge 30% → 80, urgence (2j restants/8j) → 90 ⇒ score ≈ ${Math.round(calc)}.`
+  ].join("\n")
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders })
@@ -122,7 +137,8 @@ serve(async (req) => {
   if (!authHeader) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } })
 
   const body = (await req.json().catch(() => ({}))) as Partial<Payload>
-  const last = (body?.messages || []).slice().reverse().find(m => m.role === "user")?.content?.slice(0, 2000) || ""
+  const msgs = (body?.messages || []) as Msg[]
+  const last = msgs.slice().reverse().find(m => m.role === "user")?.content?.slice(0, 2000) || ""
   if (!last.trim()) return new Response(JSON.stringify({ error: "Empty query" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } })
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!
@@ -140,6 +156,7 @@ serve(async (req) => {
   if (!emp) return new Response(JSON.stringify({ error: "Forbidden: orphan session" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } })
 
   const q = normalize(last)
+  const prevAssistant = msgs.slice().reverse().find(m => m.role === "assistant")?.content || ""
 
   // 1) Navigation rapide
   const nav = quickNavAnswer(q)
@@ -147,16 +164,22 @@ serve(async (req) => {
     return new Response(JSON.stringify({ answer: nav, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
   }
 
-  // 2) Explication du score
+  // 2) Explication du score (technique)
   if (isScoreHow(q)) {
     return new Response(JSON.stringify({ answer: answerScoreHow(), citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
+  }
+
+  // 2bis) “Explique simplement” (détection follow‑up après une réponse sur le score)
+  const askSimple = (q.includes("explique") || q.includes("expliquer") || q.includes("vulgaris") || q.includes("simple")) &&
+    /calcul du score|s_client|s_marge|score ≈|score ~=|score ≃/i.test(prevAssistant || "")
+  if (askSimple) {
+    return new Response(JSON.stringify({ answer: simpleScoreExplanationWithExample(), citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
   }
 
   // 3) Exemple de score (générique ou par projet)
   if (isScoreExample(q)) {
     const code = extractProjectCode(last)
     if (code) {
-      // Récupérer le score du projet ciblé
       const resp = await fetch(`${supabaseUrl}/functions/v1/project-scoring`, {
         method: "POST",
         headers: { Authorization: authHeader, "Content-Type": "application/json" },
@@ -166,41 +189,23 @@ serve(async (req) => {
         const data = await resp.json().catch(() => ({ scores: [] }))
         const item = (data?.scores || []).find((x: any) => (x.code || "").toUpperCase() === code)
         if (item) {
-          const s_client = sClient(item.segment)
-          const s_marge = sMarge(item.margin_pct ?? null)
+          const sc = sClient(item.segment)
+          const sm = sMarge(item.margin_pct ?? null)
           const dLeft = daysLeft(item.due_date ?? null)
-          const s_urg = sUrgence(dLeft, item.effort_days ?? null)
-          const s_rec = 0, s_strat = 0
-          const raw = 0.25*s_client + 0.35*s_marge + 0.20*s_urg + 0.10*s_rec + 0.10*s_strat
-          const mult = item.star ? 1.15 : 1
-          const calc = clamp100(round2(raw * mult))
+          const su = sUrgence(dLeft, item.effort_days ?? null)
+          const calc = clamp100(round2(0.25*sc + 0.35*sm + 0.20*su))
           const lines = [
             `Exemple sur ${item.code} — ${item.name}:`,
-            `- Segment: ${String(item.segment ?? "Normal")} → S_client=${Math.round(s_client)}`,
-            `- Marge: ${item.margin_pct == null ? "—" : `${Math.round(item.margin_pct)}%`} → S_marge=${Math.round(s_marge)}`,
-            `- Urgence: jours restants=${dLeft ?? "?"}, effort=${item.effort_days ?? "?"} → S_urgence=${Math.round(s_urg)}`,
-            `- Bonus Star: ${item.star ? "oui (×1,15)" : "non"}`,
-            `Score ≈ ${Math.round(calc)} (formule).`,
+            `- Segment: ${String(item.segment ?? "Normal")} → S_client=${Math.round(sc)}`,
+            `- Marge: ${item.margin_pct == null ? "—" : `${Math.round(item.margin_pct)}%`} → S_marge=${Math.round(sm)}`,
+            `- Urgence: jours restants=${dLeft ?? "?"}, effort=${item.effort_days ?? "?"} → S_urgence=${Math.round(su)}`,
+            `Score ≈ ${Math.round(calc)}.`,
           ]
           return new Response(JSON.stringify({ answer: lines.join("\n"), citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
         }
       }
-      // si échec: basculer sur exemple générique
     }
-    const s_client = 50   // Normal
-    const s_marge = sMarge(32) // 32% → 60 + 2×(12) = 84
-    const s_urg = sUrgence(5, 10) // 5 jours restants / 10j d'effort → B=0,5 → 90
-    const s_rec = 0, s_strat = 0
-    const calc = clamp100(round2((0.25*s_client + 0.35*s_marge + 0.20*s_urg + 0.10*s_rec + 0.10*s_strat)))
-    const example = [
-      "Exemple:",
-      "- S_client=50 (client Normal).",
-      "- S_marge=84 (marge 32%).",
-      "- S_urgence=90 (5j restants / 10j d’effort).",
-      "- S_récurrence=0, S_strat=0.",
-      `Score ≈ ${Math.round(calc)}.`,
-    ]
-    return new Response(JSON.stringify({ answer: example.join("\n"), citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
+    return new Response(JSON.stringify({ answer: simpleScoreExplanationWithExample(), citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
   }
 
   // 4) Projets prioritaires (top scores)
@@ -230,7 +235,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({ answer: [prefix, ...lines].join("\n"), citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
   }
 
-  // 5) Heures restantes sur un projet (par code ou mes projets)
+  // 5) Heures restantes (code ou déduction)
   if ((q.includes("heure") || q.includes("heures")) && (q.includes("reste") || q.includes("restant"))) {
     const code = extractProjectCode(last)
     if (code) {
@@ -252,8 +257,7 @@ serve(async (req) => {
         usedH = ((plans || []) as any[]).reduce((acc, r) => acc + Number(r.planned_minutes || 0), 0) / 60
       }
       const remaining = Math.max(0, budgetH - usedH)
-      const answer = `${projectLabel}: budget ${budgetH.toFixed(1)} h, réalisé ${usedH.toFixed(1)} h → reste ${remaining.toFixed(1)} h.`
-      return new Response(JSON.stringify({ answer, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
+      return new Response(JSON.stringify({ answer: `${projectLabel}: budget ${budgetH.toFixed(1)} h, réalisé ${usedH.toFixed(1)} h → reste ${remaining.toFixed(1)} h.`, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
     } else {
       const { data: pe } = await admin.from("project_employees").select("project_id").eq("employee_id", userId)
       const myIds = Array.from(new Set((pe || []).map((r: any) => r.project_id)))
@@ -277,8 +281,7 @@ serve(async (req) => {
         usedH = ((plans || []) as any[]).reduce((acc, r) => acc + Number(r.planned_minutes || 0), 0) / 60
       }
       const remaining = Math.max(0, budgetH - usedH)
-      const answer = `${(prj as any).code} — ${(prj as any).name}: budget ${budgetH.toFixed(1)} h, réalisé ${usedH.toFixed(1)} h → reste ${remaining.toFixed(1)} h.`
-      return new Response(JSON.stringify({ answer, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
+      return new Response(JSON.stringify({ answer: `${(prj as any).code} — ${(prj as any).name}: budget ${budgetH.toFixed(1)} h, réalisé ${usedH.toFixed(1)} h → reste ${remaining.toFixed(1)} h.`, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
     }
   }
 
@@ -323,7 +326,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({ answer, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
   }
 
-  // 7) Statut/validation du jour (“ai-je des heures à valider ?”)
+  // 7) Statut/validation du jour
   if ((q.includes("valider") || q.includes("validation")) && (q.includes("heure") || q.includes("jour") || q.includes("journee") || q.includes("aujourd"))) {
     const today = new Date()
     const y = today.getFullYear()
@@ -352,7 +355,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({ answer, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
   }
 
-  // 8) Recherche RAG (FTS websearch) + fallback ILIKE + LLM si clé
+  // 8) RAG (FTS websearch) + fallback ILIKE + LLM si clé
   const { data: doc } = await admin.from("kb_documents").select("id, name, version").eq("active", true).order("created_at", { ascending: false }).maybeSingle()
   if (!doc) {
     const fallback = "Le guide n'est pas encore indexé. Ouvre Admin → Base de connaissance (RAG) et indexe le/les guides (puis active la version)."
