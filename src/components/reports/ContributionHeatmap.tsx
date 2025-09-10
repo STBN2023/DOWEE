@@ -42,12 +42,12 @@ function levelFrom(count: number, max: number) {
 
 function colorClass(level: number): string {
   switch (level) {
-    case 0: return "bg-orange-50/50 border border-[#BFBFBF]/40";
+    case 0: return "bg-orange-50/60 border border-[#BFBFBF]/40";
     case 1: return "bg-orange-100";
     case 2: return "bg-orange-200";
     case 3: return "bg-orange-300";
     case 4: return "bg-orange-500";
-    default: return "bg-orange-50/50";
+    default: return "bg-orange-50/60";
   }
 }
 
@@ -94,7 +94,7 @@ const ContributionHeatmap: React.FC<Props> = ({ start, end, counts }) => {
   }
 
   return (
-    <div className="w-full overflow-x-auto">
+    <div className="w-full overflow-hidden">
       <div className="inline-block">
         {/* Labels mois */}
         <div className="ml-8 mb-1 flex gap-[3px]">
@@ -128,10 +128,10 @@ const ContributionHeatmap: React.FC<Props> = ({ start, end, counts }) => {
             ))}
           </div>
 
-          {/* Légende */}
-          <div className="ml-3 flex items-center gap-2">
+          {/* Légende compacte */}
+          <div className="ml-3 hidden items-center gap-2 md:flex">
             <span className="text-[10px] text-[#214A33]/60">Moins</span>
-            <div className="h-[12px] w-[12px] rounded-[3px] bg-orange-50/50 border border-[#BFBFBF]/40" />
+            <div className="h-[12px] w-[12px] rounded-[3px] bg-orange-50/60 border border-[#BFBFBF]/40" />
             <div className="h-[12px] w-[12px] rounded-[3px] bg-orange-100" />
             <div className="h-[12px] w-[12px] rounded-[3px] bg-orange-200" />
             <div className="h-[12px] w-[12px] rounded-[3px] bg-orange-300" />

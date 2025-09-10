@@ -19,10 +19,6 @@ type LogRow = {
 
 type Project = { id: string; code: string; name: string };
 
-function isoDay(d: Date) {
-  return format(d, "yyyy-MM-dd");
-}
-
 function hourLabel(h: number) {
   return `${String(h).padStart(2, "0")}:00`;
 }
@@ -48,7 +44,7 @@ const ReportsChanges = () => {
   const [logs, setLogs] = React.useState<LogRow[]>([]);
   const [projects, setProjects] = React.useState<Project[]>([]);
 
-  // Étendre la période à ~6 mois (180 jours) pour le heatmap
+  // Période heatmap ~6 mois
   const since = React.useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() - 180);
@@ -75,7 +71,7 @@ const ReportsChanges = () => {
       if (error) throw new Error(error.message);
       const logs = (rows ?? []) as LogRow[];
 
-      // Projets référencés (prev et new)
+      // Projets référencés
       const ids = Array.from(
         new Set(
           logs.flatMap((l) => [l.prev_project_id, l.new_project_id]).filter(Boolean) as string[]
@@ -109,7 +105,7 @@ const ReportsChanges = () => {
     [projects]
   ) as Record<string, Project>;
 
-  // Agrégations pour KPIs
+  // KPIs
   const total = logs.length;
   const sameDayCount = logs.filter((l) => {
     try {
@@ -148,22 +144,59 @@ const ReportsChanges = () => {
     return map;
   }, [logs]);
 
-  // Période heatmap alignée sur semaines
+  // Période heatmap alignée
   const heatStart = React.useMemo(() => mondayOf(since), [since]);
   const heatEnd = React.useMemo(() => sundayOf(until), [until]);
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-6">
+    <div className="mx-auto max-w-6xl px-4 py-6">
       <Card className="border-[#BFBFBF]">
         <CardHeader>
           <CardTitle className="text-[#214A33]">Reporting — Modifs planning</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Heatmap des occurrences */}
-          <div>
-            <ContributionHeatmap start={heatStart} end={heatEnd} counts={dailyCounts} />
-            <div className="mt-1 text-[11px] text-[#214A33]/60">
-              Occurrences de modifications sur les 6 derniers mois (plus foncé = plus de modifs).
+          {/* Bandeau compact: Heatmap + KPIs + Top projets */}
+          <div className="grid gap-3 md:grid-cols-3">
+            {/* Colonne principale: Heatmap + 2 KPIs compacts */}
+            <div className="md:col-span-2 space-y-3">
+              <div className="rounded-md border border-[#BFBFBF] bg-white p-3">
+                <ContributionHeatmap start={heatStart} end={heatEnd} counts={dailyCounts} />
+                <div className="mt-1 text-[11px] text-[#214A33]/60">
+                  Occurrences de modifications sur les 6 derniers mois (plus foncé = plus de modifs).
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-3">
+                  <div className="text-xs text-[#214A33]/70">Modifications totales</div>
+                  <div className="text-2xl font-semibold text-[#214A33] tabular-nums">{total}</div>
+                </div>
+                <div className="rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-3">
+                  <div className="text-xs text-[#214A33]/70">Le jour-même</div>
+                  <div className="text-2xl font-semibold text-[#214A33] tabular-nums">{sameDayCount}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Colonne latérale: Top projets */}
+            <div className="rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-3">
+              <div className="text-sm font-medium text-[#214A33]">Top projet (modifs)</div>
+              <div className="mt-2 text-sm text-[#214A33]">
+                {topByProject.length === 0 ? (
+                  <div className="text-[#214A33]/60">—</div>
+                ) : (
+                  <div className="space-y-1">
+                    {topByProject.map((t) => {
+                      const p = projById[t.id];
+                      return (
+                        <div key={t.id} className="flex items-center justify-between">
+                          <span className="truncate">{p ? `${p.code} — ${p.name}` : t.id}</span>
+                          <span className="font-medium tabular-nums">{t.n}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -175,38 +208,8 @@ const ReportsChanges = () => {
             <div className="text-sm text-[#214A33]/70">Chargement…</div>
           ) : (
             <>
-              {/* KPIs */}
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-3">
-                  <div className="text-xs text-[#214A33]/70">Modifications totales</div>
-                  <div className="text-2xl font-semibold text-[#214A33] tabular-nums">{total}</div>
-                </div>
-                <div className="rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-3">
-                  <div className="text-xs text-[#214A33]/70">Le jour-même</div>
-                  <div className="text-2xl font-semibold text-[#214A33] tabular-nums">{sameDayCount}</div>
-                </div>
-                <div className="rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-3">
-                  <div className="text-xs text-[#214A33]/70">Top projet (modifs)</div>
-                  <div className="mt-1 text-sm text-[#214A33]">
-                    {topByProject.length === 0 ? "—" : (
-                      <div className="space-y-1">
-                        {topByProject.map((t) => {
-                          const p = projById[t.id];
-                          return (
-                            <div key={t.id} className="flex items-center justify-between">
-                              <span>{p ? `${p.code} — ${p.name}` : t.id}</span>
-                              <span className="font-medium tabular-nums">{t.n}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Liste */}
-              <div className="overflow-x-auto rounded-md border border-[#BFBFBF]">
+              {/* Liste des modifications */}
+              <div className="overflow-x-auto rounded-md border border-[#BFBFBF] bg-white">
                 <table className="w-full border-collapse text-sm">
                   <thead className="bg-[#F7F7F7]">
                     <tr>
@@ -243,7 +246,9 @@ const ReportsChanges = () => {
                                 {isSameDay && <Badge variant="secondary" className="border-[#BFBFBF] text-[#214A33]">Jour-même</Badge>}
                               </div>
                             </td>
-                            <td className="p-2">{format(new Date(l.d), "EEE dd/MM", { locale: fr })} — {hourLabel(l.hour)}</td>
+                            <td className="p-2">
+                              {format(new Date(l.d), "EEE dd/MM", { locale: fr })} — {hourLabel(l.hour)}
+                            </td>
                             <td className="p-2">
                               <span className="inline-flex items-center rounded-full border border-[#BFBFBF] px-2 py-0.5 text-xs">
                                 {l.action === "upsert" ? "Ajout/Remplacement" : "Suppression"}
@@ -253,7 +258,7 @@ const ReportsChanges = () => {
                               {before ? (<span><span className="font-medium">{before.code}</span> — {before.name}</span>) : "—"}
                             </td>
                             <td className="p-2">
-                              {after ? (<span><span className="font-medium">{after.code}</span> — {after.name}</span>) : "—"}
+                              {after ? (<span className="font-medium">{after.code}</span>) : "—"}{after ? ` — ${after.name}` : ""}
                             </td>
                           </tr>
                         );
