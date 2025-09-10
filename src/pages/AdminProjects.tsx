@@ -92,6 +92,9 @@ const AdminProjects = () => {
     client_id: string;
     tariff_id: string | null;
     quote_amount: string;
+    budget_conception: string;
+    budget_crea: string;
+    budget_dev: string;
     due_date: string;
     effort_days: string;
   }>({
@@ -100,6 +103,9 @@ const AdminProjects = () => {
     client_id: "",
     tariff_id: null,
     quote_amount: "",
+    budget_conception: "",
+    budget_crea: "",
+    budget_dev: "",
     due_date: "",
     effort_days: "",
   });
@@ -173,6 +179,22 @@ const AdminProjects = () => {
     return () => { mounted = false; };
   }, []);
 
+  // Helpers calcul heures max (budget / tarif) — viseur indicatif
+  const computeHoursMax = (tariff: Tariff | undefined | null, budgets: { conc?: string; crea?: string; dev?: string }) => {
+    if (!tariff) return { conc: null, crea: null, dev: null, total: null as number | null };
+    const n = (v?: string) => {
+      if (!v) return 0;
+      const x = Number(v.replace(",", "."));
+      return isFinite(x) ? x : 0;
+    };
+    const hConc = tariff.rate_conception > 0 ? n(budgets.conc) / tariff.rate_conception : 0;
+    const hCrea = tariff.rate_crea > 0 ? n(budgets.crea) / tariff.rate_crea : 0;
+    const hDev = tariff.rate_dev > 0 ? n(budgets.dev) / tariff.rate_dev : 0;
+    const total = hConc + hCrea + hDev;
+    const rnd = (x: number) => Math.round(x * 10) / 10;
+    return { conc: rnd(hConc), crea: rnd(hCrea), dev: rnd(hDev), total: rnd(total) };
+  };
+
   const onCreateProject = async () => {
     const name = form.name.trim();
     const client_id = form.client_id;
@@ -180,10 +202,20 @@ const AdminProjects = () => {
       showError("Nom et client requis.");
       return;
     }
-    const quote = form.quote_amount ? Number(form.quote_amount.replace(",", ".")) : null;
+    const num = (s: string) => {
+      if (!s.trim()) return null;
+      const v = Number(s.replace(",", "."));
+      return isFinite(v) ? v : null;
+    };
+    const quote = num(form.quote_amount);
     const due_date = form.due_date.trim() ? form.due_date.trim() : null;
     const effort_days_val = form.effort_days.trim() === "" ? null : Number(form.effort_days.replace(",", "."));
     const effort_days = isFinite(Number(effort_days_val)) ? Number(effort_days_val) : null;
+
+    // Budgets par service
+    const budget_conception = num(form.budget_conception);
+    const budget_crea = num(form.budget_crea);
+    const budget_dev = num(form.budget_dev);
 
     try {
       const created = await createProject({
@@ -191,12 +223,26 @@ const AdminProjects = () => {
         status: form.status,
         client_id,
         tariff_id: form.tariff_id || null,
-        quote_amount: isFinite(Number(quote)) ? Number(quote) : null,
+        quote_amount: quote,
+        budget_conception,
+        budget_crea,
+        budget_dev,
         due_date,
         effort_days,
       });
       showSuccess(`Projet créé: ${created.code}`);
-      setForm({ name: "", status: "active", client_id: "", tariff_id: null, quote_amount: "", due_date: "", effort_days: "" });
+      setForm({
+        name: "",
+        status: "active",
+        client_id: "",
+        tariff_id: null,
+        quote_amount: "",
+        budget_conception: "",
+        budget_crea: "",
+        budget_dev: "",
+        due_date: "",
+        effort_days: "",
+      });
       setOpenCreate(false);
       await refresh();
     } catch (e: any) {
@@ -248,10 +294,19 @@ const AdminProjects = () => {
       showError("Nom et client requis.");
       return;
     }
-    const quote = editForm.quote_amount ? Number(editForm.quote_amount.replace(",", ".")) : null;
+    const num = (s: string) => {
+      if (!s.trim()) return null;
+      const v = Number(s.replace(",", "."));
+      return isFinite(v) ? v : null;
+    };
+    const quote = num(editForm.quote_amount);
     const due_date = editForm.due_date.trim() ? editForm.due_date.trim() : null;
     const effort_days_val = editForm.effort_days.trim() === "" ? null : Number(editForm.effort_days.replace(",", "."));
     const effort_days = isFinite(Number(effort_days_val)) ? Number(effort_days_val) : null;
+
+    const budget_conception = num(editForm.budget_conception);
+    const budget_crea = num(editForm.budget_crea);
+    const budget_dev = num(editForm.budget_dev);
 
     try {
       await updateProject(openEditFor.id, {
@@ -259,7 +314,10 @@ const AdminProjects = () => {
         status: editForm.status,
         client_id: editForm.client_id,
         tariff_id: editForm.tariff_id || null,
-        quote_amount: isFinite(Number(quote)) ? Number(quote) : null,
+        quote_amount: quote,
+        budget_conception,
+        budget_crea,
+        budget_dev,
         due_date,
         effort_days,
       });
@@ -317,6 +375,26 @@ const AdminProjects = () => {
     }
   };
 
+  // Trouver barèmes sélectionnés pour calcul “heures max”
+  const selectedCreateTariff = React.useMemo(
+    () => tariffs.find((t) => t.id === form.tariff_id) || null,
+    [tariffs, form.tariff_id]
+  );
+  const selectedEditTariff = React.useMemo(
+    () => tariffs.find((t) => t.id === (editForm.tariff_id || "")) || null,
+    [tariffs, editForm.tariff_id]
+  );
+  const hCreate = computeHoursMax(selectedCreateTariff, {
+    conc: form.budget_conception,
+    crea: form.budget_crea,
+    dev: form.budget_dev,
+  });
+  const hEdit = computeHoursMax(selectedEditTariff, {
+    conc: editForm.budget_conception,
+    crea: editForm.budget_crea,
+    dev: editForm.budget_dev,
+  });
+
   return (
     <div className="mx-auto max-w-[1280px] px-6 py-6">
       <Card className="border-[#BFBFBF]">
@@ -332,7 +410,7 @@ const AdminProjects = () => {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Nouveau projet</DialogTitle>
-                <DialogDescription>Le code est généré (CLIENT-YYYY-NNN).</DialogDescription>
+                <DialogDescription>Le code est généré (CLIENT‑YYYY‑NNN).</DialogDescription>
               </DialogHeader>
               <div className="grid grid-cols-2 gap-4 py-2">
                 <div className="grid gap-2">
@@ -362,6 +440,32 @@ const AdminProjects = () => {
                   <Label>Montant total du devis (HT)</Label>
                   <Input inputMode="decimal" placeholder="ex: 12000" value={form.quote_amount} onChange={(e) => setForm((f) => ({ ...f, quote_amount: e.target.value }))} />
                 </div>
+
+                {/* Budgets par service */}
+                <div className="col-span-2 grid gap-2">
+                  <Label>Budgets par service (HT)</Label>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="grid gap-1">
+                      <Label className="text-xs text-[#214A33]/80">Conception</Label>
+                      <Input inputMode="decimal" placeholder="ex: 5000" value={form.budget_conception} onChange={(e) => setForm((f) => ({ ...f, budget_conception: e.target.value }))} />
+                      <div className="text-[11px] text-[#214A33]/60">Heures max: {hCreate.conc ?? "—"}</div>
+                    </div>
+                    <div className="grid gap-1">
+                      <Label className="text-xs text-[#214A33]/80">Créa</Label>
+                      <Input inputMode="decimal" placeholder="ex: 3000" value={form.budget_crea} onChange={(e) => setForm((f) => ({ ...f, budget_crea: e.target.value }))} />
+                      <div className="text-[11px] text-[#214A33]/60">Heures max: {hCreate.crea ?? "—"}</div>
+                    </div>
+                    <div className="grid gap-1">
+                      <Label className="text-xs text-[#214A33]/80">Dev</Label>
+                      <Input inputMode="decimal" placeholder="ex: 4000" value={form.budget_dev} onChange={(e) => setForm((f) => ({ ...f, budget_dev: e.target.value }))} />
+                      <div className="text-[11px] text-[#214A33]/60">Heures max: {hCreate.dev ?? "—"}</div>
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-[#214A33]/60">
+                    Total heures max (indicatif): {hCreate.total ?? "—"} h {selectedCreateTariff ? "" : "(sélectionnez un barème pour calculer)"} 
+                  </div>
+                </div>
+
                 <div className="grid gap-2">
                   <Label>Échéance</Label>
                   <Input type="date" value={form.due_date} onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))} />
@@ -541,6 +645,32 @@ const AdminProjects = () => {
                                     <Label>Montant total du devis (HT)</Label>
                                     <Input inputMode="decimal" value={editForm.quote_amount} onChange={(e) => setEditForm((f) => ({ ...f, quote_amount: e.target.value }))} />
                                   </div>
+
+                                  {/* Budgets par service en édition */}
+                                  <div className="col-span-2 grid gap-2">
+                                    <Label>Budgets par service (HT)</Label>
+                                    <div className="grid gap-3 md:grid-cols-3">
+                                      <div className="grid gap-1">
+                                        <Label className="text-xs text-[#214A33]/80">Conception</Label>
+                                        <Input inputMode="decimal" value={editForm.budget_conception} onChange={(e) => setEditForm((f) => ({ ...f, budget_conception: e.target.value }))} />
+                                        <div className="text-[11px] text-[#214A33]/60">Heures max: {hEdit.conc ?? "—"}</div>
+                                      </div>
+                                      <div className="grid gap-1">
+                                        <Label className="text-xs text-[#214A33]/80">Créa</Label>
+                                        <Input inputMode="decimal" value={editForm.budget_crea} onChange={(e) => setEditForm((f) => ({ ...f, budget_crea: e.target.value }))} />
+                                        <div className="text-[11px] text-[#214A33]/60">Heures max: {hEdit.crea ?? "—"}</div>
+                                      </div>
+                                      <div className="grid gap-1">
+                                        <Label className="text-xs text-[#214A33]/80">Dev</Label>
+                                        <Input inputMode="decimal" value={editForm.budget_dev} onChange={(e) => setEditForm((f) => ({ ...f, budget_dev: e.target.value }))} />
+                                        <div className="text-[11px] text-[#214A33]/60">Heures max: {hEdit.dev ?? "—"}</div>
+                                      </div>
+                                    </div>
+                                    <div className="text-[11px] text-[#214A33]/60">
+                                      Total heures max (indicatif): {hEdit.total ?? "—"} h {selectedEditTariff ? "" : "(sélectionnez un barème pour calculer)"} 
+                                    </div>
+                                  </div>
+
                                   <div className="grid gap-2">
                                     <Label>Échéance</Label>
                                     <Input type="date" value={editForm.due_date} onChange={(e) => setEditForm((f) => ({ ...f, due_date: e.target.value }))} />
@@ -665,10 +795,6 @@ const AdminProjects = () => {
           </div>
         </CardContent>
       </Card>
-
-      <AlertDialog open={!!finalizeFor} onOpenChange={(o) => !o && setFinalizeFor(null)}>
-        {/* Trigger handled per-row; this is kept to satisfy controlled modal typing */}
-      </AlertDialog>
     </div>
   );
 };
