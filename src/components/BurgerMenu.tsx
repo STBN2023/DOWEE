@@ -46,12 +46,13 @@ const BurgerMenu = () => {
           <div className="mb-2 mt-4 px-2 text-xs font-semibold uppercase tracking-wide text-[#214A33]/60">Administration</div>
           <nav className="flex flex-col">
             <NavItem to="/admin" icon={Settings} label="Admin (hub)" onClick={() => setOpen(false)} />
-            <NavItem to="/admin/ticker" icon={Settings} label="Bandeau (paramètres)" onClick={() => setOpen(false)} />
             <NavItem to="/admin/employees" icon={Users} label="Profils salariés" onClick={() => setOpen(false)} />
             <NavItem to="/admin/clients" icon={Building2} label="Clients" onClick={() => setOpen(false)} />
             <NavItem to="/admin/projects" icon={FolderKanban} label="Projets" onClick={() => setOpen(false)} />
             <NavItem to="/admin/tariffs" icon={Wallet} label="Barèmes (tarifs)" onClick={() => setOpen(false)} />
             <NavItem to="/admin/internal-costs" icon={Banknote} label="Coûts internes" onClick={() => setOpen(false)} />
+            {/* Bandeau déplacé ici, juste avant Références */}
+            <NavItem to="/admin/ticker" icon={Settings} label="Bandeau" onClick={() => setOpen(false)} />
             <NavItem to="/admin/references" icon={Shapes} label="Références" onClick={() => setOpen(false)} />
             <NavItem to="/admin/llm" icon={Brain} label="LLM (OpenAI)" onClick={() => setOpen(false)} />
             {role === "admin" && (

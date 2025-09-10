@@ -78,7 +78,7 @@ const Admin = () => {
         <Tile
           to="/admin/ticker"
           icon={Settings}
-          title="Bandeau — Paramètres"
+          title="Bandeau"
           desc="Activer des modules et configurer la ville météo."
           cta="Ouvrir"
         />
