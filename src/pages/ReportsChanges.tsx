@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
+import ContributionHeatmap from "@/components/reports/ContributionHeatmap";
 
 type LogRow = {
   id: string;
@@ -26,6 +27,19 @@ function hourLabel(h: number) {
   return `${String(h).padStart(2, "0")}:00`;
 }
 
+function mondayOf(d: Date) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  const day = (x.getDay() + 6) % 7;
+  x.setDate(x.getDate() - day);
+  return x;
+}
+function sundayOf(d: Date) {
+  const x = mondayOf(d);
+  x.setDate(x.getDate() + 6);
+  return x;
+}
+
 const ReportsChanges = () => {
   const { loading: authLoading, employee } = useAuth();
   const [loading, setLoading] = React.useState(true);
@@ -34,9 +48,16 @@ const ReportsChanges = () => {
   const [logs, setLogs] = React.useState<LogRow[]>([]);
   const [projects, setProjects] = React.useState<Project[]>([]);
 
+  // Étendre la période à ~6 mois (180 jours) pour le heatmap
   const since = React.useMemo(() => {
     const d = new Date();
-    d.setDate(d.getDate() - 30);
+    d.setDate(d.getDate() - 180);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+  const until = React.useMemo(() => {
+    const d = new Date();
+    d.setHours(23, 59, 59, 999);
     return d;
   }, []);
 
@@ -50,11 +71,11 @@ const ReportsChanges = () => {
         .select("id, d, hour, prev_project_id, new_project_id, action, occurred_at")
         .gte("occurred_at", since.toISOString())
         .order("occurred_at", { ascending: false })
-        .limit(200);
+        .limit(2000);
       if (error) throw new Error(error.message);
       const logs = (rows ?? []) as LogRow[];
 
-      // Récupérer les projets référencés (prev et new)
+      // Projets référencés (prev et new)
       const ids = Array.from(
         new Set(
           logs.flatMap((l) => [l.prev_project_id, l.new_project_id]).filter(Boolean) as string[]
@@ -88,7 +109,7 @@ const ReportsChanges = () => {
     [projects]
   ) as Record<string, Project>;
 
-  // KPIs
+  // Agrégations pour KPIs
   const total = logs.length;
   const sameDayCount = logs.filter((l) => {
     try {
@@ -113,13 +134,39 @@ const ReportsChanges = () => {
       .slice(0, 5);
   }, [logs]);
 
+  // Comptes journaliers pour le heatmap (par date d'occurrence)
+  const dailyCounts = React.useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const l of logs) {
+      try {
+        const iso = new Date(l.occurred_at).toISOString().slice(0, 10);
+        map[iso] = (map[iso] ?? 0) + 1;
+      } catch {
+        // ignore
+      }
+    }
+    return map;
+  }, [logs]);
+
+  // Période heatmap alignée sur semaines
+  const heatStart = React.useMemo(() => mondayOf(since), [since]);
+  const heatEnd = React.useMemo(() => sundayOf(until), [until]);
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
       <Card className="border-[#BFBFBF]">
         <CardHeader>
-          <CardTitle className="text-[#214A33]">Reporting — Modifs planning (30 derniers jours)</CardTitle>
+          <CardTitle className="text-[#214A33]">Reporting — Modifs planning</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Heatmap des occurrences */}
+          <div>
+            <ContributionHeatmap start={heatStart} end={heatEnd} counts={dailyCounts} />
+            <div className="mt-1 text-[11px] text-[#214A33]/60">
+              Occurrences de modifications sur les 6 derniers mois (plus foncé = plus de modifs).
+            </div>
+          </div>
+
           {errorMsg && (
             <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{errorMsg}</div>
           )}
