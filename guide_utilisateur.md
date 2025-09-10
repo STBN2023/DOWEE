@@ -18,6 +18,7 @@ Sommaire
 13. Dépannage (FAQ)
 14. Sécurité & rôles (POC)
 15. Contact et support
+16. Assistant (Bot)
 
 ----------------------------------------------------------------
 
@@ -31,20 +32,18 @@ Sommaire
   - Valider la journée: copier vos créneaux planifiés en heures réelles et marquer la journée comme “validée”.
 - Tableaux de bord: Global, Équipe, Moi, avec une vision chiffrée (heures, coûts, nombre de projets).
 - Rentabilité: vues synthétiques par client et par projet (soldes, coûts, marges).
-- Administration: gestion des employés, clients, projets, barèmes (tarifs), coûts internes, et paramètres du bandeau.
+- Administration: gestion des employés, clients, projets, barèmes (tarifs), coûts internes, paramètres du bandeau, et configuration du Bot (LLM/RAG/relances).
 
 
 2) Connexion et profil
 
 - Se connecter
   - Lien: “Se connecter” dans l’en-tête ou via la page /login.
-  - Authentification e‑mail/mot de passe via Supabase.
-- Création/activation du profil
-  - Au premier login, votre profil salarié est créé automatiquement dans employees (nom affiché, prénom/nom si disponibles).
+  - Authentification e‑mail/mot de passe via Supabase (et Google OAuth pour Google Agenda).
+- Profil salarié
+  - Votre profil employees doit exister pour utiliser l’app. En cas de session “orpheline”, l’UI vous déconnecte automatiquement.
 - Déconnexion
   - Bouton “Déconnexion” dans l’en‑tête (badge utilisateur).
-- Session “orpheline”
-  - Si une session existe mais aucun profil employees correspondant: l’UI se réinitialise automatiquement pour éviter tout état incohérent.
 
 
 3) Navigation générale
@@ -52,12 +51,11 @@ Sommaire
 - En‑tête
   - Logo “DoWee”, sélecteur de vue par rôle (Admin/Manager/User), badge utilisateur (initiale + nom) et bouton “Déconnexion”.
 - Menu latéral (Burger)
-  - Ouvre un tiroir avec les principales sections:
-    - Général: Accueil, Planning (semaine), Journée, Tableaux de bord, Reporting modifs, Rentabilité clients/projets.
-    - Administration: Hub Admin, Bandeau (paramètres), Profils salariés, Clients, Projets, Barèmes (tarifs), Coûts internes, Références, LLM (OpenAI), Debug (admin).
+  - Général: Accueil, Planning (semaine), Journée, Tableaux de bord, Reporting modifs, Rentabilité clients/projets.
+  - Administration: Admin (hub), Bandeau (paramètres), Profils salariés, Clients, Projets, Barèmes (tarifs), Coûts internes, Références, LLM (OpenAI), Bot, Debug (admin).
 - Sélecteur de vue (rôle)
-  - Impacte l’affichage par défaut des onglets des dashboards (Admin → Global, Manager → Équipe, User → Moi).
-  - Important: ce sélecteur n’est pas un mécanisme d’autorisation (POC).
+  - Pilote l’onglet par défaut des dashboards (Admin → Global, Manager → Équipe, User → Moi).
+  - Note: ce sélecteur n’est pas un mécanisme d’autorisation (POC).
 
 
 4) Bandeau d’information (ticker)
@@ -65,196 +63,171 @@ Sommaire
 - Description
   - Bandeau défilant en bas de page, affichant:
     - Alertes internes (échéances, budgets, marges) si connecté.
-    - Météo (WeatherAPI) selon la ville ou votre position (selon vos réglages).
-    - Message personnalisé (texte libre).
-- Paramétrage
-  - Page: Administration → “Bandeau (paramètres)” (/admin/ticker).
-  - Modules:
-    - Alertes internes: ON/OFF (les alertes nécessitent une session active).
-    - Météo: ON/OFF.
-    - Ville météo: saisissez par exemple “Paris”.
-    - Utiliser ma position: active la géolocalisation; pensez à autoriser le navigateur.
-    - Message personnalisé: texte libre diffusé dans le bandeau.
-  - Liens dans le message
-    - Les URLs (https://…) sont automatiquement cliquables et s’ouvrent dans un nouvel onglet.
-- Actualisation
-  - Bouton “Rafraîchir le bandeau” dans la page de paramètres.
-  - Rafraîchissement automatique toutes les 5 minutes.
+    - Météo (WeatherAPI) selon la ville ou votre position.
+    - Message personnalisé.
+- Paramétrage (/admin/ticker)
+  - Modules: Alertes internes ON/OFF, Météo ON/OFF.
+  - Ville météo: ex. “Paris”.
+  - Utiliser ma position: active la géolocalisation (bouton “Détecter ma position”).
+  - Portée des alertes: Moi | Équipe | Global (impacte les baromètres sur le bandeau).
+  - Message personnalisé: texte libre (les URLs https://… sont cliquables).
+  - Rafraîchissement: bouton “Rafraîchir le bandeau”; mise à jour auto toutes les 5 minutes.
 
 
 5) Planning hebdomadaire
 
-- Accès: Menu → “Planning (semaine)” (/planning).
+- Accès: /planning.
 - Structure:
-  - Ligne de temps à gauche (heures 08:00 → 18:00).
-  - Colonnes = jours de la semaine en cours (lundi → dimanche).
-  - Bandeau de projets en haut: projets qui vous sont affectés (status projet “actif”).
-- Navigation temporelle:
-  - “Précédente”, “Cette semaine”, “Suivante”.
-- Ajouter des créneaux (Drag & Drop)
-  - Glissez un projet (pilule) vers une cellule vide: crée un créneau d’1h.
-  - Étirement mono‑jour: pendant le drag, survolez plusieurs heures de la même journée pour ajouter une plage (un créneau par heure).
-  - Surlignage: la plage courante est entourée (anneau ambré).
-- Remplacer vs insérer
-  - Démarrez le drag sur une case vide: n’ajoute que sur les cases libres (n’écrase pas).
-  - Démarrez sur une case occupée: la plage cible remplacera les créneaux existants aux mêmes heures (comportement “remplacement”).
-- Déplacer un créneau
-  - Cliquez-déplacez un créneau vers une autre case pour le déplacer (supprime l’ancien, crée le nouveau).
-- Supprimer un créneau
-  - Glissez le créneau hors de la grille et relâchez.
-- Indicateurs utiles
-  - Conflits Google Agenda: si activé, la cellule peut afficher un badge “Gcal • n” (fond bleu) ou un motif rouge si conflit (planification + évènement). Un liseré bleu en haut de colonne indique un “all-day” ce jour-là.
-  - Codes couleur des créneaux: teintes selon la note/score projet (vert, ambre, orange, rouge).
-- Effacer la semaine
-  - Bouton “Effacer la semaine”: supprime tous vos créneaux planifiés de la semaine en cours.
+  - Heures 08:00 → 18:00 (lignes), jours (colonnes).
+  - Bandeau projets en haut: projets “actifs” qui vous sont affectés.
+- Drag & drop:
+  - Déposer sur une case vide pour créer 1h.
+  - Étirement vertical mono‑jour: crée un créneau par heure survolée.
+  - Démarrer sur une case vide = “insérer” (ne remplace pas).
+  - Démarrer sur une case occupée = “remplacer”.
+  - Déplacer: glisser un créneau vers une autre case (supprime l’ancien, crée le nouveau).
+  - Supprimer: glisser un créneau hors de la grille et relâcher.
+- Google Agenda (superposition):
+  - Commandes en haut: “Afficher Google Agenda” (toggle), “Connecter Google Agenda” (OAuth Google), “Recharger”.
+  - Évènements: badge “Gcal • n” dans la cellule; liseré bleu si all‑day; motif rouge en cas de conflit avec un créneau planifié.
+- Effacer la semaine: supprime tous les créneaux planifiés de la semaine en cours.
 
 
 6) Édition de la journée
 
-- Accès: Menu → “Journée (édition)” (/day).
-- Vue simplifiée sur une seule date:
-  - Bandeau projets en haut, liste d’heures en colonne (08:00 → 18:00).
-- Trois gestes rapides:
-  - Assignation au clic: sélectionnez un projet (pilule), cliquez sur une heure vide → crée un créneau.
-  - Double‑clic pour supprimer: supprime le créneau sur l’heure.
-  - Drag & drop: vous pouvez aussi déplacer/supprimer comme en vue semaine.
-- Validation de la journée
-  - Bouton “Valider cette journée”: copie vos créneaux planifiés en lignes “réelles” et marque la journée comme validée.
-  - Rappel automatique: à partir de 18h locale, une invite s’affiche pour vous inciter à valider.
-  - Avertissement de fermeture: si non validée et après 18h, un message prévient à la fermeture de l’onglet/fenêtre.
+- Accès: /day.
+- Gestes rapides:
+  - Sélectionner un projet puis cliquer sur une heure vide → création d’1h.
+  - Double‑cliquer sur un créneau → suppression.
+  - Drag & drop possible comme en vue semaine.
+- Validation:
+  - Bouton “Valider cette journée”: copie les plans en heures réelles et marque la journée validée.
+  - Rappel automatique fin de journée (et via Bot, cf. chapitre 16).
+  - Avertissement de fermeture si non validée (en fin de journée).
 
 
 7) Page “Aujourd’hui”
 
-- Accès: Menu → “Aujourd’hui” (/today).
+- Accès: /today.
 - Contenu:
-  - Récapitulatif de vos créneaux planifiés du jour (triés par heure).
-  - Bouton “Valider ma journée” (mêmes effets que dans la page Journée).
-  - Raccourcis: “Modifier mon planning” ouvre la page Journée.
+  - Récapitulatif des créneaux planifiés du jour.
+  - Bouton “Valider ma journée”.
+  - Lien “Modifier mon planning” vers /day.
 
 
 8) Tableaux de bord (Dashboards)
 
-- Accès: Menu → “Tableaux de bord” (/dashboards).
+- Accès: /dashboards.
 - Onglets:
-  - Global (Admin): projets totaux/actifs/en pause, heures & coûts planifiés/réels (semaine), vue annuelle détaillée.
-  - Équipe (Manager): filtres par équipe (conception, créa, dev), mêmes agrégations et top membres.
-  - Moi (User): synthèse personnelle (heures & coûts semaine), vue annuelle personnelle.
-- Navigation semaine (en haut à droite): “Précédente”, “Cette semaine”, “Suivante”, avec libellé de période.
-- Le sélecteur de rôle (en‑tête) choisit l’onglet ouvert par défaut.
+  - Global (Admin): projets totaux/actifs/en pause; heures & coûts planifiés/réels de la semaine; vue annuelle.
+  - Équipe (Manager): sélection d’équipe (conception, créa, dev), agrégations + top membres; vue annuelle.
+  - Moi (User): mes heures & coûts semaine; vue annuelle personnelle.
+- Navigation semaine: boutons Précédente / Cette semaine / Suivante; période affichée.
+- Astuce: sur certaines listes, un “Score (priorité)” 0–100 aide à prioriser (plus haut = plus prioritaire). Des pastilles (i) expliquent le calcul quand disponible.
 
 
 9) Rentabilité (Clients & Projets)
 
-- Rentabilité Clients (/profitability/clients)
-  - Liste des clients, CA vendu, coût, marge et marge % (codes couleur).
-  - Recherche, tri et export CSV.
-- Rentabilité Projets (/profitability/projects)
-  - Liste des projets, rattachement client, CA vendu, coût, marge et marge %.
-  - Filtre par client, recherche, tri et export CSV.
+- Clients (/profitability/clients)
+  - Liste: CA vendu, coût, marge, marge % (codes couleur).
+  - Recherche, tri, export CSV.
+- Projets (/profitability/projects)
+  - Liste: client, CA vendu, coût, marge, marge %.
+  - Filtre par client, recherche, tri, export CSV.
 - Codes couleur Marge %
   - ≥ 40%: vert; 20–39%: jaune; 1–19%: orange; ≤ 0%: rouge.
 
 
 10) Reporting des modifications
 
-- Accès: “Reporting modifs” (/reports/changes).
-
-- Calendrier des occurrences (heatmap)
-  - En-tête de page: calendrier de type “contributions” (semaines en colonnes, jours en lignes) couvrant environ 6 derniers mois.
-  - Dégradé orange du plus clair (moins de modifications) au plus foncé (plus de modifications).
-  - Légende située sous le calendrier (“Moins” → “Plus”), centrée.
-  - Survol: info-bulle indiquant la date et le nombre de modifications du jour.
-  - Périmètre: toutes les modifications de planning (ajout/remplacement/suppression), basées sur l’horodatage d’occurrence.
-  - Astuce: les labels des mois apparaissent automatiquement au changement de mois sur la première ligne (lundi).
-
+- Accès: /reports/changes.
+- Calendrier “heatmap” (en‑tête de page)
+  - Semaines en colonnes, jours en lignes; ~6 derniers mois.
+  - Dégradé orange: plus foncé = plus de modifications.
+  - Légende centrée sous le calendrier (“Moins” → “Plus”).
+  - Survol: info‑bulle date + nombre de modifications.
 - KPIs
-  - Nombre de modifications totales sur la période observée.
-  - “Jour‑même”: nombre de modifications effectuées le jour même du créneau.
-  - Top projets concernés: les projets ayant le plus de modifications.
-
+  - Modifications totales sur la période.
+  - “Jour‑même”: modifications effectuées le jour du créneau.
+  - “Top projets”: projets avec le plus de modifications.
 - Liste chronologique
-  - Modifications sur 30 jours (ou période affichée), avec date/heure d’occurrence, jour/heure ciblé, action, “avant / après”.
-  - Badge “Jour‑même” quand la modification est effectuée le même jour que le créneau.
-
-- Détail
-  - “Avant” = projet initial (s’il existait), “Après” = projet résultant (le cas échéant).
-  - La liste est triée de la plus récente à la plus ancienne.
+  - Date d’occurrence, jour/heure ciblé, action, “avant / après”.
+  - Badge “Jour‑même” si applicable.
 
 
 11) Administration (Hub)
 
-- Accès: “Admin (hub)” (/admin).
-- Profils salariés (/admin/employees)
-  - Créer/modifier/supprimer des profils (id = UUID Supabase).
-  - Rôle: admin/manager/user, Équipe (conception, créa, dev, …).
-- Clients (/admin/clients)
-  - Créer/modifier/supprimer des clients (code, nom).
-- Projets (/admin/projects)
-  - Création: code auto (CLIENT‑YYYY‑NNN), statut (actif, pause, archivé), client, barème, montant, échéance, effort (jours).
-  - Affectations: associer des salariés aux projets (affiche le nom complet); pas de champ “rôle” dans l’UI d’affectation.
-  - Finaliser (pause) un projet: met en pause et supprime les créneaux futurs (historique conservé).
-- Barèmes (tarifs) (/admin/tariffs)
-  - Définir les tarifs HT par profil (conception/crea/dev).
-- Coûts internes (/admin/internal-costs)
-  - Définir les coûts internes journaliers par profil; la dernière entrée (par date d’effet) est utilisée pour les calculs.
-- Références (/admin/references)
-  - Ajouts simples de référentiels (ex: catégories). Stockage local pour l’instant (POC).
-- LLM (OpenAI) (/admin/llm)
-  - Enregistrer la clé OpenAI (stockée côté serveur) pour reformuler/prioriser le bandeau d’alertes.
-- Bandeau (paramètres) (/admin/ticker)
-  - Activer des modules, ville météo / position, message personnalisé, rafraîchir le bandeau.
-- Debug (/debug)
-  - Informations de session (réservé aux profils admin via le menu).
+- Accès: /admin (hub).
+- Profils salariés (/admin/employees): créer/modifier/supprimer; rôle (admin/manager/user); équipe.
+- Clients (/admin/clients): créer/modifier/supprimer (code, nom).
+- Projets (/admin/projects):
+  - Création: code auto (CLIENT‑YYYY‑NNN), statut (actif/pause/archivé), client, barème, montants, échéance, effort (jours).
+  - Affectations: associer des salariés (affiche le nom complet).
+  - Finaliser (pause): met en pause + suppression des créneaux futurs (historique conservé).
+- Barèmes (tarifs) (/admin/tariffs): tarifs HT par profil (conception/crea/dev).
+- Coûts internes (/admin/internal-costs): coûts journaliers; la dernière entrée (date d’effet) est utilisée pour les calculs.
+- Références (/admin/references): référentiels simples (stockage local pour le POC).
+- LLM (OpenAI) (/admin/llm): enregistrer la clé OpenAI (stockée côté serveur).
+- Bot (/admin/bot): réglages des relances (après‑midi, à la connexion) et indexation de la base de connaissance (RAG).
+  - Base de connaissance (RAG): coller/charger le guide, choisir le chunk size / overlap, indexer, activer une version.
+  - LLM: si configuré, le bot peut reformuler/prioriser ses messages.
+- Debug (/debug): infos de session (réservé admin via menu).
 
 
 12) Astuces & bonnes pratiques
 
-- Drag & drop fluide
-  - Étirez verticalement dans la même colonne pour créer plusieurs créneaux d’un coup.
-  - Démarrez sur une case vide pour “insérer” (ne remplace pas).
-  - Démarrez sur une case occupée pour “remplacer”.
-- Suppression rapide
-  - Glissez un créneau hors de la grille et relâchez.
-- Conflits et visibilité
-  - Activez la météo et votre position depuis le module Bandeau; les alertes nécessitent d’être connecté.
-- Affectations
-  - Si un projet n’apparaît pas dans votre bandeau de planification, vérifiez qu’il vous est bien affecté (Admin → Projets → Affecter).
-- Validation quotidienne
-  - Validez en fin de journée: vos heures réelles sont copiées depuis le planning du jour.
+- Drag & drop fluide (étirement mono‑jour).
+- “Insérer” vs “Remplacer” (point de départ du drag).
+- Suppression rapide par drag out.
+- Conflits & visibilité Google Agenda (toggle, connecter, recharger).
+- Affectations manquantes? vérifier dans Admin → Projets → Affecter.
+- Validation quotidienne: valider en fin de journée (ou via la page Aujourd’hui).
 
 
 13) Dépannage (FAQ)
 
-- La météo ne s’affiche pas
-  - Vérifiez dans “Bandeau (paramètres)” que “Météo” est activé, qu’une ville est saisie ou qu’“Utiliser ma position” est activé et autorisé par le navigateur.
-  - Si le problème persiste, recharger la page. Si un message d’erreur est visible (ex: CORS/clé manquante), prévenez l’admin pour vérifier la clé serveur WEATHERAPI.
-- Je ne vois pas mes projets dans le bandeau de planification
-  - Ils doivent vous être affectés (Admin → Projets → Affecter). Le projet doit être “actif”.
-- Je ne peux pas valider la journée
-  - Assurez‑vous d’avoir une session active (reconnectez‑vous si besoin). Essayez depuis /day ou /today.
-- Les liens du message personnalisé ne sont pas cliquables
-  - Utilisez des URLs complètes commençant par “https://”. Elles seront rendues cliquables automatiquement.
-- Conflits avec Google Agenda
-  - Le badge “Gcal • n” indique des évènements sur ce créneau; un motif rouge signale un conflit avec votre planification.
+- Météo absente
+  - Vérifier module Météo, ville/position autorisée, clé serveur disponible.
+- Projets manquants dans le bandeau
+  - Vérifier les affectations et le statut projet (actif).
+- Validation impossible
+  - Session active requise; essayer /day ou /today.
+- Liens non cliquables dans le message
+  - Utiliser des URLs complètes https://…
+- Google Agenda
+  - Utiliser “Connecter Google Agenda” (OAuth Google), puis “Afficher” et “Recharger”. Autoriser le scope “calendar.readonly”.
 
 
 14) Sécurité & rôles (POC)
 
-- Authentification: Supabase Auth (e‑mail/mot de passe).
-- Données: Postgres avec RLS (Row Level Security).
-- Sélecteur de rôle en en‑tête
-  - Sert à piloter l’affichage par défaut des vues (UI), ce n’est pas un système d’autorisation fine (POC).
-- Sessions orphelines
-  - Déconnectées automatiquement côté client pour éviter les incohérences.
+- Auth: Supabase Auth (e‑mail/mot de passe, Google pour Agenda).
+- Données: Postgres avec RLS.
+- Sélecteur de rôle (UI): affiche des vues différentes; ce n’est pas un système d’autorisations fines.
+- Sessions “orphelines”: déconnexion automatique côté client.
 
 
 15) Contact et support
 
-- En cas de blocage, capturez l’écran et le message d’erreur (si présent) et communiquez:
-  - L’URL de la page,
-  - Les actions effectuées,
-  - L’heure approximative.
-- Pour tout besoin d’évolution (nouveau tableau, champs supplémentaires, workflows), priorisez via le Product Owner.
+- En cas de blocage, fournir l’URL, l’action effectuée, l’heure, et si possible une capture.
+- Pour les évolutions (nouveaux tableaux/champs/workflows), prioriser avec le Product Owner.
 
-Bon usage de DoWee !
+
+16) Assistant (Bot)
+
+- Ouverture
+  - Bouton flottant en bas à droite (robot orange) ou via des liens “Demander au bot” dans certaines aides (i).
+  - Vous pouvez aussi l’ouvrir depuis d’autres écrans (ex: bouton “Ouvrir le bot”).
+- Ce qu’il sait faire
+  - Répondre sur l’utilisation de l’app (navigation rapide), expliquer des indicateurs (marge, score) et synthétiser vos chiffres clés.
+  - Relancer la validation quotidienne (après‑midi, ou à la connexion selon réglages).
+  - Si une base de connaissance (RAG) est indexée et active, il s’appuie dessus pour répondre.
+  - Si un LLM est configuré (OpenAI), il peut reformuler/prioriser certains messages.
+- Relances validation
+  - À partir d’une heure définie l’après‑midi (par défaut 16h) et/ou à la connexion, il propose d’aller valider la journée si elle ne l’est pas.
+  - Deux boutons: “Valider aujourd’hui” (ouvre /today) ou “Plus tard”.
+- Réglages (Admin → Bot)
+  - Activer/désactiver la relance de l’après‑midi et l’heure.
+  - Activer la proposition à la connexion (avec option pour ignorer “Plus tard” déjà cliqué).
+  - Indexer/activer une version de la base de connaissance (RAG).
+- LLM (Admin → LLM)
+  - Stocker la clé OpenAI côté serveur (jamais renvoyée au navigateur). Le bot l’utilise automatiquement si disponible.
