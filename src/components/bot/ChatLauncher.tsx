@@ -1,7 +1,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import RobotSVG from "./RobotSVG";
+import AnimatedRobot from "./AnimatedRobot";
 import ChatPanel from "./ChatPanel";
 
 const ChatLauncher: React.FC = () => {
@@ -22,7 +22,7 @@ const ChatLauncher: React.FC = () => {
           aria-label={open ? "Fermer Dowee Bot" : "Ouvrir Dowee Bot"}
           title="Dowee Bot"
         >
-          <RobotSVG size={24} />
+          <AnimatedRobot size={24} decorative />
         </Button>
       </motion.div>
     </>
