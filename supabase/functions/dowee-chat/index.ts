@@ -44,23 +44,36 @@ serve(async (req) => {
   const { data: emp } = await admin.from("employees").select("id").eq("id", userData.user.id).maybeSingle()
   if (!emp) return new Response(JSON.stringify({ error: "Forbidden: orphan session" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } })
 
-  // Version active du guide
+  // Document actif
   const { data: doc } = await admin.from("kb_documents").select("id, name, version").eq("active", true).order("created_at", { ascending: false }).maybeSingle()
   if (!doc) {
-    const fallback = "Le guide n'est pas encore indexé. Demandez à un admin d'ouvrir Admin → Base de connaissance (RAG) et d'indexer le guide."
+    const fallback = "Le guide n'est pas encore indexé. Ouvre Admin → Base de connaissance (RAG) et indexe le/les guides (puis active la version)."
     return new Response(JSON.stringify({ answer: fallback, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
   }
 
-  // Recherche FTS (fr)
-  // Supabase textSearch applique plainto_tsquery si on passe le texte brut
-  const { data: chunks } = await admin
+  // Recherche FTS (ts tsvector, config fr). Fallback: ILIKE sur content si rien.
+  const { data: chunksFts } = await admin
     .from("kb_chunks")
     .select("section, content, order_idx")
     .eq("document_id", doc.id)
     .textSearch("ts", last, { config: "french" })
     .limit(5)
 
-  const top = (chunks ?? []).slice(0, 5)
+  let top = (chunksFts ?? []).slice(0, 5)
+
+  if (top.length === 0) {
+    // Fallback simple: ILIKE sur content avec 2-3 premiers mots
+    const terms = last.split(/\s+/).filter(Boolean).slice(0, 3)
+    const pattern = `%${terms.join("%")}%`
+    const { data: chunksLike } = await admin
+      .from("kb_chunks")
+      .select("section, content, order_idx")
+      .eq("document_id", doc.id)
+      .ilike("content", pattern)
+      .limit(5)
+    top = (chunksLike ?? []).slice(0, 5)
+  }
+
   const context = top.map((c, i) => `#${i+1} [${c.section ?? "Section"}]\n${(c.content ?? "").slice(0, 1200)}`).join("\n\n")
   const sys = systemPrompt()
   const finalPrompt = [
@@ -75,7 +88,7 @@ serve(async (req) => {
   const provider = (secret as any)?.provider as string | undefined
 
   if (!apiKey || provider !== "openai") {
-    // Fallback extractif simple
+    // Fallback extractif
     const answer = top.length > 0
       ? `D'après le guide:\n- ${top.map(c => (c.section ?? "Section")).join(" • ")}.\n\n${(top[0].content ?? "").slice(0, 500)}\n\nSi besoin, demandez une recommandation de développement.`
       : "Le guide ne contient pas d'information pertinente. Souhaitez-vous créer une recommandation de développement ?"
