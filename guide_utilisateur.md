@@ -159,10 +159,27 @@ Sommaire
 10) Reporting des modifications
 
 - Accès: “Reporting modifs” (/reports/changes).
-- Contenu:
-  - KPIs (nombre de modifs, “jour‑même”, top projets concernés).
-  - Liste chronologique des changements de planning (ajout/remplacement/suppression) sur 30 jours.
-  - Détail “avant / après” par ligne.
+
+- Calendrier des occurrences (heatmap)
+  - En-tête de page: calendrier de type “contributions” (semaines en colonnes, jours en lignes) couvrant environ 6 derniers mois.
+  - Dégradé orange du plus clair (moins de modifications) au plus foncé (plus de modifications).
+  - Légende située sous le calendrier (“Moins” → “Plus”), centrée.
+  - Survol: info-bulle indiquant la date et le nombre de modifications du jour.
+  - Périmètre: toutes les modifications de planning (ajout/remplacement/suppression), basées sur l’horodatage d’occurrence.
+  - Astuce: les labels des mois apparaissent automatiquement au changement de mois sur la première ligne (lundi).
+
+- KPIs
+  - Nombre de modifications totales sur la période observée.
+  - “Jour‑même”: nombre de modifications effectuées le jour même du créneau.
+  - Top projets concernés: les projets ayant le plus de modifications.
+
+- Liste chronologique
+  - Modifications sur 30 jours (ou période affichée), avec date/heure d’occurrence, jour/heure ciblé, action, “avant / après”.
+  - Badge “Jour‑même” quand la modification est effectuée le même jour que le créneau.
+
+- Détail
+  - “Avant” = projet initial (s’il existait), “Après” = projet résultant (le cas échéant).
+  - La liste est triée de la plus récente à la plus ancienne.
 
 
 11) Administration (Hub)
@@ -186,7 +203,7 @@ Sommaire
 - LLM (OpenAI) (/admin/llm)
   - Enregistrer la clé OpenAI (stockée côté serveur) pour reformuler/prioriser le bandeau d’alertes.
 - Bandeau (paramètres) (/admin/ticker)
-  - Activer modules, ville météo / position, message personnalisé, rafraîchir le bandeau.
+  - Activer des modules, ville météo / position, message personnalisé, rafraîchir le bandeau.
 - Debug (/debug)
   - Informations de session (réservé aux profils admin via le menu).
 
@@ -202,7 +219,7 @@ Sommaire
 - Conflits et visibilité
   - Activez la météo et votre position depuis le module Bandeau; les alertes nécessitent d’être connecté.
 - Affectations
-  - Si un projet n’apparaît pas dans votre bandeau de projets, vérifiez qu’il vous est bien affecté (Admin → Projets → Affecter).
+  - Si un projet n’apparaît pas dans votre bandeau de planification, vérifiez qu’il vous est bien affecté (Admin → Projets → Affecter).
 - Validation quotidienne
   - Validez en fin de journée: vos heures réelles sont copiées depuis le planning du jour.
 
