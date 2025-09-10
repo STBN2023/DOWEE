@@ -12,7 +12,7 @@ const Login = () => {
 
   React.useEffect(() => {
     if (!session) return;
-    // Nouveau: on va sur le dashboard perso
+    // Redirection vers le dashboard perso après connexion
     navigate("/dashboards?tab=me", { replace: true });
   }, [session, navigate]);
 
@@ -25,7 +25,7 @@ const Login = () => {
         <CardContent>
           <Auth
             supabaseClient={supabase}
-            providers={[]}
+            providers={["google"]}
             appearance={{
               theme: ThemeSupa,
               variables: {
