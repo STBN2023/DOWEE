@@ -4,7 +4,8 @@ export type BotSettings = {
   afternoonReminderEnabled: boolean;
   afternoonReminderHour: number; // 0-23
   afternoonReminderRepeatMinutes: number; // intervalle de répétition (min)
-  promptOnLoginEnabled: boolean; // nouveau: proposer à la connexion
+  promptOnLoginEnabled: boolean; // proposer la validation à la connexion
+  promptOnLoginIgnoreDismissed: boolean; // ignorer le 'Plus tard' déjà pris pour la journée à la connexion
 };
 
 type Ctx = {
@@ -13,6 +14,7 @@ type Ctx = {
   setHour: (h: number) => void;
   setRepeatMinutes: (m: number) => void;
   setPromptOnLoginEnabled: (v: boolean) => void;
+  setPromptOnLoginIgnoreDismissed: (v: boolean) => void;
 };
 
 const LS_KEY = "dowee.bot.settings";
@@ -22,6 +24,7 @@ const defaultSettings: BotSettings = {
   afternoonReminderHour: 16,
   afternoonReminderRepeatMinutes: 30,
   promptOnLoginEnabled: true,
+  promptOnLoginIgnoreDismissed: false,
 };
 
 function loadSettings(): BotSettings {
@@ -36,6 +39,7 @@ function loadSettings(): BotSettings {
       afternoonReminderHour: Number.isFinite(hour) ? Math.max(0, Math.min(23, hour)) : 16,
       afternoonReminderRepeatMinutes: Number.isFinite(repeat) ? Math.max(5, Math.min(240, repeat)) : 30,
       promptOnLoginEnabled: p?.promptOnLoginEnabled !== undefined ? !!p.promptOnLoginEnabled : true,
+      promptOnLoginIgnoreDismissed: p?.promptOnLoginIgnoreDismissed !== undefined ? !!p.promptOnLoginIgnoreDismissed : false,
     };
   } catch {
     return defaultSettings;
@@ -85,8 +89,23 @@ export const BotSettingsProvider = ({ children }: { children: React.ReactNode })
     });
   };
 
+  const setPromptOnLoginIgnoreDismissed = (v: boolean) => {
+    setSettings((prev) => {
+      const next = { ...prev, promptOnLoginIgnoreDismissed: !!v };
+      saveSettings(next);
+      return next;
+    });
+  };
+
   const value: Ctx = React.useMemo(
-    () => ({ settings, setEnabled, setHour, setRepeatMinutes, setPromptOnLoginEnabled }),
+    () => ({
+      settings,
+      setEnabled,
+      setHour,
+      setRepeatMinutes,
+      setPromptOnLoginEnabled,
+      setPromptOnLoginIgnoreDismissed,
+    }),
     [settings]
   );
 

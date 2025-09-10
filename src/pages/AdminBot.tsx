@@ -15,18 +15,22 @@ const AdminBot: React.FC = () => {
   const { loading: authLoading, employee } = useAuth();
   const isAdmin = employee?.role === "admin";
 
-  // Réglages bot (relance)
-  const { settings, setEnabled, setHour, setRepeatMinutes, setPromptOnLoginEnabled } = useBotSettings();
+  const {
+    settings,
+    setEnabled,
+    setHour,
+    setRepeatMinutes,
+    setPromptOnLoginEnabled,
+    setPromptOnLoginIgnoreDismissed,
+  } = useBotSettings();
+
   const [hour, setHourInput] = React.useState<string>(String(settings.afternoonReminderHour));
   const [repeat, setRepeatInput] = React.useState<string>(String(settings.afternoonReminderRepeatMinutes));
 
-  // LLM
   const [llm, setLlm] = React.useState<{ configured: boolean; provider: string | null } | null>(null);
 
-  // TEST: déclenchement immédiat du bot
   const [testNow, setTestNow] = React.useState(false);
 
-  // RAG
   const [text, setText] = React.useState("");
   const [name, setName] = React.useState("guide_utilisateur.md");
   const [chunkSize, setChunkSize] = React.useState("1200");
@@ -104,7 +108,7 @@ const AdminBot: React.FC = () => {
       showSuccess("Version activée.");
       await refreshDocs();
     } catch (e: any) {
-      showError(e?.message || "Activation impossible.");
+    showError(e?.message || "Activation impossible.");
     }
   };
 
@@ -114,7 +118,6 @@ const AdminBot: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 space-y-6">
-      {/* Réglages relance */}
       <Card className="border-[#BFBFBF]">
         <CardHeader>
           <CardTitle className="text-[#214A33]">Bot</CardTitle>
@@ -124,9 +127,24 @@ const AdminBot: React.FC = () => {
             <div className="flex items-center justify-between rounded-md border border-[#BFBFBF] bg-white px-3 py-2">
               <div className="flex flex-col">
                 <Label className="text-[#214A33]">Proposer la validation à la connexion</Label>
-                <span className="text-xs text-[#214A33]/60">Ouvre le bot dès l’ouverture de session si la journée n’est pas validée.</span>
+                <span className="text-xs text-[#214A33]/60">
+                  Ouvre le bot dès l’ouverture de session si la journée n’est pas validée.
+                </span>
               </div>
               <Switch checked={settings.promptOnLoginEnabled} onCheckedChange={(v) => setPromptOnLoginEnabled(!!v)} />
+            </div>
+
+            <div className="flex items-center justify-between rounded-md border border-[#BFBFBF] bg-white px-3 py-2">
+              <div className="flex flex-col">
+                <Label className="text-[#214A33]">Ignorer “Plus tard” à la connexion</Label>
+                <span className="text-xs text-[#214A33]/60">
+                  Affiche quand même le message d’ouverture, même si “Plus tard” a déjà été cliqué aujourd’hui.
+                </span>
+              </div>
+              <Switch
+                checked={settings.promptOnLoginIgnoreDismissed}
+                onCheckedChange={(v) => setPromptOnLoginIgnoreDismissed(!!v)}
+              />
             </div>
 
             <div className="flex items-center justify-between rounded-md border border-[#BFBFBF] bg-white px-3 py-2">
@@ -137,7 +155,6 @@ const AdminBot: React.FC = () => {
               <Switch checked={settings.afternoonReminderEnabled} onCheckedChange={(v) => setEnabled(!!v)} />
             </div>
 
-            {/* Test immédiat */}
             <div className="flex items-center justify-between rounded-md border border-[#BFBFBF] bg-white px-3 py-2">
               <div className="flex flex-col">
                 <Label className="text-[#214A33]">Tester l’invite maintenant</Label>
@@ -199,14 +216,16 @@ const AdminBot: React.FC = () => {
             </div>
 
             <div className="rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-3 text-sm text-[#214A33]">
-              <div>LLM: {llm?.configured ? (<span className="text-emerald-700">configuré ({llm?.provider})</span>) : (<span className="text-[#214A33]/70">non configuré</span>)} — <a href="/admin/llm" className="underline hover:text-[#214A33]/80">Configurer</a></div>
+              <div>
+                LLM: {llm?.configured ? (<span className="text-emerald-700">configuré ({llm?.provider})</span>) : (<span className="text-[#214A33]/70">non configuré</span>)} —{" "}
+                <a href="/admin/llm" className="underline hover:text-[#214A33]/80">Configurer</a>
+              </div>
               <div className="text-xs text-[#214A33]/60">La reformulation/priorisation avancée utilise OpenAI si disponible.</div>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* RAG intégré */}
       <Card className="border-[#BFBFBF]">
         <CardHeader>
           <CardTitle className="text-[#214A33]">Base de connaissance (RAG)</CardTitle>
@@ -304,6 +323,7 @@ const AdminBot: React.FC = () => {
               )}
             </div>
           </div>
+
           <div className="text-[11px] text-[#214A33]/60">Cette version utilise la recherche plein texte (français). Les embeddings pourront être ajoutés ultérieurement sans changer l’UI.</div>
         </CardContent>
       </Card>
