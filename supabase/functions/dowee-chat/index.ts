@@ -18,6 +18,81 @@ function systemPrompt() {
   ].join("\n")
 }
 
+function normalize(s: string) {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // strip accents
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function includesAll(haystack: string, needles: string[]) {
+  return needles.every((k) => haystack.includes(k))
+}
+
+function quickAnswer(question: string): string | null {
+  const q = normalize(question)
+
+  // Pages usuelles — navigation rapide
+  if (includesAll(q, ["journee"])) {
+    return "Accès: Menu → Journée (édition) — URL: /day"
+  }
+  if (includesAll(q, ["planning"])) {
+    return "Accès: Menu → Planning (semaine) — URL: /planning"
+  }
+  if (includesAll(q, ["dashboard"]) || includesAll(q, ["tableaux", "bord"])) {
+    return "Accès: Menu → Tableaux de bord — URL: /dashboards"
+  }
+  if (includesAll(q, ["report", "modif"]) || includesAll(q, ["reporting"])) {
+    return "Accès: Menu → Reporting modifs — URL: /reports/changes"
+  }
+  if (includesAll(q, ["rentabilite", "client"])) {
+    return "Accès: Menu → Rentabilité clients — URL: /profitability/clients"
+  }
+  if (includesAll(q, ["rentabilite", "projet"])) {
+    return "Accès: Menu → Rentabilité projets — URL: /profitability/projects"
+  }
+  if (includesAll(q, ["admin"]) && !q.includes("llm") && !q.includes("rag") && !q.includes("ticker") && !q.includes("band")) {
+    return "Accès: Menu → Admin (hub) — URL: /admin"
+  }
+  if (includesAll(q, ["employe"]) || includesAll(q, ["salari"])) {
+    return "Accès: Admin → Profils salariés — URL: /admin/employees"
+  }
+  if (includesAll(q, ["client"]) && q.includes("admin")) {
+    return "Accès: Admin → Clients — URL: /admin/clients"
+  }
+  if (includesAll(q, ["projet"]) && q.includes("admin")) {
+    return "Accès: Admin → Projets — URL: /admin/projects"
+  }
+  if (includesAll(q, ["tarif"]) || includesAll(q, ["bareme"])) {
+    return "Accès: Admin → Barèmes (tarifs) — URL: /admin/tariffs"
+  }
+  if (includesAll(q, ["cout", "interne"])) {
+    return "Accès: Admin → Coûts internes — URL: /admin/internal-costs"
+  }
+  if (includesAll(q, ["bandeau"]) || includesAll(q, ["ticker"])) {
+    return "Accès: Admin → Bandeau — URL: /admin/ticker"
+  }
+  if (includesAll(q, ["llm"]) || includesAll(q, ["openai"])) {
+    return "Accès: Admin → LLM (OpenAI) — URL: /admin/llm"
+  }
+  if (includesAll(q, ["rag"]) || includesAll(q, ["base", "connaissance"])) {
+    return "Accès: Admin → Base de connaissance (RAG) — URL: /admin/rag"
+  }
+  if (includesAll(q, ["aujourdhui"]) || includesAll(q, ["aujourd", "hui"])) {
+    return "Accès: Menu → Aujourd’hui — URL: /today"
+  }
+  if (includesAll(q, ["login"]) || includesAll(q, ["connexion"])) {
+    return "Accès: Page de connexion — URL: /login"
+  }
+  if (includesAll(q, ["debug"])) {
+    return "Accès: Admin → Debug — URL: /debug (réservé admin)"
+  }
+
+  return null
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders })
   if (req.method !== "POST") {
@@ -30,6 +105,12 @@ serve(async (req) => {
   const body = (await req.json().catch(() => ({}))) as Partial<Payload>
   const last = (body?.messages || []).slice().reverse().find(m => m.role === "user")?.content?.slice(0, 2000) || ""
   if (!last.trim()) return new Response(JSON.stringify({ error: "Empty query" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } })
+
+  // Réponse rapide si la question ressemble à une demande de navigation
+  const shortcut = quickAnswer(last)
+  if (shortcut) {
+    return new Response(JSON.stringify({ answer: shortcut, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
+  }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!
@@ -51,12 +132,12 @@ serve(async (req) => {
     return new Response(JSON.stringify({ answer: fallback, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
   }
 
-  // Recherche FTS (ts tsvector, config fr). Fallback: ILIKE sur content si rien.
+  // Recherche FTS (websearch_to_tsquery français). Fallback: ILIKE sur content si rien.
   const { data: chunksFts } = await admin
     .from("kb_chunks")
     .select("section, content, order_idx")
     .eq("document_id", doc.id)
-    .textSearch("ts", last, { config: "french" })
+    .textSearch("ts", last, { config: "french", type: "websearch" })
     .limit(5)
 
   let top = (chunksFts ?? []).slice(0, 5)
