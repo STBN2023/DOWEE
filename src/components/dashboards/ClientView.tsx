@@ -6,6 +6,7 @@ import { listAdminProjects, type Project } from "@/api/adminProjects";
 import { getProjectScores, type ProjectScore } from "@/api/projectScoring";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import HelpInfo from "@/components/HelpInfo";
 
 function eur(n: number | null | undefined) {
   if (n == null) return "—";
@@ -154,14 +155,27 @@ const ClientView: React.FC = () => {
         </Select>
       </div>
 
-      {/* Bandeau Note (score) */}
+      {/* Bandeau Score (avec aide) */}
       {currentScore != null && (
         <div className="rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-3 inline-flex items-center gap-3">
-          <div className="text-sm text-[#214A33]">Note (priorité)</div>
+          <div className="text-sm text-[#214A33] flex items-center">
+            <span>Score (priorité)</span>
+            <HelpInfo
+              title="Score — comment est-il calculé ?"
+              botHint="Demandez au bot: “Explique le score de PRIORITE-PROJET (code)”."
+            >
+              <ul className="list-disc pl-4">
+                <li>Score 0–100 agrégé:</li>
+                <li>Client (25%) · Marge (35%) · Urgence (20%) · Récurrence (10%) · Stratégie (10%).</li>
+                <li>Bonus x1,15 si client “Star”.</li>
+                <li>Plus le score est élevé, plus le projet est prioritaire.</li>
+              </ul>
+            </HelpInfo>
+          </div>
           <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-semibold", scoreBadgeClass(currentScore))}>
             {String(currentScore).padStart(2, "0")}
           </span>
-          <div className="text-xs text-[#214A33]/70">Plus la note est haute, plus le projet est prioritaire.</div>
+          <div className="text-xs text-[#214A33]/70">Plus le score est élevé, plus le projet est prioritaire.</div>
         </div>
       )}
 
