@@ -119,6 +119,21 @@ const AdminBot: React.FC = () => {
     return <div className="mx-auto max-w-3xl px-4 py-6 text-[#214A33]/80">Chargement…</div>;
   }
 
+  // util pour nettoyer la mémo du jour afin de re-tester immédiatement
+  const clearLoginPromptMemoForToday = () => {
+    try {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, "0");
+      const d = String(now.getDate()).padStart(2, "0");
+      const iso = `${y}-${m}-${d}`;
+      sessionStorage.removeItem(`dowee.bot.login.prompted.${iso}.ign`);
+      sessionStorage.removeItem(`dowee.bot.login.prompted.${iso}.respect`);
+    } catch {
+      // ignore
+    }
+  };
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 space-y-6">
       {/* Réglages relance */}
@@ -131,22 +146,23 @@ const AdminBot: React.FC = () => {
             <div className="flex items-center justify-between rounded-md border border-[#BFBFBF] bg-white px-3 py-2">
               <div className="flex flex-col">
                 <Label className="text-[#214A33]">Proposer la validation à la connexion</Label>
-                <span className="text-xs text-[#214A33]/60">Ouvre le bot dès l’ouverture de session si la journée n’est pas validée.</span>
+                <span className="text-xs text-[#214A33]/60">
+                  Ouvre le bot dès l’ouverture de session si la journée n’est pas validée.
+                </span>
               </div>
-              <Switch checked={settings.promptOnLoginEnabled} onCheckedChange={(v) => setPromptOnLoginEnabled(!!v)} />
+              <Switch checked={settings.promptOnLoginEnabled} onCheckedChange={(v) => { setPromptOnLoginEnabled(!!v); clearLoginPromptMemoForToday(); }} />
             </div>
 
-            {/* Nouvelle option: ignorer 'Plus tard' pour l'invite à la connexion */}
             <div className="flex items-center justify-between rounded-md border border-[#BFBFBF] bg-white px-3 py-2">
               <div className="flex flex-col">
-                <Label className="text-[#214A33]">Ignorer “Plus tard” pour l’invite à la connexion</Label>
+                <Label className="text-[#214A33]">Ignorer “Plus tard” à la connexion</Label>
                 <span className="text-xs text-[#214A33]/60">
-                  Si activé, le bot s’ouvrira à la connexion même si “Plus tard” a déjà été cliqué aujourd’hui.
+                  Affiche quand même le message d’ouverture, même si “Plus tard” a déjà été cliqué aujourd’hui.
                 </span>
               </div>
               <Switch
                 checked={settings.promptOnLoginIgnoreDismissed}
-                onCheckedChange={(v) => setPromptOnLoginIgnoreDismissed(!!v)}
+                onCheckedChange={(v) => { setPromptOnLoginIgnoreDismissed(!!v); clearLoginPromptMemoForToday(); }}
               />
             </div>
 
@@ -220,7 +236,10 @@ const AdminBot: React.FC = () => {
             </div>
 
             <div className="rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-3 text-sm text-[#214A33]">
-              <div>LLM: {llm?.configured ? (<span className="text-emerald-700">configuré ({llm?.provider})</span>) : (<span className="text-[#214A33]/70">non configuré</span>)} — <a href="/admin/llm" className="underline hover:text-[#214A33]/80">Configurer</a></div>
+              <div>
+                LLM: {llm?.configured ? (<span className="text-emerald-700">configuré ({llm?.provider})</span>) : (<span className="text-[#214A33]/70">non configuré</span>)} —{" "}
+                <a href="/admin/llm" className="underline hover:text-[#214A33]/80">Configurer</a>
+              </div>
               <div className="text-xs text-[#214A33]/60">La reformulation/priorisation avancée utilise OpenAI si disponible.</div>
             </div>
           </div>

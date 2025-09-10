@@ -114,7 +114,11 @@ export default function ChatLauncher({
   }, []);
 
   const dismissedKey = useMemo(() => `dowee.bot.afternoon.dismissed.${todayIso}`, [todayIso]);
-  const loginPromptKey = useMemo(() => `dowee.bot.login.prompted.${todayIso}`, [todayIso]);
+  // IMPORTANT: la clé tient compte du réglage pour ne pas bloquer après changement d’option
+  const loginPromptKey = useMemo(
+    () => `dowee.bot.login.prompted.${todayIso}.${settings.promptOnLoginIgnoreDismissed ? "ign" : "respect"}`,
+    [todayIso, settings.promptOnLoginIgnoreDismissed]
+  );
 
   const runAfternoonCheck = useCallback(
     async (opts?: { ignoreAfternoonFlag?: boolean; ignoreDismissed?: boolean }) => {
