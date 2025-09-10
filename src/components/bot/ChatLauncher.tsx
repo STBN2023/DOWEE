@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import { doweeChat } from "@/api/doweeBot";
+import { useAuth } from "@/context/AuthContext";
+import { getDayStatus } from "@/api/dayValidation";
 
 /**
  * ChatLauncher — DoWee (charte couleur appliquée)
@@ -17,6 +20,9 @@ export default function ChatLauncher({
   onOpenChange?: (open: boolean) => void;
   onSend?: (msg: string) => Promise<string> | string;
 }) {
+  const navigate = useNavigate();
+  const { session } = useAuth();
+
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([
     {
@@ -26,6 +32,10 @@ export default function ChatLauncher({
     },
   ]);
   const [pending, setPending] = useState(false);
+
+  // État de la relance “16h”
+  const [afternoonCta, setAfternoonCta] = useState<boolean>(false);
+
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -33,7 +43,7 @@ export default function ChatLauncher({
       top: listRef.current.scrollHeight,
       behavior: "smooth",
     });
-  }, [messages, open]);
+  }, [messages, open, afternoonCta]);
 
   const toggle = () => {
     const next = !open;
@@ -95,6 +105,94 @@ export default function ChatLauncher({
     }
   }
 
+  // ---------- Rappel automatique 16:00 ----------
+  const todayIso = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }, []);
+
+  const dismissedKey = useMemo(() => `dowee.bot.afternoon.dismissed.${todayIso}`, [todayIso]);
+
+  const scheduleAfternoonCheck = useCallback(() => {
+    // Calcule un timeout jusqu’à 16:00 locale
+    const now = new Date();
+    const target = new Date();
+    target.setHours(16, 0, 0, 0);
+    const ms = target.getTime() - now.getTime();
+    if (ms <= 0) {
+      // Déjà après 16:00 → vérifier tout de suite
+      return 10; // 10ms
+    }
+    return ms;
+  }, []);
+
+  const runAfternoonCheck = useCallback(async () => {
+    if (!session) return; // pas connecté
+    // Ne pas relancer si l’utilisateur a dit “pas tout de suite”
+    if (localStorage.getItem(dismissedKey) === "1") return;
+
+    try {
+      const status = await getDayStatus(todayIso);
+      if (status?.validated) return;
+      // Open chat + message d’invite + CTA
+      setOpen(true);
+      setAfternoonCta(true);
+      setMessages((m) => [
+        ...m,
+        {
+          role: "assistant",
+          content:
+            "Il est 16:00. Souhaitez‑vous valider votre planning de l’après‑midi ?",
+        },
+      ]);
+      onOpenChange?.(true);
+    } catch {
+      // silencieux
+    }
+  }, [session, todayIso, dismissedKey, onOpenChange]);
+
+  useEffect(() => {
+    // Planifie la vérification à 16:00
+    const delay = scheduleAfternoonCheck();
+    const timer = setTimeout(() => {
+      runAfternoonCheck();
+      // Puis re‑vérifier toutes les 30 minutes si pas validé et non “dismiss”
+      const poll = setInterval(() => {
+        // Ne pas spammer si déjà fermé par “pas tout de suite”
+        if (localStorage.getItem(dismissedKey) === "1") {
+          clearInterval(poll);
+          return;
+        }
+        runAfternoonCheck();
+      }, 30 * 60 * 1000);
+      // Cleanup du poll au démontage
+      (window as any).__dowee_poll = poll;
+    }, delay);
+
+    return () => {
+      clearTimeout(timer);
+      const poll = (window as any).__dowee_poll;
+      if (poll) clearInterval(poll);
+    };
+  }, [scheduleAfternoonCheck, runAfternoonCheck, dismissedKey]);
+
+  const onValidateToday = () => {
+    setAfternoonCta(false);
+    setOpen(false);
+    onOpenChange?.(false);
+    navigate("/today");
+  };
+
+  const onNotNow = () => {
+    localStorage.setItem(dismissedKey, "1");
+    setAfternoonCta(false);
+    setOpen(false);
+    onOpenChange?.(false);
+  };
+
   return (
     <div className="fixed bottom-[64px] right-4 z-[1000] select-none">
       <div className="flex items-end gap-3">
@@ -139,6 +237,7 @@ export default function ChatLauncher({
             className="mt-3 w=[min(92vw,380px)] h-[min(70vh,560px)] rounded-2xl bg-[#F7F7F7] shadow-2xl ring-1 ring-[#BFBFBF] overflow-hidden"
           >
             <Header onClose={toggle} />
+
             <div
               ref={listRef}
               className="h-[calc(100%-3.5rem-3.5rem)] overflow-y-auto p-3 bg-gradient-to-b from-[#F7F7F7] to-white space-y-3"
@@ -147,7 +246,36 @@ export default function ChatLauncher({
                 <Message key={i} role={m.role} content={m.content} />
               ))}
               {pending && <Typing />}
+
+              {/* CTA validation 16:00 */}
+              {afternoonCta && (
+                <div className="mt-2 rounded-xl border border-[#BFBFBF] bg-white p-3">
+                  <div className="mb-2 text-sm font-medium text-[#214A33]">
+                    Valider votre planning de l’après‑midi ?
+                  </div>
+                  <div className="text-xs text-[#214A33]/80 mb-3">
+                    Cela copie vos créneaux planifiés en heures réelles et marque la journée validée (modifiable ensuite).
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={onValidateToday}
+                      className="inline-flex items-center rounded-md bg-[#F2994A] px-3 py-1.5 text-sm text-white hover:bg-[#E38C3F]"
+                    >
+                      Valider aujourd’hui
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onNotNow}
+                      className="inline-flex items-center rounded-md border border-[#BFBFBF] bg-white px-3 py-1.5 text-sm text-[#214A33] hover:bg-[#F7F7F7]"
+                    >
+                      Pas tout de suite
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
+
             <Footer
               onSend={(text) => {
                 const t = (text || "").trim();
