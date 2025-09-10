@@ -211,8 +211,10 @@ const AdminProjects = () => {
     };
     const quote = num(form.quote_amount);
     const due_date = form.due_date.trim() ? form.due_date.trim() : null;
+
+    // Effort (jours) — arrondi à l'entier pour coller au type integer en base
     const effort_days_val = form.effort_days.trim() === "" ? null : Number(form.effort_days.replace(",", "."));
-    const effort_days = isFinite(Number(effort_days_val)) ? Number(effort_days_val) : null;
+    const effort_days = Number.isFinite(effort_days_val as number) ? Math.round(effort_days_val as number) : null;
 
     // Budgets par service
     const budget_conception = num(form.budget_conception);
@@ -305,8 +307,10 @@ const AdminProjects = () => {
     };
     const quote = num(editForm.quote_amount);
     const due_date = editForm.due_date.trim() ? editForm.due_date.trim() : null;
+
+    // Effort (jours) — arrondi à l'entier (colonne integer)
     const effort_days_val = editForm.effort_days.trim() === "" ? null : Number(editForm.effort_days.replace(",", "."));
-    const effort_days = isFinite(Number(effort_days_val)) ? Number(effort_days_val) : null;
+    const effort_days = Number.isFinite(effort_days_val as number) ? Math.round(effort_days_val as number) : null;
 
     const budget_conception = num(editForm.budget_conception);
     const budget_crea = num(editForm.budget_crea);
@@ -405,10 +409,9 @@ const AdminProjects = () => {
     if (!selectedCreateTariff) return;
     if (hCreate.total == null) return;
     const totalHours = hCreate.total;
-    const days = Math.round((totalHours / 8) * 10) / 10; // 1 décimale
+    const days = Math.round((totalHours / 8) * 10) / 10;
     setForm((f) => {
       if (effortCreateTouched && f.effort_days.trim() !== "") return f;
-      // Préremplir (ou mettre à jour s’il était vide)
       return { ...f, effort_days: String(days) };
     });
   }, [selectedCreateTariff, hCreate.total, effortCreateTouched]);
@@ -509,7 +512,7 @@ const AdminProjects = () => {
                     onChange={(e) => { setForm((f) => ({ ...f, effort_days: e.target.value })); setEffortCreateTouched(true); }}
                     onBlur={() => setEffortCreateTouched(true)}
                   />
-                  <div className="text-[11px] text-[#214A33]/60">Prérempli depuis les budgets/barème: total_heures ÷ 8</div>
+                  <div className="text-[11px] text-[#214A33]/60">Prérempli (heures totales ÷ 8). Enregistrement arrondi à l’entier.</div>
                 </div>
               </div>
               <DialogFooter>
@@ -720,7 +723,7 @@ const AdminProjects = () => {
                                       onChange={(e) => { setEditForm((f) => ({ ...f, effort_days: e.target.value })); setEffortEditTouched(true); }}
                                       onBlur={() => setEffortEditTouched(true)}
                                     />
-                                    <div className="text-[11px] text-[#214A33]/60">Mis à jour depuis les budgets/barème (sauf si saisi à la main)</div>
+                                    <div className="text-[11px] text-[#214A33]/60">Prérempli (heures totales ÷ 8). Enregistrement arrondi à l’entier.</div>
                                   </div>
                                 </div>
                                 <DialogFooter>
