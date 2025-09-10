@@ -127,17 +127,17 @@ const ContributionHeatmap: React.FC<Props> = ({ start, end, counts }) => {
               </div>
             ))}
           </div>
+        </div>
 
-          {/* Légende compacte */}
-          <div className="ml-3 hidden items-center gap-2 md:flex">
-            <span className="text-[10px] text-[#214A33]/60">Moins</span>
-            <div className="h-[12px] w-[12px] rounded-[3px] bg-orange-50/60 border border-[#BFBFBF]/40" />
-            <div className="h-[12px] w-[12px] rounded-[3px] bg-orange-100" />
-            <div className="h-[12px] w-[12px] rounded-[3px] bg-orange-200" />
-            <div className="h-[12px] w-[12px] rounded-[3px] bg-orange-300" />
-            <div className="h-[12px] w-[12px] rounded-[3px] bg-orange-500" />
-            <span className="text-[10px] text-[#214A33]/60">Plus</span>
-          </div>
+        {/* Légende sous la heatmap, centrée */}
+        <div className="mt-2 flex items-center justify-center gap-2">
+          <span className="text-[10px] text-[#214A33]/60">Moins</span>
+          <div className="h-[12px] w-[12px] rounded-[3px] bg-orange-50/60 border border-[#BFBFBF]/40" />
+          <div className="h-[12px] w-[12px] rounded-[3px] bg-orange-100" />
+          <div className="h-[12px] w-[12px] rounded-[3px] bg-orange-200" />
+          <div className="h-[12px] w-[12px] rounded-[3px] bg-orange-300" />
+          <div className="h-[12px] w-[12px] rounded-[3px] bg-orange-500" />
+          <span className="text-[10px] text-[#214A33]/60">Plus</span>
         </div>
       </div>
     </div>
