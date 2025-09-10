@@ -15,13 +15,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      # Avec cache uniquement si un lock file est présent
+      - name: Setup Node (with cache)
+        if: ${{ hashFiles('package-lock.json') != '' || hashFiles('npm-shrinkwrap.json') != '' || hashFiles('yarn.lock') != '' }}
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
-      - name: Install dependencies
+      # Fallback sans cache si aucun lock file
+      - name: Setup Node (no cache)
+        if: ${{ hashFiles('package-lock.json') == '' && hashFiles('npm-shrinkwrap.json') == '' && hashFiles('yarn.lock') == '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Installer les dépendances
+      - name: Install dependencies (npm ci)
+        if: ${{ hashFiles('package-lock.json') != '' }}
+        run: npm ci
+
+      - name: Install dependencies (npm install)
+        if: ${{ hashFiles('package-lock.json') == '' }}
         run: npm install
 
       - name: Lint
