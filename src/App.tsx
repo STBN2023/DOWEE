@@ -31,6 +31,8 @@ import { TickerProvider } from "./components/ticker/TickerProvider";
 import TickerBar from "./components/ticker/TickerBar";
 import { TickerSettingsProvider } from "./context/TickerSettingsContext";
 import TickerSettingsPage from "./pages/TickerSettings";
+import ChatLauncher from "./components/bot/ChatLauncher";
+import AdminRag from "./pages/AdminRag";
 
 const queryClient = new QueryClient();
 
@@ -178,6 +180,14 @@ const App = () => (
                     }
                   />
                   <Route
+                    path="/admin/rag"
+                    element={
+                      <ProtectedRoute>
+                        <AdminRag />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
                     path="/debug"
                     element={
                       <ProtectedRoute>
@@ -187,6 +197,7 @@ const App = () => (
                   />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
+                <ChatLauncher />
                 <TickerBar />
               </BrowserRouter>
             </TickerProvider>
