@@ -109,6 +109,7 @@ const AdminProjects = () => {
     due_date: "",
     effort_days: "",
   });
+  const [effortCreateTouched, setEffortCreateTouched] = React.useState(false);
 
   const [openAssignFor, setOpenAssignFor] = React.useState<string | null>(null);
   const [assignSelection, setAssignSelection] = React.useState<Record<string, boolean>>({});
@@ -137,6 +138,7 @@ const AdminProjects = () => {
     due_date: "",
     effort_days: "",
   });
+  const [effortEditTouched, setEffortEditTouched] = React.useState(false);
 
   const [showScoreHelp, setShowScoreHelp] = React.useState<boolean>(false);
   const [openRows, setOpenRows] = React.useState<Record<string, boolean>>({});
@@ -184,7 +186,7 @@ const AdminProjects = () => {
     if (!tariff) return { conc: null, crea: null, dev: null, total: null as number | null };
     const n = (v?: string) => {
       if (!v) return 0;
-      const x = Number(v.replace(",", "."));
+      const x = Number((v || "").toString().replace(",", "."));
       return isFinite(x) ? x : 0;
     };
     const hConc = tariff.rate_conception > 0 ? n(budgets.conc) / tariff.rate_conception : 0;
@@ -243,6 +245,7 @@ const AdminProjects = () => {
         due_date: "",
         effort_days: "",
       });
+      setEffortCreateTouched(false);
       setOpenCreate(false);
       await refresh();
     } catch (e: any) {
@@ -273,6 +276,7 @@ const AdminProjects = () => {
 
   const openEditDialog = (p: Project) => {
     setOpenEditFor(p);
+    setEffortEditTouched(false);
     setEditForm({
       name: p.name,
       status: p.status,
@@ -323,6 +327,7 @@ const AdminProjects = () => {
       });
       showSuccess("Projet modifié.");
       setOpenEditFor(null);
+      setEffortEditTouched(false);
       await refresh();
     } catch (e: any) {
       showError(e?.message || "Modification impossible.");
@@ -395,12 +400,37 @@ const AdminProjects = () => {
     dev: editForm.budget_dev,
   });
 
+  // Auto-remplir Effort (jours) en création si non modifié par l’utilisateur
+  React.useEffect(() => {
+    if (!selectedCreateTariff) return;
+    if (hCreate.total == null) return;
+    const totalHours = hCreate.total;
+    const days = Math.round((totalHours / 8) * 10) / 10; // 1 décimale
+    setForm((f) => {
+      if (effortCreateTouched && f.effort_days.trim() !== "") return f;
+      // Préremplir (ou mettre à jour s’il était vide)
+      return { ...f, effort_days: String(days) };
+    });
+  }, [selectedCreateTariff, hCreate.total, effortCreateTouched]);
+
+  // Auto-remplir Effort (jours) en édition si non modifié par l’utilisateur
+  React.useEffect(() => {
+    if (!selectedEditTariff) return;
+    if (hEdit.total == null) return;
+    const totalHours = hEdit.total;
+    const days = Math.round((totalHours / 8) * 10) / 10;
+    setEditForm((f) => {
+      if (effortEditTouched && f.effort_days.trim() !== "") return f;
+      return { ...f, effort_days: String(days) };
+    });
+  }, [selectedEditTariff, hEdit.total, effortEditTouched]);
+
   return (
     <div className="mx-auto max-w-[1280px] px-6 py-6">
       <Card className="border-[#BFBFBF]">
         <CardHeader className="flex items-center justify-between">
           <CardTitle className="text-[#214A33]">Admin — Projets</CardTitle>
-          <Dialog open={openCreate} onOpenChange={setOpenCreate}>
+          <Dialog open={openCreate} onOpenChange={(o) => { setOpenCreate(o); if (!o) setEffortCreateTouched(false); }}>
             <DialogTrigger asChild>
               <Button className="bg-[#214A33] hover:bg-[#214A33]/90 text-white">
                 <Plus className="mr-2 h-4 w-4" />
@@ -462,7 +492,7 @@ const AdminProjects = () => {
                     </div>
                   </div>
                   <div className="text-[11px] text-[#214A33]/60">
-                    Total heures max (indicatif): {hCreate.total ?? "—"} h {selectedCreateTariff ? "" : "(sélectionnez un barème pour calculer)"} 
+                    Total heures max (indicatif): {hCreate.total ?? "—"} h {selectedCreateTariff ? "" : "(sélectionnez un barème pour calculer)"}
                   </div>
                 </div>
 
@@ -472,11 +502,18 @@ const AdminProjects = () => {
                 </div>
                 <div className="grid gap-2">
                   <Label>Effort (jours)</Label>
-                  <Input inputMode="decimal" placeholder="ex: 12" value={form.effort_days} onChange={(e) => setForm((f) => ({ ...f, effort_days: e.target.value }))} />
+                  <Input
+                    inputMode="decimal"
+                    placeholder="ex: 12"
+                    value={form.effort_days}
+                    onChange={(e) => { setForm((f) => ({ ...f, effort_days: e.target.value })); setEffortCreateTouched(true); }}
+                    onBlur={() => setEffortCreateTouched(true)}
+                  />
+                  <div className="text-[11px] text-[#214A33]/60">Prérempli depuis les budgets/barème: total_heures ÷ 8</div>
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={() => setOpenCreate(false)}>Annuler</Button>
+                <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={() => { setOpenCreate(false); setEffortCreateTouched(false); }}>Annuler</Button>
                 <Button className="bg-[#F2994A] hover:bg-[#F2994A]/90 text-white" onClick={onCreateProject}>Créer</Button>
               </DialogFooter>
             </DialogContent>
@@ -667,7 +704,7 @@ const AdminProjects = () => {
                                       </div>
                                     </div>
                                     <div className="text-[11px] text-[#214A33]/60">
-                                      Total heures max (indicatif): {hEdit.total ?? "—"} h {selectedEditTariff ? "" : "(sélectionnez un barème pour calculer)"} 
+                                      Total heures max (indicatif): {hEdit.total ?? "—"} h {selectedEditTariff ? "" : "(sélectionnez un barème pour calculer)"}
                                     </div>
                                   </div>
 
@@ -677,11 +714,17 @@ const AdminProjects = () => {
                                   </div>
                                   <div className="grid gap-2">
                                     <Label>Effort (jours)</Label>
-                                    <Input inputMode="decimal" value={editForm.effort_days} onChange={(e) => setEditForm((f) => ({ ...f, effort_days: e.target.value }))} />
+                                    <Input
+                                      inputMode="decimal"
+                                      value={editForm.effort_days}
+                                      onChange={(e) => { setEditForm((f) => ({ ...f, effort_days: e.target.value })); setEffortEditTouched(true); }}
+                                      onBlur={() => setEffortEditTouched(true)}
+                                    />
+                                    <div className="text-[11px] text-[#214A33]/60">Mis à jour depuis les budgets/barème (sauf si saisi à la main)</div>
                                   </div>
                                 </div>
                                 <DialogFooter>
-                                  <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={() => setOpenEditFor(null)}>Annuler</Button>
+                                  <Button variant="outline" className="border-[#BFBFBF] text-[#214A33]" onClick={() => { setOpenEditFor(null); setEffortEditTouched(false); }}>Annuler</Button>
                                   <Button className="bg-[#F2994A] hover:bg-[#F2994A]/90 text-white" onClick={confirmEdit}>Enregistrer</Button>
                                 </DialogFooter>
                               </DialogContent>
@@ -733,7 +776,12 @@ const AdminProjects = () => {
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                   <AlertDialogCancel>Annuler</AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => deleteProject(p.id).then(() => refresh()).then(() => showSuccess("Projet supprimé.")).catch((e) => showError(e?.message || "Suppression impossible."))}>Supprimer</AlertDialogAction>
+                                  <AlertDialogAction onClick={() =>
+                                    deleteProject(p.id)
+                                      .then(() => refresh())
+                                      .then(() => showSuccess("Projet supprimé."))
+                                      .catch((e) => showError(e?.message || "Suppression impossible."))
+                                  }>Supprimer</AlertDialogAction>
                                 </AlertDialogFooter>
                               </AlertDialogContent>
                             </AlertDialog>
