@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { doweeChat } from "@/api/doweeBot";
 import { useAuth } from "@/context/AuthContext";
 import { getDayStatus } from "@/api/dayValidation";
+import { useBotSettings } from "@/context/BotSettingsContext";
 
 /**
  * ChatLauncher — DoWee (charte couleur appliquée)
@@ -22,6 +23,7 @@ export default function ChatLauncher({
 }) {
   const navigate = useNavigate();
   const { session } = useAuth();
+  const { settings } = useBotSettings();
 
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([
@@ -33,7 +35,7 @@ export default function ChatLauncher({
   ]);
   const [pending, setPending] = useState(false);
 
-  // État de la relance “16h”
+  // État de la relance “après-midi”
   const [afternoonCta, setAfternoonCta] = useState<boolean>(false);
 
   const listRef = useRef<HTMLDivElement>(null);
@@ -52,9 +54,7 @@ export default function ChatLauncher({
   };
 
   function cleanAnswer(answer: string, userMsg: string): string {
-    // Supprime les préfixes de relecture
     let out = answer.replace(/^\s*(tu|vous)\s+as|avez\s+dit\s*:.*$/gim, "").trim();
-    // Si la réponse répète exactement la question entre guillemets, on l’enlève
     const q = userMsg.trim().replace(/\s+/g, " ").toLowerCase();
     out = out
       .replace(new RegExp(`^"\\s*${escapeRegExp(q)}\\s*"`), "")
@@ -68,7 +68,6 @@ export default function ChatLauncher({
   }
 
   async function callAssistant(withMsg: string): Promise<string> {
-    // Si onSend externe existe, on l’utilise, sinon on appelle le RAG
     const custom = onSend?.(withMsg);
     if (custom) return await custom;
 
@@ -105,7 +104,7 @@ export default function ChatLauncher({
     }
   }
 
-  // ---------- Rappel automatique 16:00 ----------
+  // ---------- Rappel automatique (configurable) ----------
   const todayIso = useMemo(() => {
     const now = new Date();
     const y = now.getFullYear();
@@ -117,27 +116,23 @@ export default function ChatLauncher({
   const dismissedKey = useMemo(() => `dowee.bot.afternoon.dismissed.${todayIso}`, [todayIso]);
 
   const scheduleAfternoonCheck = useCallback(() => {
-    // Calcule un timeout jusqu’à 16:00 locale
+    if (!settings.afternoonReminderEnabled) return -1;
     const now = new Date();
     const target = new Date();
-    target.setHours(16, 0, 0, 0);
+    target.setHours(settings.afternoonReminderHour, 0, 0, 0);
     const ms = target.getTime() - now.getTime();
-    if (ms <= 0) {
-      // Déjà après 16:00 → vérifier tout de suite
-      return 10; // 10ms
-    }
+    if (ms <= 0) return 10;
     return ms;
-  }, []);
+  }, [settings.afternoonReminderEnabled, settings.afternoonReminderHour]);
 
   const runAfternoonCheck = useCallback(async () => {
-    if (!session) return; // pas connecté
-    // Ne pas relancer si l’utilisateur a dit “pas tout de suite”
+    if (!session) return;
+    if (!settings.afternoonReminderEnabled) return;
     if (localStorage.getItem(dismissedKey) === "1") return;
 
     try {
       const status = await getDayStatus(todayIso);
       if (status?.validated) return;
-      // Open chat + message d’invite + CTA
       setOpen(true);
       setAfternoonCta(true);
       setMessages((m) => [
@@ -145,30 +140,35 @@ export default function ChatLauncher({
         {
           role: "assistant",
           content:
-            "Il est 16:00. Souhaitez‑vous valider votre planning de l’après‑midi ?",
+            "Il est l’heure de valider votre planning de l’après‑midi. Souhaitez‑vous le faire maintenant ?",
         },
       ]);
       onOpenChange?.(true);
     } catch {
       // silencieux
     }
-  }, [session, todayIso, dismissedKey, onOpenChange]);
+  }, [session, todayIso, dismissedKey, onOpenChange, settings.afternoonReminderEnabled]);
 
   useEffect(() => {
-    // Planifie la vérification à 16:00
+    // Écouteur de test manuel
+    const handler = () => runAfternoonCheck();
+    window.addEventListener("dowee:bot:triggerAfternoon", handler as any);
+    return () => window.removeEventListener("dowee:bot:triggerAfternoon", handler as any);
+  }, [runAfternoonCheck]);
+
+  useEffect(() => {
     const delay = scheduleAfternoonCheck();
+    if (delay < 0) return; // désactivé
+
     const timer = setTimeout(() => {
       runAfternoonCheck();
-      // Puis re‑vérifier toutes les 30 minutes si pas validé et non “dismiss”
       const poll = setInterval(() => {
-        // Ne pas spammer si déjà fermé par “pas tout de suite”
         if (localStorage.getItem(dismissedKey) === "1") {
           clearInterval(poll);
           return;
         }
         runAfternoonCheck();
-      }, 30 * 60 * 1000);
-      // Cleanup du poll au démontage
+      }, Math.max(5, settings.afternoonReminderRepeatMinutes) * 60 * 1000);
       (window as any).__dowee_poll = poll;
     }, delay);
 
@@ -177,7 +177,7 @@ export default function ChatLauncher({
       const poll = (window as any).__dowee_poll;
       if (poll) clearInterval(poll);
     };
-  }, [scheduleAfternoonCheck, runAfternoonCheck, dismissedKey]);
+  }, [scheduleAfternoonCheck, runAfternoonCheck, dismissedKey, settings.afternoonReminderRepeatMinutes]);
 
   const onValidateToday = () => {
     setAfternoonCta(false);
@@ -206,7 +206,6 @@ export default function ChatLauncher({
           transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
         >
           <AnimatedRobot className="w-9 h-9" />
-          {/* voyant actif en vert foncé */}
           <span className="absolute -top-1 -right-1 inline-block w-3 h-3 rounded-full bg-[#214A33] shadow-[0_0_0_2px_#F7F7F7]" />
         </motion.button>
 
@@ -234,7 +233,7 @@ export default function ChatLauncher({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.98, y: 8 }}
             transition={{ duration: 0.18 }}
-            className="mt-3 w=[min(92vw,380px)] h-[min(70vh,560px)] rounded-2xl bg-[#F7F7F7] shadow-2xl ring-1 ring-[#BFBFBF] overflow-hidden"
+            className="mt-3 w=[min(92vw,380px)] h=[min(70vh,560px)] rounded-2xl bg-[#F7F7F7] shadow-2xl ring-1 ring-[#BFBFBF] overflow-hidden"
           >
             <Header onClose={toggle} />
 
@@ -247,7 +246,7 @@ export default function ChatLauncher({
               ))}
               {pending && <Typing />}
 
-              {/* CTA validation 16:00 */}
+              {/* CTA validation */}
               {afternoonCta && (
                 <div className="mt-2 rounded-xl border border-[#BFBFBF] bg-white p-3">
                   <div className="mb-2 text-sm font-medium text-[#214A33]">
@@ -442,7 +441,6 @@ function AnimatedRobot({ className = "" }: { className?: string }) {
           <stop offset="1" stopColor="#E38C3F" />
         </linearGradient>
       </defs>
-      {/* Corps */}
       <motion.rect
         x="10"
         y="18"
@@ -453,7 +451,6 @@ function AnimatedRobot({ className = "" }: { className?: string }) {
         animate={{ y: [18, 16, 18] }}
         transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
       />
-      {/* Antenne */}
       <motion.circle
         cx="32"
         cy="10"
@@ -463,7 +460,6 @@ function AnimatedRobot({ className = "" }: { className?: string }) {
         transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
       />
       <rect x="31" y="12" width="2" height="6" rx="1" fill="#BFBFBF" />
-      {/* Visage */}
       <rect x="16" y="24" width="32" height="16" rx="8" fill="#F7F7F7" />
       <motion.circle
         cx="26"
