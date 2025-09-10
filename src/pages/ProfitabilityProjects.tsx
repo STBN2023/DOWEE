@@ -29,15 +29,18 @@ type SortDir = "asc" | "desc";
 const Hint = ({ children, label }: { children: React.ReactNode; label?: string }) => (
   <Tooltip>
     <TooltipTrigger asChild>
+      {/* Badge très visible pour l’accessibilité et le contraste */}
       <span
-        className="ml-1 inline-flex cursor-help items-center justify-center align-middle"
         aria-label={label || "Informations"}
         title={label || "Informations"}
+        className="ml-1 inline-flex h-5 w-5 cursor-help select-none items-center justify-center rounded-full bg-[#F2994A] text-[11px] font-bold text-white ring-1 ring-[#BFBFBF]"
       >
-        <Info className="h-4 w-4 text-[#214A33]/80" />
+        i
       </span>
     </TooltipTrigger>
-    <TooltipContent side="top" className="max-w-xs text-xs leading-relaxed">{children}</TooltipContent>
+    <TooltipContent side="top" align="center" className="max-w-xs text-xs leading-relaxed">
+      {children}
+    </TooltipContent>
   </Tooltip>
 );
 
@@ -168,7 +171,7 @@ const ProfitabilityProjects: React.FC = () => {
         <CardContent>
           {/* Encart d’aide + lien vers bot */}
           <div className="mb-3 rounded-md border border-[#BFBFBF] bg-[#F7F7F7] p-3 text-sm text-[#214A33]">
-            Besoin du détail du calcul ? Passez la souris sur les icônes d’aide (i) ou
+            Besoin du détail du calcul ? Survolez les badges (i) ou
             <button
               type="button"
               onClick={() => window.dispatchEvent(new Event("dowee:bot:open"))}
@@ -185,44 +188,48 @@ const ProfitabilityProjects: React.FC = () => {
             <table className="w-full border-collapse text-sm">
               <thead className="bg-[#F7F7F7]">
                 <tr>
-                  <th className="p-2 text-left font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("code")}>
+                  <th className="p-2 text-left text-sm font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("code")}>
                     Projet
                   </th>
-                  <th className="p-2 text-left font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("client")}>
+                  <th className="p-2 text-left text-sm font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("client")}>
                     Client
                   </th>
-                  <th className="p-2 text-right font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("sold")}>
-                    CA vendu
-                    <Hint label="Comment est calculé le CA vendu ?">
-                      Valeur HT vendue du projet:
-                      <br />- Utilise projects.quote_amount si présent,
-                      <br />- Sinon somme budgets: conception + créa + dev.
-                    </Hint>
+                  <th className="p-2 text-right text-sm font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("sold")}>
+                    <span className="inline-flex items-center">
+                      CA vendu <Hint label="Comment est calculé le CA vendu ?">
+                        Valeur HT vendue du projet:
+                        <br />- Utilise projects.quote_amount si présent,
+                        <br />- Sinon somme budgets: conception + créa + dev.
+                      </Hint>
+                    </span>
                   </th>
-                  <th className="p-2 text-right font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("cost")}>
-                    Coût
-                    <Hint label="Comment est calculé le coût ?">
-                      Coût réalisé estimé:
-                      <br />- Heures réelles (actual_items) × taux horaire par équipe,
-                      <br />- À défaut, heures planifiées (plan_items),
-                      <br />- Taux issus de ref_internal_costs (€/jour ÷ 8),
-                      <br />- Défaut si vide: 800/500/800 €/j (conc./créa/dev).
-                    </Hint>
+                  <th className="p-2 text-right text-sm font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("cost")}>
+                    <span className="inline-flex items-center">
+                      Coût <Hint label="Comment est calculé le coût ?">
+                        Coût réalisé estimé:
+                        <br />- Heures réelles (actual_items) × taux horaire par équipe,
+                        <br />- À défaut, heures planifiées (plan_items),
+                        <br />- Taux issus de ref_internal_costs (€/jour ÷ 8),
+                        <br />- Défaut si vide: 800/500/800 €/j (conc./créa/dev).
+                      </Hint>
+                    </span>
                   </th>
-                  <th className="p-2 text-right font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("margin")}>
-                    Marge
-                    <Hint label="Comment est calculée la marge ?">
-                      Marge en euros:
-                      <br />marge = CA vendu − coût réalisé.
-                    </Hint>
+                  <th className="p-2 text-right text-sm font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("margin")}>
+                    <span className="inline-flex items-center">
+                      Marge <Hint label="Comment est calculée la marge ?">
+                        Marge en euros:
+                        <br />marge = CA vendu − coût réalisé.
+                      </Hint>
+                    </span>
                   </th>
-                  <th className="p-2 text-right font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("margin_pct")}>
-                    Marge %
-                    <Hint label="Comment est calculée la marge % ?">
-                      Pourcentage:
-                      <br />marge % = (marge / CA vendu) × 100,
-                      <br />affiché si CA vendu &gt; 0.
-                    </Hint>
+                  <th className="p-2 text-right text-sm font-semibold text-[#214A33] cursor-pointer" onClick={() => setSortKey("margin_pct")}>
+                    <span className="inline-flex items-center">
+                      Marge % <Hint label="Comment est calculée la marge % ?">
+                        Pourcentage:
+                        <br />marge % = (marge / CA vendu) × 100,
+                        <br />affiché si CA vendu &gt; 0.
+                      </Hint>
+                    </span>
                   </th>
                 </tr>
               </thead>
@@ -259,7 +266,7 @@ const ProfitabilityProjects: React.FC = () => {
           </div>
 
           <div className="mt-2 text-[11px] text-[#214A33]/60">
-            Astuce: sur mobile, appuyez plutôt sur l’icône (i) pour voir l’explication.
+            Astuce: sur mobile, touchez le badge (i) pour afficher l’explication.
             <br />
             Codes couleur: ≥40% vert, 20–39% jaune, 1–19% orange, ≤0% rouge.
           </div>
