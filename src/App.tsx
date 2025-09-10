@@ -197,10 +197,10 @@ const App = () => (
                   />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
-                {/* Remonte le chatbot de 5px */}
-                <div className="translate-y-[-5px]">
-                  <ChatLauncher />
-                </div>
+
+                {/* Chatbot : rendu direct, sans wrapper transform */}
+                <ChatLauncher />
+
                 <TickerBar />
               </BrowserRouter>
             </TickerProvider>
