@@ -12,6 +12,7 @@ export type TickerSettings = {
   lat: number | null;
   lon: number | null;
   customMessage: string; // message libre diffusé dans le bandeau
+  scope: "me" | "team" | "global";
 };
 
 type Ctx = {
@@ -20,6 +21,7 @@ type Ctx = {
   setWeatherCity: (city: string) => void;
   setGeo: (patch: Partial<{ useGeo: boolean; lat: number | null; lon: number | null }>) => void;
   setCustomMessage: (msg: string) => void;
+  setScope: (scope: "me" | "team" | "global") => void;
 };
 
 const LS_KEY = "dowee.ticker.settings";
@@ -34,6 +36,7 @@ const defaultSettings: TickerSettings = {
   lat: null,
   lon: null,
   customMessage: "",
+  scope: "me",
 };
 
 function loadSettings(): TickerSettings {
@@ -51,6 +54,7 @@ function loadSettings(): TickerSettings {
       lat: typeof p?.lat === "number" ? p.lat : null,
       lon: typeof p?.lon === "number" ? p.lon : null,
       customMessage: typeof p?.customMessage === "string" ? p.customMessage : "",
+      scope: (p?.scope === "me" || p?.scope === "team" || p?.scope === "global") ? p.scope : "me",
     };
   } catch {
     return defaultSettings;
@@ -98,8 +102,16 @@ export const TickerSettingsProvider = ({ children }: { children: React.ReactNode
     });
   };
 
+  const setScope = (scope: "me" | "team" | "global") => {
+    setSettings((prev) => {
+      const next = { ...prev, scope };
+      saveSettings(next);
+      return next;
+    });
+  };
+
   const value = React.useMemo<Ctx>(
-    () => ({ settings, setModules, setWeatherCity, setGeo, setCustomMessage }),
+    () => ({ settings, setModules, setWeatherCity, setGeo, setCustomMessage, setScope }),
     [settings]
   );
 

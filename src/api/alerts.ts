@@ -8,6 +8,7 @@ export type AlertItem = {
   severity: "critical" | "warning" | "info";
   short: string;
   source: "rule";
+  meta?: Record<string, number | string | null>;
 };
 
 export type AlertsResponse = { items: AlertItem[] };

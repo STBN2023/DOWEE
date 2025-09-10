@@ -17,6 +17,7 @@ type RawItem = {
   severity: "critical" | "warning" | "info"
   short: string
   source: "rule"
+  meta?: Record<string, number | string | null>
 }
 type LlmItem = {
   id: string
@@ -43,7 +44,6 @@ serve(async (req) => {
   const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } })
   const admin = createClient(supabaseUrl, serviceRole, { global: { headers: { Authorization: `Bearer ${serviceRole}` } } })
 
-  // Auth + orphan
   const { data: userData } = await userClient.auth.getUser()
   if (!userData?.user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } })
   const userId = userData.user.id
@@ -51,12 +51,12 @@ serve(async (req) => {
   if (empErr) return new Response(JSON.stringify({ error: empErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } })
   if (!empRow) return new Response(JSON.stringify({ error: "Forbidden: orphan session" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } })
 
-  // Get LLM key
+  // LLM key
   const { data: secret } = await admin.from("secrets_llm").select("api_key, provider").eq("id", "openai").maybeSingle()
   const apiKey = (secret as any)?.api_key as string | undefined
   const provider = (secret as any)?.provider as string | undefined
   if (!apiKey || provider !== "openai") {
-    // Fallback to raw alerts if no key
+    // fallback to raw alerts
     const rawRes = await fetch(`${supabaseUrl}/functions/v1/alerts-ticker`, {
       method: "POST",
       headers: { Authorization: authHeader, "Content-Type": "application/json" },
@@ -66,7 +66,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({ items: data.items ?? [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
   }
 
-  // Fetch raw alerts first
+  // Fetch raw enriched alerts
   const rawRes = await fetch(`${supabaseUrl}/functions/v1/alerts-ticker`, {
     method: "POST",
     headers: { Authorization: authHeader, "Content-Type": "application/json" },
@@ -78,15 +78,12 @@ serve(async (req) => {
   }
   const raw = (await rawRes.json()) as { items: RawItem[] }
   const items = raw.items ?? []
-
-  // If nothing to do, return as-is
   if (items.length === 0) {
     return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
   }
 
-  // Call OpenAI to rephrase/prioritize
   const prompt = [
-    { role: "system", content: "Tu es un assistant de priorisation. On te fournit des alertes déjà calculées. Tu dois retourner une liste d’éléments pour un bandeau défilant, en FR, très concis, sans inventer d’informations. Respecte strictement les champs et n’ajoute rien." },
+    { role: "system", content: "Tu es un assistant qui priorise et reformule des alertes projet en français. Tu dois produire des messages très courts, actionnables, et CONSERVER EXACTEMENT les chiffres fournis (jours, pourcentages, euros). N’invente pas de données. Longueur < 100 caractères par message." },
     { role: "user", content: JSON.stringify({
       instructions: {
         language: "fr",
@@ -95,13 +92,13 @@ serve(async (req) => {
         order: ["critical","warning","info"],
         type_priority: ["deadline","budget_days","margin"],
         constraints: [
-          "Ne pas inventer de projets ni de chiffres.",
+          "Conserver les nombres (jours, %, €) EXACTEMENT tels qu’ils sont fournis.",
           "Inclure le code projet au début du message.",
-          "Longueur < 100 caractères par message.",
+          "0 blabla: 1 info clé par item."
         ]
       },
       schema: { type: "array", items: { id: "string from input", short: "string concise message" } },
-      input_items: items
+      input_items: items // short + meta (j_left, budget_pct, margin_eur, margin_pct, etc.)
     }) }
   ]
 
@@ -138,7 +135,6 @@ serve(async (req) => {
     return new Response(JSON.stringify({ items }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
   }
 
-  // Merge LLM short messages back onto items (preserve type/severity)
   const byId = new Map<string, RawItem>()
   items.forEach((it) => byId.set(it.id, it))
   const merged = []

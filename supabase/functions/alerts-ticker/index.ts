@@ -34,6 +34,7 @@ type AlertItem = {
   severity: "critical" | "warning" | "info"
   short: string
   source: "rule"
+  meta?: Record<string, number | string | null>
 }
 
 function normalizeTeamSlug(input?: string | null): "conception" | "créa" | "dev" | null {
@@ -54,6 +55,7 @@ function daysUntil(dueIso: string | null): number | null {
   return Math.floor(diff)
 }
 function round2(n: number) { return Math.round(n * 100) / 100 }
+function eur(n: number) { return `€${round2(n)}` }
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders })
@@ -75,17 +77,14 @@ serve(async (req) => {
   const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } })
   const admin = createClient(supabaseUrl, serviceRole, { global: { headers: { Authorization: `Bearer ${serviceRole}` } } })
 
-  // Auth
   const { data: userData } = await userClient.auth.getUser()
   if (!userData?.user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } })
   const userId = userData.user.id
 
-  // Orphan check
   const { data: empSelf, error: empErr } = await admin.from("employees").select("id, team, role").eq("id", userId).maybeSingle()
   if (empErr) return new Response(JSON.stringify({ error: empErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } })
   if (!empSelf) return new Response(JSON.stringify({ error: "Forbidden: orphan session" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } })
 
-  // Data
   const [
     { data: projects, error: projErr },
     { data: employees, error: emplErr },
@@ -100,7 +99,6 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: msg }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } })
   }
 
-  // Scope filtering
   const activeProjects = (projects ?? []) as ProjectRow[]
   const teamMap = new Map<string, string | null>()
   ;(employees ?? []).forEach((e: any) => teamMap.set((e as EmployeeRow).id, (e as EmployeeRow).team ?? null))
@@ -111,7 +109,6 @@ serve(async (req) => {
   if (scope === "global") {
     for (const p of activeProjects) includedProjectIds.add(p.id)
   } else if (scope === "team") {
-    // employees with same normalized team as current user
     const myTeam = normalizeTeamSlug((empSelf as any).team ?? null)
     const teamEmpIds = new Set<string>()
     for (const e of (employees ?? []) as any[]) {
@@ -140,7 +137,6 @@ serve(async (req) => {
   const filtered = activeProjects.filter((p) => includedProjectIds.has(p.id))
   const projIds = filtered.map((p) => p.id)
 
-  // Cost base: internal costs (€/day) → €/hour
   const { data: costRows } = await admin
     .from("ref_internal_costs")
     .select("rate_conception, rate_crea, rate_dev, effective_from, created_at")
@@ -153,7 +149,6 @@ serve(async (req) => {
   const H = 8
   const HOUR: Record<"conception"|"créa"|"dev", number> = { conception: dayConc / H, "créa": dayCrea / H, dev: dayDev / H }
 
-  // Load actuals/plans
   const [{ data: actuals, error: actErr }, { data: plans, error: planErr }] = await Promise.all([
     admin.from("actual_items").select("project_id, employee_id, minutes").in("project_id", projIds),
     admin.from("plan_items").select("project_id, employee_id, planned_minutes").in("project_id", projIds),
@@ -163,11 +158,9 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: msg }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } })
   }
 
-  // Aggregate per project (scope-filtered employees if applicable)
-  const hoursActual = new Map<string, number>() // project_id -> hours
-  const hoursPlanned = new Map<string, number>() // project_id -> hours
+  const hoursActual = new Map<string, number>()
+  const hoursPlanned = new Map<string, number>()
   const costActual = new Map<string, number>()
-  const costPlanned = new Map<string, number>()
 
   function secOf(empId: string): "conception" | "créa" | "dev" {
     const norm = normalizeTeamSlug(teamMap.get(empId) ?? null) ?? "conception"
@@ -182,7 +175,6 @@ serve(async (req) => {
     costActual.set(r.project_id, (costActual.get(r.project_id) ?? 0) + hrs * rate)
   }
 
-  // If no actuals at all for a project, fallback to plans to estimate
   const projectsWithActuals = new Set<string>()
   for (const k of hoursActual.keys()) projectsWithActuals.add(k)
 
@@ -190,28 +182,29 @@ serve(async (req) => {
     if (allowedEmployeeIds && !allowedEmployeeIds.has(r.employee_id)) continue
     const hrs = (r.planned_minutes ?? 0) / 60
     hoursPlanned.set(r.project_id, (hoursPlanned.get(r.project_id) ?? 0) + hrs)
+    // fallback: si pas d'actuals, on estime le coût depuis le plan
     if (!projectsWithActuals.has(r.project_id)) {
       const rate = HOUR[secOf(r.employee_id)]
       costActual.set(r.project_id, (costActual.get(r.project_id) ?? 0) + hrs * rate)
     }
   }
 
-  // Compute alerts
   const items: AlertItem[] = []
 
   for (const p of filtered) {
     const sold = (p.quote_amount ?? 0) || ((p.budget_conception ?? 0) + (p.budget_crea ?? 0) + (p.budget_dev ?? 0))
     const cost = costActual.get(p.id) ?? 0
-    const margin = sold > 0 ? ((sold - cost) / sold) * 100 : null
+    const marginEur = round2(sold - cost)
+    const marginPct = sold > 0 ? round2((marginEur / sold) * 100) : null
 
     const hoursUsed = hoursActual.get(p.id) ?? 0
     const daysUsed = hoursUsed / H
     const budgetDays = typeof p.effort_days === "number" && isFinite(p.effort_days) ? p.effort_days : null
-    const budgetPct = budgetDays != null && budgetDays > 0 ? (daysUsed / budgetDays) * 100 : null
+    const budgetPct = budgetDays != null && budgetDays > 0 ? round2((daysUsed / budgetDays) * 100) : null
 
     const jLeft = daysUntil(p.due_date)
 
-    // deadline alerts
+    // deadline alerts (avec J+/-)
     if (jLeft != null && jLeft <= 7) {
       const sev: AlertItem["severity"] = jLeft <= 3 ? "critical" : "warning"
       items.push({
@@ -219,43 +212,44 @@ serve(async (req) => {
         project: { id: p.id, code: p.code, name: p.name },
         type: "deadline",
         severity: sev,
-        short: `${p.code} — échéance J${jLeft >= 0 ? "-" + jLeft : "+" + Math.abs(jLeft)}`,
+        short: `${p.code} — Échéance ${jLeft >= 0 ? "J-" + jLeft : "J+" + Math.abs(jLeft)}`,
         source: "rule",
+        meta: { j_left: jLeft, due_date: p.due_date },
       })
     }
 
-    // budget days alerts
+    // budget days alerts (avec reste)
     if (budgetPct != null && budgetDays != null) {
-      if (budgetPct >= 100) {
-        const sev: AlertItem["severity"] = budgetPct >= 110 ? "critical" : "warning"
+      if (budgetPct >= 85) {
+        const sev: AlertItem["severity"] = budgetPct >= 100 ? (budgetPct >= 110 ? "critical" : "warning") : "warning"
+        const rest = round2(budgetDays - daysUsed)
         items.push({
           id: `budget:${p.id}`,
           project: { id: p.id, code: p.code, name: p.name },
           type: "budget_days",
           severity: sev,
-          short: `${p.code} — budget jours ${round2(budgetPct)}% (${round2(daysUsed)}j/${budgetDays}j)`,
+          short: `${p.code} — Budget: ${daysUsed.toFixed(1)}j/${budgetDays}j (${budgetPct.toFixed(0)}%) · Reste ${rest.toFixed(1)}j`,
           source: "rule",
+          meta: { days_used: round2(daysUsed), budget_days: budgetDays, budget_pct: budgetPct, rest_days: rest },
         })
       }
     }
 
-    // margin alerts
-    if (margin != null) {
-      if (margin < 15) {
-        const sev: AlertItem["severity"] = margin < 5 ? "critical" : "warning"
-        items.push({
-          id: `margin:${p.id}`,
-          project: { id: p.id, code: p.code, name: p.name },
-          type: "margin",
-          severity: sev,
-          short: `${p.code} — marge ${round2(margin)}%`,
-          source: "rule",
-        })
-      }
+    // margin alerts (avec €)
+    if (marginPct != null && marginPct < 20) {
+      const sev: AlertItem["severity"] = marginPct <= 0 ? "critical" : (marginPct < 10 ? "critical" : "warning")
+      items.push({
+        id: `margin:${p.id}`,
+        project: { id: p.id, code: p.code, name: p.name },
+        type: "margin",
+        severity: sev,
+        short: `${p.code} — Marge ${marginPct.toFixed(0)}% (${eur(marginEur)})`,
+        source: "rule",
+        meta: { margin_pct: marginPct, margin_eur: marginEur, sold_ht: sold, cost_realized: cost },
+      })
     }
   }
 
-  // order: critical → warning → info; inside: deadline, budget, margin
   const orderType = { deadline: 0, budget_days: 1, margin: 2 } as Record<AlertItem["type"], number>
   const orderSev = { critical: 0, warning: 1, info: 2 } as Record<AlertItem["severity"], number>
   items.sort((a, b) => {

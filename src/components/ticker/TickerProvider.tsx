@@ -7,6 +7,13 @@ import {
   fetchWeatherByCoordsWeatherAPI,
   type TickerItem,
 } from "@/api/tickerExtras";
+import { getTimeCostOverview } from "@/api/timeCost";
+
+function eur(n: number | null | undefined) {
+  if (n == null) return "—";
+  try { return n.toLocaleString("fr-FR", { style: "currency", currency: "EUR" }); }
+  catch { return `${n} €`; }
+}
 
 type TickerContextValue = {
   items: TickerItem[];
@@ -41,6 +48,14 @@ export const TickerProvider = ({ children }: { children: React.ReactNode }) => {
     });
   }, []);
 
+  const normTeam = React.useCallback((t?: string | null) => {
+    if (!t) return "conception";
+    const base = t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (base === "crea" || base === "creation") return "créa";
+    if (base === "dev" || base === "developpement" || base === "developement") return "dev";
+    return "conception";
+  }, []);
+
   const refresh = React.useCallback(async () => {
     setLoading(true);
     try {
@@ -48,15 +63,72 @@ export const TickerProvider = ({ children }: { children: React.ReactNode }) => {
 
       // Alertes: uniquement si connecté
       if (!authLoading && session && employee && settings.modules.alerts) {
+        const scope = settings.scope || "me";
         promises.push(
-          getAlerts("global", 40)
+          getAlerts(scope, 40)
             .then((r) =>
               (r.items ?? []).map((it) => ({
-                id: String(it.id),
-                short: String(it.short),
-                severity: (it.severity as any) || "info",
+                id: String((it as any).id),
+                short: String((it as any).short),
+                severity: ((it as any).severity as any) || "info",
               }))
             )
+            .catch(() => [])
+        );
+
+        // Baro-métriques (heures & coûts) hebdo selon scope
+        promises.push(
+          getTimeCostOverview()
+            .then((tc) => {
+              const out: TickerItem[] = [];
+              if (scope === "global") {
+                const hp = tc.global.hours_planned ?? 0;
+                const ha = tc.global.hours_actual ?? 0;
+                const cp = tc.global.cost_planned ?? 0;
+                const ca = tc.global.cost_actual ?? 0;
+                out.push({
+                  id: "baro-global-hours",
+                  short: `Semaine (Global) — Heures: ${hp.toFixed(1)}h planifié vs ${ha.toFixed(1)}h réel`,
+                  severity: "info",
+                });
+                out.push({
+                  id: "baro-global-cost",
+                  short: `Semaine (Global) — Coût: ${eur(cp)} planifié vs ${eur(ca)} réel`,
+                  severity: "info",
+                });
+              } else if (scope === "team") {
+                const t = normTeam(employee?.team ?? null);
+                const agg = tc.byTeam.find((x) => x.team === t);
+                if (agg) {
+                  out.push({
+                    id: `baro-team-hours-${t}`,
+                    short: `Semaine (${t}) — Heures: ${agg.hours_planned.toFixed(1)}h planifié vs ${agg.hours_actual.toFixed(1)}h réel`,
+                    severity: "info",
+                  });
+                  out.push({
+                    id: `baro-team-cost-${t}`,
+                    short: `Semaine (${t}) — Coût: ${eur(agg.cost_planned)} planifié vs ${eur(agg.cost_actual)} réel`,
+                    severity: "info",
+                  });
+                }
+              } else {
+                const hp = tc.me.hours_planned ?? 0;
+                const ha = tc.me.hours_actual ?? 0;
+                const cp = tc.me.cost_planned ?? 0;
+                const ca = tc.me.cost_actual ?? 0;
+                out.push({
+                  id: "baro-me-hours",
+                  short: `Semaine (Moi) — Heures: ${hp.toFixed(1)}h planifié vs ${ha.toFixed(1)}h réel`,
+                  severity: "info",
+                });
+                out.push({
+                  id: "baro-me-cost",
+                  short: `Semaine (Moi) — Coût: ${eur(cp)} planifié vs ${eur(ca)} réel`,
+                  severity: "info",
+                });
+              }
+              return out;
+            })
             .catch(() => [])
         );
       }
@@ -123,15 +195,17 @@ export const TickerProvider = ({ children }: { children: React.ReactNode }) => {
     settings.lon,
     settings.weatherCity,
     settings.customMessage,
+    settings.scope,
     askBrowserPosition,
     setGeo,
+    normTeam,
   ]);
 
   React.useEffect(() => {
     refresh();
   }, [refresh]);
 
-  // Rafraîchissement périodique (si connecté ou non)
+  // Rafraîchissement périodique
   React.useEffect(() => {
     const id = setInterval(refresh, 5 * 60 * 1000);
     return () => clearInterval(id);

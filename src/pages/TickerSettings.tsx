@@ -8,6 +8,7 @@ import { useTickerSettings } from "@/context/TickerSettingsContext";
 import { useTicker } from "@/components/ticker/TickerProvider";
 import { Info, Navigation } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const Row = ({ children }: { children: React.ReactNode }) => (
   <div className="flex items-center justify-between rounded-md border border-[#BFBFBF] bg-white px-3 py-2">
@@ -16,7 +17,7 @@ const Row = ({ children }: { children: React.ReactNode }) => (
 );
 
 const TickerSettingsPage: React.FC = () => {
-  const { settings, setModules, setWeatherCity, setGeo, setCustomMessage } = useTickerSettings();
+  const { settings, setModules, setWeatherCity, setGeo, setCustomMessage, setScope } = useTickerSettings();
   const { refresh } = useTicker();
 
   const [city, setCity] = React.useState(settings.weatherCity);
@@ -80,10 +81,30 @@ const TickerSettingsPage: React.FC = () => {
             <div className="flex items-start gap-2">
               <Info className="mt-0.5 h-4 w-4 text-[#F2994A]" />
               <div>
-                Configurez la météo (WeatherAPI) et définissez un message personnalisé diffusé en continu.
+                Configurez la météo (WeatherAPI), le message personnalisé et la portée des alertes (Moi/Équipe/Global).
               </div>
             </div>
           </div>
+
+          {/* Scope Bandeau */}
+          <Row>
+            <div className="flex items-center gap-3">
+              <Label className="text-[#214A33]">Portée des alertes</Label>
+              <span className="text-xs text-[#214A33]/60">choix du périmètre affiché</span>
+            </div>
+            <div className="w-[220px]">
+              <Select value={settings.scope} onValueChange={(v) => setScope(v as any)}>
+                <SelectTrigger className="bg-white border-[#BFBFBF] text-[#214A33]">
+                  <SelectValue placeholder="Scope" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="me">Moi</SelectItem>
+                  <SelectItem value="team">Équipe</SelectItem>
+                  <SelectItem value="global">Global</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </Row>
 
           {/* Alertes */}
           <Row>
