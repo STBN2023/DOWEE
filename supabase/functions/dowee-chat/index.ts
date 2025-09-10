@@ -13,24 +13,17 @@ type Payload = { messages: Msg[] }
 function systemPrompt() {
   return [
     "Tu es Dowee Bot, assistant concis français.",
-    "Tu réponds UNIQUEMENT d'après le CONTEXTE fourni (guide utilisateur) et/ou les données disponibles côté app.",
-    "Si le guide ne couvre pas la question, dis-le clairement et propose de créer une recommandation.",
-    "Style: direct, phrases courtes; listes succinctes si nécessaire; pas d'hallucination."
+    "Tu adaptes tes réponses au rôle de l'utilisateur (admin, manager, user).",
+    "Tu réponds UNIQUEMENT d'après le CONTEXTE (métriques, données de l'app, guide) fourni.",
+    "Tu proposes systématiquement des actions concrètes si c'est pertinent.",
+    "Style: direct, puces courtes, pas d'hallucination.",
   ].join("\n")
 }
 
 function normalize(s: string) {
-  return s
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
+  return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim()
 }
-
-function includesAll(haystack: string, needles: string[]) {
-  return needles.every((k) => haystack.includes(k))
-}
+function includesAll(haystack: string, needles: string[]) { return needles.every((k) => haystack.includes(k)) }
 
 function quickNavAnswer(question: string): string | null {
   const q = normalize(question)
@@ -55,10 +48,8 @@ function quickNavAnswer(question: string): string | null {
   return null
 }
 
-// --- Score (explication) ---
-function isScoreHow(q: string) {
-  return q.includes("score") && (q.includes("calcul") || q.includes("comment") || q.includes("formule"))
-}
+// ---- Score: explication / exemple
+function isScoreHow(q: string) { return q.includes("score") && (q.includes("calcul") || q.includes("comment") || q.includes("formule")) }
 function answerScoreHow() {
   return [
     "Calcul du score projet:",
@@ -67,14 +58,10 @@ function answerScoreHow() {
     "- S_urgence: B = jours restants / effort (j). B≤0→100; 0<B<1→90; 1–3→60; ≥3→20 (20%).",
     "- S_récurrence: 0–100 (10%).",
     "- S_strat: 0 / 50 / 100 (10%).",
-    "Score = min(100, (0,25*S_client + 0,35*S_marge + 0,20*S_urgence + 0,10*S_récurrence + 0,10*S_strat) × (×1,15 si client Star))."
+    "Score = min(100, (0,25*S_client + 0,35*S_marge + 0,20*S_urgence + 0,10*S_récurrence + 0,10*S_strat) × (×1,15 si client Star)).",
   ].join("\n")
 }
-
-// --- Score (exemple/générique) ---
-function isScoreExample(q: string) {
-  return q.includes("exemple") && q.includes("score")
-}
+function isScoreExample(q: string) { return q.includes("exemple") && q.includes("score") }
 function sClient(segment?: string | null): number {
   if (!segment) return 50
   const s = segment.toLowerCase()
@@ -113,33 +100,69 @@ function extractProjectCode(text: string): string | null {
   return m ? m[1].toUpperCase() : null
 }
 function simpleScoreExplanationWithExample(): string {
-  const s_client = 50  // client normal
-  const s_marge = sMarge(30) // 30% → 60 + 2*(10) = 80
-  const s_urg = sUrgence(2, 8) // 2 jours restants / 8j d’effort → B=0,25 → 90
-  const s_rec = 0, s_strat = 0
-  const calc = clamp100(round2(0.25*s_client + 0.35*s_marge + 0.20*s_urg + 0.10*s_rec + 0.10*s_strat))
+  const sc = 50
+  const sm = sMarge(30)
+  const su = sUrgence(2, 8)
+  const calc = clamp100(round2(0.25*sc + 0.35*sm + 0.20*su))
   return [
     "En clair:",
-    "1) On combine 5 notes: client (25%), marge (35%), urgence (20%), récurrence (10%), stratégie (10%).",
-    "2) Plus la marge est haute et l’échéance proche, plus le score monte.",
+    "1) 5 notes: client (25%), marge (35%), urgence (20%), récurrence (10%), stratégie (10%).",
+    "2) Plus la marge est haute et l’échéance proche, plus la note monte.",
     "3) Client “Star” ajoute un bonus ×1,15.",
-    `Exemple: client “Normal” (50), marge 30% → 80, urgence (2j restants/8j) → 90 ⇒ score ≈ ${Math.round(calc)}.`
+    `Exemple: Normal=50, marge=30% → 80, urgence (2j/8j) → 90 ⇒ score ≈ ${Math.round(calc)}.`,
   ].join("\n")
+}
+
+// ---- Intent détection “analyse / obligations / enjeux / priorités”
+function isAnalysisIntent(q: string) {
+  return (
+    q.includes("analyse") || q.includes("analyser") || q.includes("interprete") || q.includes("interpret") ||
+    q.includes("enjeu") || q.includes("obligation") || q.includes("priorite") || q.includes("priorité") ||
+    q.includes("que faire") || (q.includes("quoi") && q.includes("faire")) || q.includes("conseil")
+  )
+}
+
+function roleAdvice(role: string | null | undefined) {
+  const r = (role || "user").toLowerCase()
+  if (r === "admin") {
+    return [
+      "- Surveille la charge globale (écart planifié vs réel) et le coût hebdo.",
+      "- Mets en pause ou re-planifie les projets en dépassement durable.",
+      "- Garantis la complétude des saisies (journées validées).",
+    ]
+  }
+  if (r === "manager") {
+    return [
+      "- Vérifie l’écart heures planifiées/réelles dans ton équipe.",
+      "- Réaffecte si surcharge ou sous-charge; remonte les risques échéance.",
+      "- Encourage la validation quotidienne des journées.",
+    ]
+  }
+  return [
+    "- Valide ta journée chaque soir.",
+    "- Priorise les projets à score élevé et proches de l’échéance.",
+    "- Renseigne tes heures pour refléter le réel.",
+  ]
+}
+
+function formatEur(n: number | null | undefined) {
+  if (n == null || !isFinite(n as number)) return "—"
+  return `${Math.round(n as number)} €`
 }
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders })
-  if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } })
-  }
+  if (req.method !== "POST") return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } })
 
   const authHeader = req.headers.get("Authorization")
   if (!authHeader) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } })
 
   const body = (await req.json().catch(() => ({}))) as Partial<Payload>
   const msgs = (body?.messages || []) as Msg[]
-  const last = msgs.slice().reverse().find(m => m.role === "user")?.content?.slice(0, 2000) || ""
+  const last = msgs.slice().reverse().find((m) => m.role === "user")?.content?.slice(0, 2000) || ""
   if (!last.trim()) return new Response(JSON.stringify({ error: "Empty query" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } })
+  const q = normalize(last)
+  const prevAssistant = msgs.slice().reverse().find((m) => m.role === "assistant")?.content || ""
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!
@@ -148,41 +171,37 @@ serve(async (req) => {
   const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } })
   const admin = createClient(supabaseUrl, serviceRole, { global: { headers: { Authorization: `Bearer ${serviceRole}` } } })
 
-  // Auth + orphan check
+  // Auth + profil
   const { data: userData } = await userClient.auth.getUser()
   if (!userData?.user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } })
   const userId = userData.user.id
-  const { data: emp } = await admin.from("employees").select("id").eq("id", userId).maybeSingle()
-  if (!emp) return new Response(JSON.stringify({ error: "Forbidden: orphan session" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } })
-
-  const q = normalize(last)
-  const prevAssistant = msgs.slice().reverse().find(m => m.role === "assistant")?.content || ""
+  const { data: me } = await admin.from("employees").select("id, role, team").eq("id", userId).maybeSingle()
+  if (!me) return new Response(JSON.stringify({ error: "Forbidden: orphan session" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } })
+  const myRole = (me as any)?.role ?? "user"
+  const myTeam = (me as any)?.team ?? null
 
   // 1) Navigation rapide
   const nav = quickNavAnswer(q)
-  if (nav) {
-    return new Response(JSON.stringify({ answer: nav, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
-  }
+  if (nav) return new Response(JSON.stringify({ answer: nav, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
 
-  // 2) Explication du score (technique)
+  // 2) Score — explication
   if (isScoreHow(q)) {
     return new Response(JSON.stringify({ answer: answerScoreHow(), citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
   }
 
-  // 2bis) “Explique simplement” (détection follow‑up après une réponse sur le score)
+  // 2bis) “Explique simplement” la formule (follow‑up)
   const askSimple = (q.includes("explique") || q.includes("expliquer") || q.includes("vulgaris") || q.includes("simple")) &&
     /calcul du score|s_client|s_marge|score ≈|score ~=|score ≃/i.test(prevAssistant || "")
   if (askSimple) {
     return new Response(JSON.stringify({ answer: simpleScoreExplanationWithExample(), citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
   }
 
-  // 3) Exemple de score (générique ou par projet)
+  // 3) Score — exemple (spécifique par code si fourni, sinon générique)
   if (isScoreExample(q)) {
     const code = extractProjectCode(last)
     if (code) {
       const resp = await fetch(`${supabaseUrl}/functions/v1/project-scoring`, {
-        method: "POST",
-        headers: { Authorization: authHeader, "Content-Type": "application/json" },
+        method: "POST", headers: { Authorization: authHeader, "Content-Type": "application/json" },
         body: JSON.stringify({ action: "list" }),
       })
       if (resp.ok) {
@@ -193,12 +212,14 @@ serve(async (req) => {
           const sm = sMarge(item.margin_pct ?? null)
           const dLeft = daysLeft(item.due_date ?? null)
           const su = sUrgence(dLeft, item.effort_days ?? null)
-          const calc = clamp100(round2(0.25*sc + 0.35*sm + 0.20*su))
+          const mult = item.star ? 1.15 : 1
+          const calc = clamp100(round2((0.25*sc + 0.35*sm + 0.20*su) * mult))
           const lines = [
             `Exemple sur ${item.code} — ${item.name}:`,
             `- Segment: ${String(item.segment ?? "Normal")} → S_client=${Math.round(sc)}`,
             `- Marge: ${item.margin_pct == null ? "—" : `${Math.round(item.margin_pct)}%`} → S_marge=${Math.round(sm)}`,
             `- Urgence: jours restants=${dLeft ?? "?"}, effort=${item.effort_days ?? "?"} → S_urgence=${Math.round(su)}`,
+            `- Bonus Star: ${item.star ? "oui (×1,15)" : "non"}`,
             `Score ≈ ${Math.round(calc)}.`,
           ]
           return new Response(JSON.stringify({ answer: lines.join("\n"), citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
@@ -208,16 +229,13 @@ serve(async (req) => {
     return new Response(JSON.stringify({ answer: simpleScoreExplanationWithExample(), citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
   }
 
-  // 4) Projets prioritaires (top scores)
+  // 4) Top projets prioritaires
   if (q.includes("prioritair") || q.includes("projet prioritaire") || q.includes("top projet") || (q.includes("quel") && q.includes("projet") && (q.includes("priorite") || q.includes("prioritair")))) {
     const resp = await fetch(`${supabaseUrl}/functions/v1/project-scoring`, {
-      method: "POST",
-      headers: { Authorization: authHeader, "Content-Type": "application/json" },
+      method: "POST", headers: { Authorization: authHeader, "Content-Type": "application/json" },
       body: JSON.stringify({ action: "list" }),
     })
-    if (!resp.ok) {
-      return new Response(JSON.stringify({ answer: "Impossible d’obtenir les scores pour l’instant.", citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
-    }
+    if (!resp.ok) return new Response(JSON.stringify({ answer: "Impossible d’obtenir les scores pour l’instant.", citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
     const data = await resp.json().catch(() => ({ scores: [] }))
     let scores: any[] = (data?.scores || []) as any[]
     if (q.includes("mes") || q.includes("moi") || q.includes("mon")) {
@@ -227,28 +245,22 @@ serve(async (req) => {
     }
     scores.sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
     const top = scores.slice(0, 3)
-    if (top.length === 0) {
-      return new Response(JSON.stringify({ answer: "Aucun projet prioritaire trouvé.", citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
-    }
+    if (top.length === 0) return new Response(JSON.stringify({ answer: "Aucun projet prioritaire trouvé.", citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
     const lines = top.map((s: any, i: number) => `${i+1}. ${s.code} — ${s.name} (score ${Math.round(s.score)})`)
     const prefix = (q.includes("mes") || q.includes("moi") || q.includes("mon")) ? "Top priorités (mes projets):" : "Top priorités (global):"
     return new Response(JSON.stringify({ answer: [prefix, ...lines].join("\n"), citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
   }
 
-  // 5) Heures restantes (code ou déduction)
+  // 5) Heures restantes (par projet ou sur mon projet)
   if ((q.includes("heure") || q.includes("heures")) && (q.includes("reste") || q.includes("restant"))) {
     const code = extractProjectCode(last)
     if (code) {
       const { data: prj } = await admin.from("projects").select("id, code, name, effort_days").eq("code", code).maybeSingle()
-      if (!prj) {
-        return new Response(JSON.stringify({ answer: `Projet ${code} introuvable. Donne un code du type CLIENT-YYYY-NNN.`, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
-      }
+      if (!prj) return new Response(JSON.stringify({ answer: `Projet ${code} introuvable. Donne un code du type CLIENT-YYYY-NNN.`, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
       const projectId = (prj as any).id
-      const projectLabel = `${(prj as any).code} — ${(prj as any).name}`
+      const label = `${(prj as any).code} — ${(prj as any).name}`
       const effortDays = (prj as any).effort_days as number | null
-      if (effortDays == null) {
-        return new Response(JSON.stringify({ answer: `${projectLabel}: effort (jours) non défini; impossible de calculer les heures restantes.`, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
-      }
+      if (effortDays == null) return new Response(JSON.stringify({ answer: `${label}: effort (jours) non défini.`, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
       const budgetH = effortDays * 8
       const { data: act } = await admin.from("actual_items").select("minutes").eq("project_id", projectId)
       let usedH = ((act || []) as any[]).reduce((acc, r) => acc + Number(r.minutes || 0), 0) / 60
@@ -257,13 +269,11 @@ serve(async (req) => {
         usedH = ((plans || []) as any[]).reduce((acc, r) => acc + Number(r.planned_minutes || 0), 0) / 60
       }
       const remaining = Math.max(0, budgetH - usedH)
-      return new Response(JSON.stringify({ answer: `${projectLabel}: budget ${budgetH.toFixed(1)} h, réalisé ${usedH.toFixed(1)} h → reste ${remaining.toFixed(1)} h.`, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
+      return new Response(JSON.stringify({ answer: `${label}: budget ${budgetH.toFixed(1)} h, réalisé ${usedH.toFixed(1)} h → reste ${remaining.toFixed(1)} h.`, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
     } else {
       const { data: pe } = await admin.from("project_employees").select("project_id").eq("employee_id", userId)
       const myIds = Array.from(new Set((pe || []).map((r: any) => r.project_id)))
-      if (myIds.length === 0) {
-        return new Response(JSON.stringify({ answer: "Aucun projet assigné. Donne un code projet (ex: ACME-2025-001).", citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
-      }
+      if (myIds.length === 0) return new Response(JSON.stringify({ answer: "Aucun projet assigné. Donne un code projet (ex: ACME-2025-001).", citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
       if (myIds.length > 1) {
         const { data: projs } = await admin.from("projects").select("code, name").in("id", myIds)
         const list = (projs || []).map((p: any) => `• ${p.code} — ${p.name}`).join("\n")
@@ -271,9 +281,7 @@ serve(async (req) => {
       }
       const { data: prj } = await admin.from("projects").select("id, code, name, effort_days").eq("id", myIds[0]).maybeSingle()
       if (!prj) return new Response(JSON.stringify({ answer: "Projet introuvable.", citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
-      const effortDays = (prj as any).effort_days as number | null
-      if (effortDays == null) return new Response(JSON.stringify({ answer: `${(prj as any).code} — ${(prj as any).name}: effort (jours) non défini.`, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
-      const budgetH = effortDays * 8
+      const budgetH = ((prj as any).effort_days ?? 0) * 8
       const { data: act } = await admin.from("actual_items").select("minutes").eq("project_id", (prj as any).id)
       let usedH = ((act || []) as any[]).reduce((acc, r) => acc + Number(r.minutes || 0), 0) / 60
       if (!act || act.length === 0) {
@@ -285,22 +293,13 @@ serve(async (req) => {
     }
   }
 
-  // 6) Chiffres clés dashboards (hebdo)
+  // 6) KPI hebdo synthèse
   if ((q.includes("chiffre") && (q.includes("cle") || q.includes("cl"))) || q.includes("kpi") || (q.includes("dashboard") && (q.includes("resume") || q.includes("synthese")))) {
-    const tcRes = await fetch(`${supabaseUrl}/functions/v1/time-cost-overview`, {
-      method: "POST",
-      headers: { Authorization: authHeader, "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "overview" }),
-    })
-    const metRes = await fetch(`${supabaseUrl}/functions/v1/metrics-overview`, {
-      method: "POST",
-      headers: { Authorization: authHeader, "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "overview" }),
-    })
-
-    if (!tcRes.ok || !metRes.ok) {
-      return new Response(JSON.stringify({ answer: "Impossible de récupérer les chiffres clés pour l’instant.", citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
-    }
+    const [tcRes, metRes] = await Promise.all([
+      fetch(`${supabaseUrl}/functions/v1/time-cost-overview`, { method: "POST", headers: { Authorization: authHeader, "Content-Type": "application/json" }, body: JSON.stringify({ action: "overview" }) }),
+      fetch(`${supabaseUrl}/functions/v1/metrics-overview`, { method: "POST", headers: { Authorization: authHeader, "Content-Type": "application/json" }, body: JSON.stringify({ action: "overview" }) }),
+    ])
+    if (!tcRes.ok || !metRes.ok) return new Response(JSON.stringify({ answer: "Impossible de récupérer les chiffres clés pour l’instant.", citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
     const tc = await tcRes.json().catch(() => null) as any
     const met = await metRes.json().catch(() => null) as any
 
@@ -311,7 +310,6 @@ serve(async (req) => {
     const ca = tc?.global?.cost_actual ?? 0
     const mhp = tc?.me?.hours_planned ?? 0
     const mha = tc?.me?.hours_actual ?? 0
-
     const total = met?.global?.nb_projects_total ?? 0
     const active = met?.global?.nb_projects_active ?? 0
     const onhold = met?.global?.nb_projects_onhold ?? 0
@@ -320,7 +318,7 @@ serve(async (req) => {
       `Période: ${range}`,
       `Projets: ${total} total • ${active} actifs • ${onhold} en pause`,
       `Heures (Global): ${hp.toFixed(1)} h planifiées • ${ha.toFixed(1)} h réelles`,
-      `Coûts (Global): ${Math.round(cp)} € planifiés • ${Math.round(ca)} € réels`,
+      `Coûts (Global): ${formatEur(cp)} planifiés • ${formatEur(ca)} réels`,
       `Mes heures: ${mhp.toFixed(1)} h planifiées • ${mha.toFixed(1)} h réelles`,
     ].join("\n")
     return new Response(JSON.stringify({ answer, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
@@ -329,36 +327,145 @@ serve(async (req) => {
   // 7) Statut/validation du jour
   if ((q.includes("valider") || q.includes("validation")) && (q.includes("heure") || q.includes("jour") || q.includes("journee") || q.includes("aujourd"))) {
     const today = new Date()
-    const y = today.getFullYear()
-    const m = String(today.getMonth() + 1).padStart(2, "0")
-    const d = String(today.getDate()).padStart(2, "0")
-    const iso = `${y}-${m}-${d}`
-
+    const iso = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`
     const [{ data: dv }, { data: plans }, { data: actuals }] = await Promise.all([
       userClient.from("day_validations").select("id").eq("employee_id", userId).eq("d", iso).maybeSingle(),
       userClient.from("plan_items").select("id").eq("employee_id", userId).eq("d", iso),
       userClient.from("actual_items").select("id").eq("employee_id", userId).eq("d", iso),
     ])
-
     const plannedCount = (plans ?? []).length
     const actualCount = (actuals ?? []).length
     const validated = !!dv
-
-    let answer = ""
-    if (validated) {
-      answer = `Ta journée (${iso}) est déjà validée.`
-    } else if (plannedCount > 0) {
-      answer = `Tu as ${plannedCount} créneau(x) planifié(s) aujourd’hui (${iso})${actualCount ? ` et ${actualCount} réel(s)` : ""}. Tu peux valider depuis /today.`
-    } else {
-      answer = `Aucun créneau planifié pour aujourd’hui (${iso}). Ouvre /day pour planifier, puis valide.`
-    }
+    const answer = validated
+      ? `Ta journée (${iso}) est déjà validée.`
+      : plannedCount > 0
+        ? `Tu as ${plannedCount} créneau(x) planifié(s) aujourd’hui (${iso})${actualCount ? ` et ${actualCount} réel(s)` : ""}. Tu peux valider depuis /today.`
+        : `Aucun créneau planifié pour aujourd’hui (${iso}). Ouvre /day pour planifier, puis valide.`
     return new Response(JSON.stringify({ answer, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
   }
 
-  // 8) RAG (FTS websearch) + fallback ILIKE + LLM si clé
+  // 8) Analyse/Conseils (rôle + dashboards + priorités + statut)
+  if (isAnalysisIntent(q)) {
+    // Récupérer métriques
+    const [tcRes, metRes, topRes] = await Promise.all([
+      fetch(`${supabaseUrl}/functions/v1/time-cost-overview`, { method: "POST", headers: { Authorization: authHeader, "Content-Type": "application/json" }, body: JSON.stringify({ action: "overview" }) }),
+      fetch(`${supabaseUrl}/functions/v1/metrics-overview`, { method: "POST", headers: { Authorization: authHeader, "Content-Type": "application/json" }, body: JSON.stringify({ action: "overview" }) }),
+      fetch(`${supabaseUrl}/functions/v1/project-scoring`, { method: "POST", headers: { Authorization: authHeader, "Content-Type": "application/json" }, body: JSON.stringify({ action: "list" }) }),
+    ])
+    const today = new Date()
+    const isoToday = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`
+    const [{ data: dv }] = await Promise.all([
+      userClient.from("day_validations").select("id").eq("employee_id", userId).eq("d", isoToday).maybeSingle(),
+    ])
+
+    let tc: any = null, met: any = null, scores: any[] = []
+    if (tcRes.ok) tc = await tcRes.json().catch(() => null)
+    if (metRes.ok) met = await metRes.json().catch(() => null)
+    if (topRes.ok) {
+      const data = await topRes.json().catch(() => ({ scores: [] }))
+      scores = data?.scores || []
+    }
+
+    // Filtrer top selon rôle/user si besoin
+    let top = scores.slice()
+    if (myRole !== "admin") {
+      const { data: pe } = await admin.from("project_employees").select("project_id").eq("employee_id", userId)
+      const mine = new Set((pe || []).map((r: any) => r.project_id))
+      top = top.filter((s) => mine.has(s.project_id))
+    }
+    top.sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
+    top = top.slice(0, 3)
+
+    // Analyse simple (fallback sans LLM)
+    const range = tc?.range ? `${tc.range.start} → ${tc.range.end}` : "semaine en cours"
+    const hp = tc?.global?.hours_planned ?? 0
+    const ha = tc?.global?.hours_actual ?? 0
+    const cp = tc?.global?.cost_planned ?? 0
+    const ca = tc?.global?.cost_actual ?? 0
+    const gapHours = ha - hp // + = surconsommation réelle
+    const gapCost = ca - cp
+
+    const bullets: string[] = []
+    bullets.push(`Période: ${range}`)
+    bullets.push(`Écart heures (Global): ${gapHours >= 0 ? "+" : ""}${gapHours.toFixed(1)} h`)
+    bullets.push(`Écart coût (Global): ${gapCost >= 0 ? "+" : ""}${Math.round(gapCost)} €`)
+    if (myRole !== "admin" && tc?.me) {
+      const mhGap = (tc.me.hours_actual ?? 0) - (tc.me.hours_planned ?? 0)
+      bullets.push(`Mes heures: ${tc.me.hours_planned?.toFixed(1) ?? "0.0"} h planif • ${tc.me.hours_actual?.toFixed(1) ?? "0.0"} h réel (écart ${mhGap >= 0 ? "+" : ""}${mhGap.toFixed(1)} h)`)
+    }
+    if (met?.global) {
+      bullets.push(`Portefeuille: ${met.global.nb_projects_active ?? 0} actifs / ${met.global.nb_projects_onhold ?? 0} en pause`)
+    }
+    if (top.length > 0) {
+      bullets.push(`Priorités: ${top.map((t: any) => `${t.code}(${Math.round(t.score)})`).join(", ")}`)
+    }
+    bullets.push(`Statut journée: ${dv ? "déjà validée" : "à valider"}`)
+
+    // Conseils par rôle
+    const actions = roleAdvice(myRole)
+
+    // LLM configuré ?
+    const { data: secret } = await admin.from("secrets_llm").select("api_key, provider").eq("id", "openai").maybeSingle()
+    const apiKey = (secret as any)?.api_key as string | undefined
+    const provider = (secret as any)?.provider as string | undefined
+
+    if (!apiKey || provider !== "openai") {
+      const answer = [
+        `Analyse (${myRole}):`,
+        ...bullets.map((b) => `- ${b}`),
+        "",
+        "Actions recommandées:",
+        ...actions.map((a) => `- ${a}`),
+      ].join("\n")
+      return new Response(JSON.stringify({ answer, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
+    }
+
+    // Prompt enrichi pour une interprétation plus fine
+    const contextBlocks = [
+      `ROLE: ${myRole}${myTeam ? ` • équipe=${myTeam}` : ""}`,
+      `DASHBOARD: hours_planned=${hp.toFixed(1)}; hours_actual=${ha.toFixed(1)}; cost_planned=${Math.round(cp)}; cost_actual=${Math.round(ca)}; projects_active=${met?.global?.nb_projects_active ?? 0}; projects_onhold=${met?.global?.nb_projects_onhold ?? 0}`,
+      `TOP_PROJECTS: ${top.map((t: any) => `${t.code}|score=${Math.round(t.score)}|name=${t.name}`).join("; ") || "none"}`,
+      `DAY_STATUS: validated=${!!dv}`,
+    ].join("\n")
+
+    const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        temperature: 0.2,
+        messages: [
+          { role: "system", content: systemPrompt() },
+          { role: "user", content: `CONTEXT\n${contextBlocks}\n\nQUESTION\n${last}\n\nOBJECTIF\nFais une synthèse concise (<=8 puces) + 3–5 actions prioritaires, adaptée au rôle.` },
+        ],
+      }),
+    })
+    if (!resp.ok) {
+      const answer = [
+        `Analyse (${myRole}):`,
+        ...bullets.map((b) => `- ${b}`),
+        "",
+        "Actions recommandées:",
+        ...actions.map((a) => `- ${a}`),
+      ].join("\n")
+      return new Response(JSON.stringify({ answer, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
+    }
+    const dataLLM = await resp.json().catch(() => null)
+    const answer = dataLLM?.choices?.[0]?.message?.content ?? [
+      `Analyse (${myRole}):`,
+      ...bullets.map((b) => `- ${b}`),
+      "",
+      "Actions recommandées:",
+      ...actions.map((a) => `- ${a}`),
+    ].join("\n")
+
+    return new Response(JSON.stringify({ answer, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
+  }
+
+  // 9) RAG (guide) + fallback ILIKE + LLM si dispo
   const { data: doc } = await admin.from("kb_documents").select("id, name, version").eq("active", true).order("created_at", { ascending: false }).maybeSingle()
   if (!doc) {
-    const fallback = "Le guide n'est pas encore indexé. Ouvre Admin → Base de connaissance (RAG) et indexe le/les guides (puis active la version)."
+    const fallback = "Le guide n'est pas encore indexé. Ouvre Admin → Base de connaissance (RAG) et indexe/active une version."
     return new Response(JSON.stringify({ answer: fallback, citations: [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } })
   }
 
@@ -368,7 +475,6 @@ serve(async (req) => {
     .eq("document_id", (doc as any).id)
     .textSearch("ts", last, { config: "french", type: "websearch" })
     .limit(5)
-
   let top = (chunksFts ?? []).slice(0, 5)
   if (top.length === 0) {
     const terms = last.split(/\s+/).filter(Boolean).slice(0, 3)
@@ -383,8 +489,6 @@ serve(async (req) => {
   }
 
   const context = top.map((c, i) => `#${i+1} [${(c as any).section ?? "Section"}]\n${((c as any).content ?? "").slice(0, 1200)}`).join("\n\n")
-  const sys = systemPrompt()
-  const finalPrompt = [`CONTEXT:\n${context || "(vide)"}`, "Question:", last].join("\n\n")
 
   const { data: secret } = await admin.from("secrets_llm").select("api_key, provider").eq("id", "openai").maybeSingle()
   const apiKey = (secret as any)?.api_key as string | undefined
@@ -392,10 +496,10 @@ serve(async (req) => {
 
   if (!apiKey || provider !== "openai") {
     const answer = top.length > 0
-      ? `D'après le guide:\n- ${top.map(c => ((c as any).section ?? "Section")).join(" • ")}.\n\n${((top[0] as any).content ?? "").slice(0, 500)}\n\nSi besoin, demandez une recommandation de développement.`
-      : "Le guide ne contient pas d'information pertinente. Souhaitez-vous créer une recommandation de développement ?"
+      ? `D'après le guide:\n- ${top.map((c) => ((c as any).section ?? "Section")).join(" • ")}.\n\n${((top[0] as any).content ?? "").slice(0, 500)}`
+      : "Le guide ne contient pas d'information pertinente."
     return new Response(JSON.stringify({ answer, citations: top.map((c) => ({ section: (c as any).section, snippet: ((c as any).content ?? '').slice(0, 180) })) }), {
-      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }
+      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     })
   }
 
@@ -403,7 +507,14 @@ serve(async (req) => {
     const resp = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "gpt-4o-mini", temperature: 0.2, messages: [{ role: "system", content: sys }, { role: "user", content: finalPrompt }] })
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        temperature: 0.2,
+        messages: [
+          { role: "system", content: systemPrompt() },
+          { role: "user", content: `CONTEXT\n${context || "(vide)"}\n\nQUESTION\n${last}\n\nRÉPONSE\nDonne une réponse concise fidèle au contexte.` },
+        ],
+      }),
     })
     if (!resp.ok) {
       const text = await resp.text()
@@ -412,7 +523,7 @@ serve(async (req) => {
     const dataLLM = await resp.json()
     const answer = dataLLM?.choices?.[0]?.message?.content ?? "Je n'ai pas trouvé d'information suffisante dans le guide."
     return new Response(JSON.stringify({ answer, citations: top.map((c) => ({ section: (c as any).section, snippet: ((c as any).content ?? '').slice(0, 180) })) }), {
-      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }
+      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     })
   } catch (e) {
     return new Response(JSON.stringify({ error: "LLM call failed", message: (e as Error).message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } })
