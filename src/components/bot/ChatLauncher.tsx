@@ -60,7 +60,6 @@ export default function ChatLauncher({
     return () => window.removeEventListener("dowee:bot:ask", askHandler as EventListener);
   }, [onOpenChange]);
 
-  // Accueil via événement — sans ajouter de message, uniquement la carte CTA
   useEffect(() => {
     const welcomeHandler = () => {
       if (session) return;
@@ -75,7 +74,6 @@ export default function ChatLauncher({
     return () => window.removeEventListener("dowee:bot:welcome", welcomeHandler as any);
   }, [session, onOpenChange]);
 
-  // Fallback auto-bienvenue pour éviter la course d’événements au refresh (sans message)
   useEffect(() => {
     if (session) return;
     try {
@@ -94,7 +92,6 @@ export default function ChatLauncher({
     }
   }, [session, onOpenChange]);
 
-  // Bonjour personnalisé après connexion (une fois par session)
   const firstName = useMemo(() => {
     const fn = employee?.first_name?.trim();
     if (fn) return fn;
@@ -134,14 +131,28 @@ export default function ChatLauncher({
   }
 
   async function callAssistant(withMsg: string): Promise<string> {
+    // Nouveau: si non connecté, expliquer clairement qu’il faut se connecter
+    if (!session) {
+      return [
+        "Pour que je puisse répondre avec les infos de l’app (planning, projets, tableaux de bord, guide), vous devez être connecté(e).",
+        "Cliquez sur « Se connecter » en haut à droite, puis reposez votre question.",
+      ].join(" ");
+    }
+
     const custom = onSend?.(withMsg);
     if (custom) return await custom;
-    const history = [...messages, { role: "user", content: withMsg }].map((m) => ({ role: m.role, content: m.content })) as Array<{ role: "user" | "assistant"; content: string }>;
+
+    const history = [...messages, { role: "user", content: withMsg }].map((m) => ({
+      role: m.role,
+      content: m.content,
+    })) as Array<{ role: "user" | "assistant"; content: string }>;
+
     try {
       const res = await doweeChat(history as any);
       return res.answer ?? "Je n’ai pas trouvé d’information pertinente.";
     } catch {
-      return "Je n’ai pas la réponse pour l’instant.";
+      // Si un problème survient malgré la session, message doux
+      return "Je n’arrive pas à récupérer les informations pour l’instant. Réessayez dans un instant ou reconnectez‑vous.";
     }
   }
 
@@ -171,7 +182,10 @@ export default function ChatLauncher({
 
   const dismissedKey = useMemo(() => `dowee.bot.afternoon.dismissed.${todayIso}`, [todayIso]);
   const afternoonPromptKey = useMemo(() => `dowee.bot.afternoon.prompted.${todayIso}`, [todayIso]);
-  const loginPromptKey = useMemo(() => `dowee.bot.login.prompted.${todayIso}.${settings.promptOnLoginIgnoreDismissed ? "ign" : "respect"}`, [todayIso, settings.promptOnLoginIgnoreDismissed]);
+  const loginPromptKey = useMemo(
+    () => `dowee.bot.login.prompted.${todayIso}.${settings.promptOnLoginIgnoreDismissed ? "ign" : "respect"}`,
+    [todayIso, settings.promptOnLoginIgnoreDismissed]
+  );
 
   const runAfternoonCheck = useCallback(
     async (opts?: { ignoreAfternoonFlag?: boolean; ignoreDismissed?: boolean; ignorePrompted?: boolean }) => {
@@ -380,9 +394,7 @@ function Message({ role, content }: { role: "user" | "assistant"; content: strin
   const isUser = role === "user";
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-      <div
-        className={`${isUser ? "bg-[#F2994A] text-white" : "bg-white text-[#214A33]"} max-w-[85%] px-3 py-2 rounded-2xl shadow-sm ring-1 ring-[#BFBFBF] ${isUser ? "rounded-br-sm" : "rounded-bl-sm"}`}
-      >
+      <div className={`${isUser ? "bg-[#F2994A] text-white" : "bg-white text-[#214A33]"} max-w-[85%] px-3 py-2 rounded-2xl shadow-sm ring-1 ring-[#BFBFBF] ${isUser ? "rounded-br-sm" : "rounded-bl-sm"}`}>
         {!isUser && (
           <div className="mb-1 flex items-center gap-2 text-[#6b6b6b] text-xs">
             <RobotHead className="w-4 h-4" /> DoWee
@@ -432,15 +444,8 @@ function Footer({ onSend }: { onSend: (msg: string) => void }) {
         (e.currentTarget as HTMLFormElement).reset();
       }}
     >
-      <input
-        name="msg"
-        placeholder="Pose ta question…"
-        className="flex-1 h-10 rounded-xl border border-[#BFBFBF] px-3 outline-none focus:ring-2 focus:ring-[#214A33] bg-white"
-        autoComplete="off"
-      />
-      <button type="submit" className="h-10 px-3 rounded-xl bg-[#F2994A] text-white hover:bg-[#E38C3F]">
-        Envoyer
-      </button>
+      <input name="msg" placeholder="Pose ta question…" className="flex-1 h-10 rounded-xl border border-[#BFBFBF] px-3 outline-none focus:ring-2 focus:ring-[#214A33] bg-white" autoComplete="off" />
+      <button type="submit" className="h-10 px-3 rounded-xl bg-[#F2994A] text-white hover:bg-[#E38C3F]">Envoyer</button>
     </form>
   );
 }
