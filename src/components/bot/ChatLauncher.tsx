@@ -60,6 +60,7 @@ export default function ChatLauncher({
     return () => window.removeEventListener("dowee:bot:ask", askHandler as EventListener);
   }, [onOpenChange]);
 
+  // Accueil via événement — sans ajouter de message, uniquement la carte CTA
   useEffect(() => {
     const welcomeHandler = () => {
       if (session) return;
@@ -74,6 +75,7 @@ export default function ChatLauncher({
     return () => window.removeEventListener("dowee:bot:welcome", welcomeHandler as any);
   }, [session, onOpenChange]);
 
+  // Fallback auto-bienvenue (sans message)
   useEffect(() => {
     if (session) return;
     try {
@@ -92,6 +94,7 @@ export default function ChatLauncher({
     }
   }, [session, onOpenChange]);
 
+  // Bonjour personnalisé après connexion (une fois par session)
   const firstName = useMemo(() => {
     const fn = employee?.first_name?.trim();
     if (fn) return fn;
@@ -123,7 +126,10 @@ export default function ChatLauncher({
   function cleanAnswer(answer: string, userMsg: string): string {
     let out = answer.replace(/^\s*(tu|vous)\s+as|avez\s+dit\s*:.*$/gim, "").trim();
     const q = userMsg.trim().replace(/\s+/g, " ").toLowerCase();
-    out = out.replace(new RegExp(`^"\\s*${escapeRegExp(q)}\\s*"`), "").replace(new RegExp(`^\\s*${escapeRegExp(q)}\\s*$`, "i"), "").trim();
+    out = out
+      .replace(new RegExp(`^"\\s*${escapeRegExp(q)}\\s*"`), "")
+      .replace(new RegExp(`^\\s*${escapeRegExp(q)}\\s*$`, "i"), "")
+      .trim();
     return out || "Je n’ai pas besoin de répéter la question. Voici la réponse :";
   }
   function escapeRegExp(s: string) {
@@ -131,7 +137,7 @@ export default function ChatLauncher({
   }
 
   async function callAssistant(withMsg: string): Promise<string> {
-    // Nouveau: si non connecté, expliquer clairement qu’il faut se connecter
+    // Si non connecté: message explicite d’invitation à se connecter
     if (!session) {
       return [
         "Pour que je puisse répondre avec les infos de l’app (planning, projets, tableaux de bord, guide), vous devez être connecté(e).",
@@ -151,7 +157,6 @@ export default function ChatLauncher({
       const res = await doweeChat(history as any);
       return res.answer ?? "Je n’ai pas trouvé d’information pertinente.";
     } catch {
-      // Si un problème survient malgré la session, message doux
       return "Je n’arrive pas à récupérer les informations pour l’instant. Réessayez dans un instant ou reconnectez‑vous.";
     }
   }
@@ -212,14 +217,26 @@ export default function ChatLauncher({
         // silencieux
       }
     },
-    [session, employee, settings.afternoonReminderEnabled, dismissedKey, afternoonPromptKey, afternoonCta, todayIso, onOpenChange]
+    [
+      session,
+      employee,
+      settings.afternoonReminderEnabled,
+      dismissedKey,
+      afternoonPromptKey,
+      afternoonCta,
+      todayIso,
+      onOpenChange,
+    ]
   );
 
   useEffect(() => {
     if (session && employee && settings.promptOnLoginEnabled) {
       const already = sessionStorage.getItem(loginPromptKey) === "1";
       if (!already) {
-        runAfternoonCheck({ ignoreAfternoonFlag: true, ignoreDismissed: !!settings.promptOnLoginIgnoreDismissed });
+        runAfternoonCheck({
+          ignoreAfternoonFlag: true,
+          ignoreDismissed: !!settings.promptOnLoginIgnoreDismissed,
+        });
         sessionStorage.setItem(loginPromptKey, "1");
       }
     }
@@ -318,7 +335,7 @@ export default function ChatLauncher({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.98, y: 8 }}
             transition={{ duration: 0.18 }}
-            className="mt-3 w=[min(92vw,380px)] h=[min(70vh,560px)] rounded-2xl bg-[#F7F7F7] shadow-2xl ring-1 ring-[#BFBFBF] overflow-hidden"
+            className="mt-3 w-[min(92vw,380px)] h-[min(70vh,560px)] rounded-2xl bg-[#F7F7F7] shadow-2xl ring-1 ring-[#BFBFBF] overflow-hidden"
           >
             <Header onClose={toggle} />
 
@@ -336,10 +353,18 @@ export default function ChatLauncher({
                   <div className="mb-2 text-sm font-medium text-[#214A33]">Vérifier / valider votre planning du jour ?</div>
                   <div className="text-xs text-[#214A33]/80 mb-3">“Valider aujourd’hui” copie vos créneaux planifiés en heures réelles et marque la journée validée (modifiable ensuite).</div>
                   <div className="flex gap-2">
-                    <button type="button" onClick={onValidateToday} className="inline-flex items-center rounded-md bg-[#F2994A] px-3 py-1.5 text-sm text-white hover:bg-[#E38C3F]">
+                    <button
+                      type="button"
+                      onClick={onValidateToday}
+                      className="inline-flex items-center rounded-md bg-[#F2994A] px-3 py-1.5 text-sm text-white hover:bg-[#E38C3F]"
+                    >
                       Valider aujourd’hui
                     </button>
-                    <button type="button" onClick={onNotNow} className="inline-flex items-center rounded-md border border-[#BFBFBF] bg-white px-3 py-1.5 text-sm text-[#214A33] hover:bg-[#F7F7F7]">
+                    <button
+                      type="button"
+                      onClick={onNotNow}
+                      className="inline-flex items-center rounded-md border border-[#BFBFBF] bg-white px-3 py-1.5 text-sm text-[#214A33] hover:bg-[#F7F7F7]"
+                    >
                       Plus tard
                     </button>
                   </div>
@@ -394,13 +419,19 @@ function Message({ role, content }: { role: "user" | "assistant"; content: strin
   const isUser = role === "user";
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-      <div className={`${isUser ? "bg-[#F2994A] text-white" : "bg-white text-[#214A33]"} max-w-[85%] px-3 py-2 rounded-2xl shadow-sm ring-1 ring-[#BFBFBF] ${isUser ? "rounded-br-sm" : "rounded-bl-sm"}`}>
+      <div
+        className={`${
+          isUser ? "bg-[#F2994A] text-white" : "bg-white text-[#214A33]"
+        } max-w-[85%] px-3 py-2 rounded-2xl shadow-sm ring-1 ring-[#BFBFBF] ${
+          isUser ? "rounded-br-sm" : "rounded-bl-sm"
+        }`}
+      >
         {!isUser && (
           <div className="mb-1 flex items-center gap-2 text-[#6b6b6b] text-xs">
             <RobotHead className="w-4 h-4" /> DoWee
           </div>
         )}
-        <div className="whitespace-pre-wrap text-sm leading-relaxed">{content}</div>
+        <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">{content}</div>
       </div>
     </div>
   );
@@ -444,8 +475,15 @@ function Footer({ onSend }: { onSend: (msg: string) => void }) {
         (e.currentTarget as HTMLFormElement).reset();
       }}
     >
-      <input name="msg" placeholder="Pose ta question…" className="flex-1 h-10 rounded-xl border border-[#BFBFBF] px-3 outline-none focus:ring-2 focus:ring-[#214A33] bg-white" autoComplete="off" />
-      <button type="submit" className="h-10 px-3 rounded-xl bg-[#F2994A] text-white hover:bg-[#E38C3F]">Envoyer</button>
+      <input
+        name="msg"
+        placeholder="Pose ta question…"
+        className="flex-1 h-10 rounded-xl border border-[#BFBFBF] px-3 outline-none focus:ring-2 focus:ring-[#214A33] bg-white"
+        autoComplete="off"
+      />
+      <button type="submit" className="h-10 px-3 rounded-xl bg-[#F2994A] text-white hover:bg-[#E38C3F]">
+        Envoyer
+      </button>
     </form>
   );
 }
