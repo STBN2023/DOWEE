@@ -37,7 +37,7 @@ export default function ChatLauncher({
 
   // Invitations contextuelles
   const [afternoonCta, setAfternoonCta] = useState<boolean>(false);
-  const [welcomeCta, setWelcomeCta] = useState<boolean>(false); // nouveau: accueil avant connexion
+  const [welcomeCta, setWelcomeCta] = useState<boolean>(false); // accueil avant connexion
 
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -70,27 +70,23 @@ export default function ChatLauncher({
       const e = ev as CustomEvent<{ message?: string }>;
       const msg = (e.detail?.message || "").trim();
       if (!msg) return;
-      // ouvrir le bot puis envoyer la question
       setOpen(true);
       onOpenChange?.(true);
-      // léger délai pour laisser le panneau s’ouvrir visuellement
       setTimeout(() => {
         handleSend(msg);
       }, 60);
     };
     window.addEventListener("dowee:bot:ask", askHandler as EventListener);
     return () => window.removeEventListener("dowee:bot:ask", askHandler as EventListener);
-  }, [onOpenChange]); // handleSend est stable via closure ci-dessous
+  }, [onOpenChange]);
 
-  // --- Invitation de bienvenue (avant connexion)
+  // --- Réception de l'événement de bienvenue (déjà en place)
   useEffect(() => {
     const welcomeHandler = () => {
-      // Ne déclencher l'accueil que si non connecté
-      if (session) return;
+      if (session) return; // seulement avant connexion
       setOpen(true);
       setWelcomeCta(true);
       onOpenChange?.(true);
-      // Ajouter un petit message d'accueil en haut
       setMessages((m) => [
         ...m,
         {
@@ -101,6 +97,41 @@ export default function ChatLauncher({
     };
     window.addEventListener("dowee:bot:welcome", welcomeHandler as any);
     return () => window.removeEventListener("dowee:bot:welcome", welcomeHandler as any);
+  }, [session, onOpenChange]);
+
+  // --- Fallback auto-bienvenue pour éviter la course d’événements au refresh
+  useEffect(() => {
+    if (session) return;
+    try {
+      // Afficher une seule fois par session de navigation, et seulement si pas encore montré
+      const SHOWN_KEY = "dowee.bot.welcome.shown";
+      const alreadyShown = sessionStorage.getItem(SHOWN_KEY) === "1";
+      if (!alreadyShown) {
+        sessionStorage.setItem(SHOWN_KEY, "1");
+        setOpen(true);
+        setWelcomeCta(true);
+        onOpenChange?.(true);
+        setMessages((m) => [
+          ...m,
+          {
+            role: "assistant",
+            content: "Bonjour 👋 Souhaitez‑vous découvrir DoWee en 30 secondes ?",
+          },
+        ]);
+      }
+    } catch {
+      // Si sessionStorage indispo, on affiche tout de même
+      setOpen(true);
+      setWelcomeCta(true);
+      onOpenChange?.(true);
+      setMessages((m) => [
+        ...m,
+        {
+          role: "assistant",
+          content: "Bonjour 👋 Souhaitez‑vous découvrir DoWee en 30 secondes ?",
+        },
+      ]);
+    }
   }, [session, onOpenChange]);
 
   function cleanAnswer(answer: string, userMsg: string): string {
@@ -167,7 +198,6 @@ export default function ChatLauncher({
 
   const dismissedKey = useMemo(() => `dowee.bot.afternoon.dismissed.${todayIso}`, [todayIso]);
   const afternoonPromptKey = useMemo(() => `dowee.bot.afternoon.prompted.${todayIso}`, [todayIso]);
-  // IMPORTANT: la clé tient compte du réglage pour ne pas bloquer après changement d’option
   const loginPromptKey = useMemo(
     () => `dowee.bot.login.prompted.${todayIso}.${settings.promptOnLoginIgnoreDismissed ? "ign" : "respect"}`,
     [todayIso, settings.promptOnLoginIgnoreDismissed]
@@ -175,18 +205,16 @@ export default function ChatLauncher({
 
   const runAfternoonCheck = useCallback(
     async (opts?: { ignoreAfternoonFlag?: boolean; ignoreDismissed?: boolean; ignorePrompted?: boolean }) => {
-      if (!session || !employee) return; // attendre que le profil soit prêt
+      if (!session || !employee) return;
       if (!opts?.ignoreAfternoonFlag && !settings.afternoonReminderEnabled) return;
       if (!opts?.ignoreDismissed && localStorage.getItem(dismissedKey) === "1") return;
       if (!opts?.ignorePrompted && sessionStorage.getItem(afternoonPromptKey) === "1") return;
-      // si déjà affiché dans ce rendu
       if (afternoonCta) return;
 
       try {
         const status = await getDayStatus(todayIso);
         if (status?.validated) return;
 
-        // Mémoriser immédiatement pour éviter tout doublon
         sessionStorage.setItem(afternoonPromptKey, "1");
 
         setOpen(true);
@@ -247,7 +275,7 @@ export default function ChatLauncher({
 
   useEffect(() => {
     const delay = scheduleAfternoonCheck();
-    if (delay < 0) return; // désactivé
+    if (delay < 0) return;
 
     const timer = setTimeout(() => {
       runAfternoonCheck();
@@ -288,7 +316,6 @@ export default function ChatLauncher({
   return (
     <div className="fixed bottom-[64px] right-4 z-[1000] select-none">
       <div className="flex items-end gap-3">
-        {/* Bouton robot animé */}
         <motion.button
           type="button"
           aria-label="Assistant DoWee"
@@ -301,7 +328,6 @@ export default function ChatLauncher({
           <span className="absolute -top-1 -right-1 inline-block w-3 h-3 rounded-full bg-[#214A33] shadow-[0_0_0_2px_#F7F7F7]" />
         </motion.button>
 
-        {/* Bulle d'ouverture */}
         <motion.button
           type="button"
           onClick={toggle}
@@ -314,7 +340,6 @@ export default function ChatLauncher({
         </motion.button>
       </div>
 
-      {/* Panneau de chat */}
       <AnimatePresence>
         {open && (
           <motion.div
@@ -338,7 +363,6 @@ export default function ChatLauncher({
               ))}
               {pending && <Typing />}
 
-              {/* CTA validation (après-midi) */}
               {afternoonCta && (
                 <div className="mt-2 rounded-xl border border-[#BFBFBF] bg-white p-3">
                   <div className="mb-2 text-sm font-medium text-[#214A33]">
@@ -366,7 +390,6 @@ export default function ChatLauncher({
                 </div>
               )}
 
-              {/* CTA bienvenue (avant connexion) */}
               {!session && welcomeCta && (
                 <div className="mt-2 rounded-xl border border-[#BFBFBF] bg-white p-3">
                   <div className="mb-2 text-sm font-medium text-[#214A33]">
