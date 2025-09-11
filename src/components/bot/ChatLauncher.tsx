@@ -6,14 +6,6 @@ import { useAuth } from "@/context/AuthContext";
 import { getDayStatus } from "@/api/dayValidation";
 import { useBotSettings } from "@/context/BotSettingsContext";
 
-/**
- * ChatLauncher — DoWee (charte couleur appliquée)
- * Palette:
- *  - Vert foncé: #214A33 (titres, accents)
- *  - Orange doux: #F2994A (actions, CTAs, robot)
- *  - Gris neutre: #BFBFBF (bordures, texte secondaire)
- *  - Blanc crème: #F7F7F7 (fonds)
- */
 export default function ChatLauncher({
   onOpenChange,
   onSend,
@@ -26,13 +18,11 @@ export default function ChatLauncher({
   const { settings } = useBotSettings();
 
   const [open, setOpen] = useState(false);
-  // Retirer le message par défaut → démarrer vide
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [pending, setPending] = useState(false);
 
-  // Invitations contextuelles
   const [afternoonCta, setAfternoonCta] = useState<boolean>(false);
-  const [welcomeCta, setWelcomeCta] = useState<boolean>(false); // accueil avant connexion
+  const [welcomeCta, setWelcomeCta] = useState<boolean>(false);
 
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -46,7 +36,6 @@ export default function ChatLauncher({
     onOpenChange?.(next);
   };
 
-  // Ouverture programmatique simple
   useEffect(() => {
     const openHandler = () => {
       setOpen(true);
@@ -56,7 +45,6 @@ export default function ChatLauncher({
     return () => window.removeEventListener("dowee:bot:open", openHandler as any);
   }, [onOpenChange]);
 
-  // Ouverture + question programmatique
   useEffect(() => {
     const askHandler = (ev: Event) => {
       const e = ev as CustomEvent<{ message?: string }>;
@@ -72,23 +60,22 @@ export default function ChatLauncher({
     return () => window.removeEventListener("dowee:bot:ask", askHandler as EventListener);
   }, [onOpenChange]);
 
-  // Réception de l'événement de bienvenue (avant connexion)
+  // Accueil via événement — sans ajouter de message, uniquement la carte CTA
   useEffect(() => {
     const welcomeHandler = () => {
       if (session) return;
+      try {
+        sessionStorage.setItem("dowee.bot.welcome.shown", "1");
+      } catch {}
       setOpen(true);
       setWelcomeCta(true);
       onOpenChange?.(true);
-      setMessages((m) => [
-        ...m,
-        { role: "assistant", content: "Bonjour 👋 Souhaitez‑vous découvrir DoWee en 30 secondes ?" },
-      ]);
     };
     window.addEventListener("dowee:bot:welcome", welcomeHandler as any);
     return () => window.removeEventListener("dowee:bot:welcome", welcomeHandler as any);
   }, [session, onOpenChange]);
 
-  // Fallback auto-bienvenue pour éviter la course d’événements au refresh
+  // Fallback auto-bienvenue pour éviter la course d’événements au refresh (sans message)
   useEffect(() => {
     if (session) return;
     try {
@@ -99,19 +86,11 @@ export default function ChatLauncher({
         setOpen(true);
         setWelcomeCta(true);
         onOpenChange?.(true);
-        setMessages((m) => [
-          ...m,
-          { role: "assistant", content: "Bonjour 👋 Souhaitez‑vous découvrir DoWee en 30 secondes ?" },
-        ]);
       }
     } catch {
       setOpen(true);
       setWelcomeCta(true);
       onOpenChange?.(true);
-      setMessages((m) => [
-        ...m,
-        { role: "assistant", content: "Bonjour 👋 Souhaitez‑vous découvrir DoWee en 30 secondes ?" },
-      ]);
     }
   }, [session, onOpenChange]);
 
@@ -147,13 +126,9 @@ export default function ChatLauncher({
   function cleanAnswer(answer: string, userMsg: string): string {
     let out = answer.replace(/^\s*(tu|vous)\s+as|avez\s+dit\s*:.*$/gim, "").trim();
     const q = userMsg.trim().replace(/\s+/g, " ").toLowerCase();
-    out = out
-      .replace(new RegExp(`^"\\s*${escapeRegExp(q)}\\s*"`), "")
-      .replace(new RegExp(`^\\s*${escapeRegExp(q)}\\s*$`, "i"), "")
-      .trim();
+    out = out.replace(new RegExp(`^"\\s*${escapeRegExp(q)}\\s*"`), "").replace(new RegExp(`^\\s*${escapeRegExp(q)}\\s*$`, "i"), "").trim();
     return out || "Je n’ai pas besoin de répéter la question. Voici la réponse :";
   }
-
   function escapeRegExp(s: string) {
     return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
@@ -161,12 +136,7 @@ export default function ChatLauncher({
   async function callAssistant(withMsg: string): Promise<string> {
     const custom = onSend?.(withMsg);
     if (custom) return await custom;
-
-    const history = [...messages, { role: "user", content: withMsg }].map((m) => ({
-      role: m.role,
-      content: m.content,
-    })) as Array<{ role: "user" | "assistant"; content: string }>;
-
+    const history = [...messages, { role: "user", content: withMsg }].map((m) => ({ role: m.role, content: m.content })) as Array<{ role: "user" | "assistant"; content: string }>;
     try {
       const res = await doweeChat(history as any);
       return res.answer ?? "Je n’ai pas trouvé d’information pertinente.";
@@ -191,7 +161,6 @@ export default function ChatLauncher({
     }
   }
 
-  // ---------- Rappel / Vérification ----------
   const todayIso = useMemo(() => {
     const now = new Date();
     const y = now.getFullYear();
@@ -202,10 +171,7 @@ export default function ChatLauncher({
 
   const dismissedKey = useMemo(() => `dowee.bot.afternoon.dismissed.${todayIso}`, [todayIso]);
   const afternoonPromptKey = useMemo(() => `dowee.bot.afternoon.prompted.${todayIso}`, [todayIso]);
-  const loginPromptKey = useMemo(
-    () => `dowee.bot.login.prompted.${todayIso}.${settings.promptOnLoginIgnoreDismissed ? "ign" : "respect"}`,
-    [todayIso, settings.promptOnLoginIgnoreDismissed]
-  );
+  const loginPromptKey = useMemo(() => `dowee.bot.login.prompted.${todayIso}.${settings.promptOnLoginIgnoreDismissed ? "ign" : "respect"}`, [todayIso, settings.promptOnLoginIgnoreDismissed]);
 
   const runAfternoonCheck = useCallback(
     async (opts?: { ignoreAfternoonFlag?: boolean; ignoreDismissed?: boolean; ignorePrompted?: boolean }) => {
@@ -232,26 +198,14 @@ export default function ChatLauncher({
         // silencieux
       }
     },
-    [
-      session,
-      employee,
-      settings.afternoonReminderEnabled,
-      dismissedKey,
-      afternoonPromptKey,
-      afternoonCta,
-      todayIso,
-      onOpenChange,
-    ]
+    [session, employee, settings.afternoonReminderEnabled, dismissedKey, afternoonPromptKey, afternoonCta, todayIso, onOpenChange]
   );
 
   useEffect(() => {
     if (session && employee && settings.promptOnLoginEnabled) {
       const already = sessionStorage.getItem(loginPromptKey) === "1";
       if (!already) {
-        runAfternoonCheck({
-          ignoreAfternoonFlag: true,
-          ignoreDismissed: !!settings.promptOnLoginIgnoreDismissed,
-        });
+        runAfternoonCheck({ ignoreAfternoonFlag: true, ignoreDismissed: !!settings.promptOnLoginIgnoreDismissed });
         sessionStorage.setItem(loginPromptKey, "1");
       }
     }
@@ -310,7 +264,6 @@ export default function ChatLauncher({
     onOpenChange?.(false);
   };
 
-  // Pitch à délivrer en cas d'acceptation (avant connexion)
   const PITCH =
     "DoWee, c’est une application de planification et de pilotage qui réduit drastiquement le temps de reporting des équipes. On glisse-dépose ses projets dans une grille hebdo, on valide sa journée en un clic, et on visualise instantanément les charges, coûts et marges par équipe, client ou projet. Le tout avec une superposition Google Agenda, un bot d’assistance et des tableaux de bord clairs. Résultat: moins de friction, plus de visibilité, de meilleures décisions.";
 
@@ -367,22 +320,12 @@ export default function ChatLauncher({
               {afternoonCta && (
                 <div className="mt-2 rounded-xl border border-[#BFBFBF] bg-white p-3">
                   <div className="mb-2 text-sm font-medium text-[#214A33]">Vérifier / valider votre planning du jour ?</div>
-                  <div className="text-xs text-[#214A33]/80 mb-3">
-                    “Valider aujourd’hui” copie vos créneaux planifiés en heures réelles et marque la journée validée (modifiable ensuite).
-                  </div>
+                  <div className="text-xs text-[#214A33]/80 mb-3">“Valider aujourd’hui” copie vos créneaux planifiés en heures réelles et marque la journée validée (modifiable ensuite).</div>
                   <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={onValidateToday}
-                      className="inline-flex items-center rounded-md bg-[#F2994A] px-3 py-1.5 text-sm text-white hover:bg-[#E38C3F]"
-                    >
+                    <button type="button" onClick={onValidateToday} className="inline-flex items-center rounded-md bg-[#F2994A] px-3 py-1.5 text-sm text-white hover:bg-[#E38C3F]">
                       Valider aujourd’hui
                     </button>
-                    <button
-                      type="button"
-                      onClick={onNotNow}
-                      className="inline-flex items-center rounded-md border border-[#BFBFBF] bg-white px-3 py-1.5 text-sm text-[#214A33] hover:bg-[#F7F7F7]"
-                    >
+                    <button type="button" onClick={onNotNow} className="inline-flex items-center rounded-md border border-[#BFBFBF] bg-white px-3 py-1.5 text-sm text-[#214A33] hover:bg-[#F7F7F7]">
                       Plus tard
                     </button>
                   </div>
@@ -438,11 +381,7 @@ function Message({ role, content }: { role: "user" | "assistant"; content: strin
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
-        className={`${
-          isUser ? "bg-[#F2994A] text-white" : "bg-white text-[#214A33]"
-        } max-w-[85%] px-3 py-2 rounded-2xl shadow-sm ring-1 ring-[#BFBFBF] ${
-          isUser ? "rounded-br-sm" : "rounded-bl-sm"
-        }`}
+        className={`${isUser ? "bg-[#F2994A] text-white" : "bg-white text-[#214A33]"} max-w-[85%] px-3 py-2 rounded-2xl shadow-sm ring-1 ring-[#BFBFBF] ${isUser ? "rounded-br-sm" : "rounded-bl-sm"}`}
       >
         {!isUser && (
           <div className="mb-1 flex items-center gap-2 text-[#6b6b6b] text-xs">
@@ -506,7 +445,6 @@ function Footer({ onSend }: { onSend: (msg: string) => void }) {
   );
 }
 
-// --- Icônes et robot ---
 function ChatIcon({ className = "" }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>
