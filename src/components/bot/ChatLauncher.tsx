@@ -137,7 +137,7 @@ export default function ChatLauncher({
   }
 
   async function callAssistant(withMsg: string): Promise<string> {
-    // Si non connecté: message explicite d’invitation à se connecter
+    // Clarifie le besoin de connexion
     if (!session) {
       return [
         "Pour que je puisse répondre avec les infos de l’app (planning, projets, tableaux de bord, guide), vous devez être connecté(e).",
@@ -335,13 +335,14 @@ export default function ChatLauncher({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.98, y: 8 }}
             transition={{ duration: 0.18 }}
-            className="mt-3 w-[min(92vw,380px)] h-[min(70vh,560px)] rounded-2xl bg-[#F7F7F7] shadow-2xl ring-1 ring-[#BFBFBF] overflow-hidden"
+            className="mt-3 w-[min(92vw,380px)] max-h-[min(70vh,560px)] rounded-2xl bg-[#F7F7F7] shadow-2xl ring-1 ring-[#BFBFBF] overflow-hidden flex flex-col"
           >
             <Header onClose={toggle} />
 
             <div
               ref={listRef}
-              className="h-[calc(100%-3.5rem-3.5rem)] overflow-y-auto p-3 bg-gradient-to-b from-[#F7F7F7] to-white space-y-3"
+              className="overflow-y-auto p-3 bg-gradient-to-b from-[#F7F7F7] to-white space-y-3"
+              style={{ maxHeight: "calc(min(70vh, 560px) - 7rem)" }} // 7rem = header (3.5rem) + footer (3.5rem)
             >
               {messages.map((m, i) => (
                 <Message key={i} role={m.role} content={m.content} />
@@ -353,18 +354,10 @@ export default function ChatLauncher({
                   <div className="mb-2 text-sm font-medium text-[#214A33]">Vérifier / valider votre planning du jour ?</div>
                   <div className="text-xs text-[#214A33]/80 mb-3">“Valider aujourd’hui” copie vos créneaux planifiés en heures réelles et marque la journée validée (modifiable ensuite).</div>
                   <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={onValidateToday}
-                      className="inline-flex items-center rounded-md bg-[#F2994A] px-3 py-1.5 text-sm text-white hover:bg-[#E38C3F]"
-                    >
+                    <button type="button" onClick={onValidateToday} className="inline-flex items-center rounded-md bg-[#F2994A] px-3 py-1.5 text-sm text-white hover:bg-[#E38C3F]">
                       Valider aujourd’hui
                     </button>
-                    <button
-                      type="button"
-                      onClick={onNotNow}
-                      className="inline-flex items-center rounded-md border border-[#BFBFBF] bg-white px-3 py-1.5 text-sm text-[#214A33] hover:bg-[#F7F7F7]"
-                    >
+                    <button type="button" onClick={onNotNow} className="inline-flex items-center rounded-md border border-[#BFBFBF] bg-white px-3 py-1.5 text-sm text-[#214A33] hover:bg-[#F7F7F7]">
                       Plus tard
                     </button>
                   </div>
