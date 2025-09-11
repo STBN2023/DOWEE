@@ -207,6 +207,19 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
     setGError(null);
     try {
       const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
+
+      // Gestion explicite des sessions expirées/permissions
+      if (res.status === 401 || res.status === 403) {
+        setGError("Session Google expirée ou permissions insuffisantes. Cliquez sur « Connecter Google Agenda » pour renouveler l’accès.");
+        setGToken(null); // force l’UI à proposer la reconnexion
+        setGCellEvents({});
+        setGCellTitles({});
+        setGAllDayByIso({});
+        setGAllDayTitles({});
+        setGLastSync(null);
+        return;
+      }
+
       if (!res.ok) throw new Error(`Google API: ${res.status}`);
       const data = await res.json();
       const items: any[] = data?.items ?? [];
@@ -268,11 +281,12 @@ const PlanningGrid: React.FC<{ projects?: Project[] }> = ({ projects: fallbackPr
       setGAllDayTitles(allDayTitlesMap);
       setGLastSync(new Date());
     } catch (e: any) {
-      setGError(e?.message || "Erreur Google Agenda.");
+      // Si 401/403 a été géré ci-dessus, on garde le message; sinon message générique
+      if (!gError) setGError(e?.message || "Erreur Google Agenda.");
     } finally {
       setGLoading(false);
     }
-  }, [gEnabled, gToken, days, hours, obtainGoogleToken]);
+  }, [gEnabled, gToken, days, hours, obtainGoogleToken, gError]);
 
   React.useEffect(() => {
     let mounted = true;
