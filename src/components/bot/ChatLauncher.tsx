@@ -35,8 +35,9 @@ export default function ChatLauncher({
   ]);
   const [pending, setPending] = useState(false);
 
-  // État de la relance “après-midi” / à la connexion
+  // Invitations contextuelles
   const [afternoonCta, setAfternoonCta] = useState<boolean>(false);
+  const [welcomeCta, setWelcomeCta] = useState<boolean>(false); // nouveau: accueil avant connexion
 
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -45,7 +46,7 @@ export default function ChatLauncher({
       top: listRef.current.scrollHeight,
       behavior: "smooth",
     });
-  }, [messages, open, afternoonCta]);
+  }, [messages, open, afternoonCta, welcomeCta]);
 
   const toggle = () => {
     const next = !open;
@@ -80,6 +81,27 @@ export default function ChatLauncher({
     window.addEventListener("dowee:bot:ask", askHandler as EventListener);
     return () => window.removeEventListener("dowee:bot:ask", askHandler as EventListener);
   }, [onOpenChange]); // handleSend est stable via closure ci-dessous
+
+  // --- Invitation de bienvenue (avant connexion)
+  useEffect(() => {
+    const welcomeHandler = () => {
+      // Ne déclencher l'accueil que si non connecté
+      if (session) return;
+      setOpen(true);
+      setWelcomeCta(true);
+      onOpenChange?.(true);
+      // Ajouter un petit message d'accueil en haut
+      setMessages((m) => [
+        ...m,
+        {
+          role: "assistant",
+          content: "Bonjour 👋 Souhaitez‑vous découvrir DoWee en 30 secondes ?",
+        },
+      ]);
+    };
+    window.addEventListener("dowee:bot:welcome", welcomeHandler as any);
+    return () => window.removeEventListener("dowee:bot:welcome", welcomeHandler as any);
+  }, [session, onOpenChange]);
 
   function cleanAnswer(answer: string, userMsg: string): string {
     let out = answer.replace(/^\s*(tu|vous)\s+as|avez\s+dit\s*:.*$/gim, "").trim();
@@ -194,7 +216,6 @@ export default function ChatLauncher({
     ]
   );
 
-  // Proposer à la connexion selon réglage: ignorer (ou non) 'Plus tard'
   useEffect(() => {
     if (session && employee && settings.promptOnLoginEnabled) {
       const already = sessionStorage.getItem(loginPromptKey) === "1";
@@ -208,14 +229,12 @@ export default function ChatLauncher({
     }
   }, [session, employee, settings.promptOnLoginEnabled, settings.promptOnLoginIgnoreDismissed, runAfternoonCheck, loginPromptKey]);
 
-  // Test manuel: ignorer aussi le mémo 'prompted' pour pouvoir re-tester
   useEffect(() => {
     const handler = () => runAfternoonCheck({ ignoreAfternoonFlag: true, ignoreDismissed: true, ignorePrompted: true });
     window.addEventListener("dowee:bot:triggerAfternoon", handler as any);
     return () => window.removeEventListener("dowee:bot:triggerAfternoon", handler as any);
   }, [runAfternoonCheck]);
 
-  // Planification à l’heure de l’après‑midi
   const scheduleAfternoonCheck = useCallback(() => {
     if (!settings.afternoonReminderEnabled) return -1;
     const now = new Date();
@@ -262,6 +281,9 @@ export default function ChatLauncher({
     setOpen(false);
     onOpenChange?.(false);
   };
+
+  // Pitch à délivrer en cas d'acceptation (avant connexion)
+  const PITCH = "DoWee, c’est une application de planification et de pilotage qui réduit drastiquement le temps de reporting des équipes. On glisse-dépose ses projets dans une grille hebdo, on valide sa journée en un clic, et on visualise instantanément les charges, coûts et marges par équipe, client ou projet. Le tout avec une superposition Google Agenda, un bot d’assistance et des tableaux de bord clairs. Résultat: moins de friction, plus de visibilité, de meilleures décisions.";
 
   return (
     <div className="fixed bottom-[64px] right-4 z-[1000] select-none">
@@ -316,7 +338,7 @@ export default function ChatLauncher({
               ))}
               {pending && <Typing />}
 
-              {/* CTA validation */}
+              {/* CTA validation (après-midi) */}
               {afternoonCta && (
                 <div className="mt-2 rounded-xl border border-[#BFBFBF] bg-white p-3">
                   <div className="mb-2 text-sm font-medium text-[#214A33]">
@@ -336,6 +358,44 @@ export default function ChatLauncher({
                     <button
                       type="button"
                       onClick={onNotNow}
+                      className="inline-flex items-center rounded-md border border-[#BFBFBF] bg-white px-3 py-1.5 text-sm text-[#214A33] hover:bg-[#F7F7F7]"
+                    >
+                      Plus tard
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* CTA bienvenue (avant connexion) */}
+              {!session && welcomeCta && (
+                <div className="mt-2 rounded-xl border border-[#BFBFBF] bg-white p-3">
+                  <div className="mb-2 text-sm font-medium text-[#214A33]">
+                    Bienvenue sur DoWee 👋
+                  </div>
+                  <div className="text-xs text-[#214A33]/80 mb-3">
+                    Souhaitez‑vous découvrir DoWee en 30 secondes ?
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWelcomeCta(false);
+                        setMessages((m) => [
+                          ...m,
+                          { role: "assistant", content: PITCH },
+                        ]);
+                      }}
+                      className="inline-flex items-center rounded-md bg-[#F2994A] px-3 py-1.5 text-sm text-white hover:bg-[#E38C3F]"
+                    >
+                      Découvrir
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWelcomeCta(false);
+                        setOpen(false);
+                        onOpenChange?.(false);
+                      }}
                       className="inline-flex items-center rounded-md border border-[#BFBFBF] bg-white px-3 py-1.5 text-sm text-[#214A33] hover:bg-[#F7F7F7]"
                     >
                       Plus tard

@@ -14,6 +14,22 @@ const Index = () => {
     navigate("/dashboards?tab=me", { replace: true });
   }, [session, navigate]);
 
+  // Ouvre le bot à l'arrivée (avant connexion) pour proposer la découverte
+  React.useEffect(() => {
+    if (session) return; // seulement avant connexion
+    try {
+      const key = "dowee.bot.welcome.prompted";
+      const already = sessionStorage.getItem(key) === "1";
+      if (!already) {
+        sessionStorage.setItem(key, "1");
+        window.dispatchEvent(new Event("dowee:bot:welcome"));
+      }
+    } catch {
+      // no-op si sessionStorage non disponible
+      window.dispatchEvent(new Event("dowee:bot:welcome"));
+    }
+  }, [session]);
+
   const firstName = React.useMemo(() => {
     const fn = employee?.first_name?.trim();
     if (fn) return fn;
